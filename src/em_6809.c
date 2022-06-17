@@ -467,6 +467,19 @@ static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
    return 0;
 }
 
+static int em_6809_match_reset(sample_t *sample_q, int num_samples) {
+   // i        addr=E ba=0 bs=1
+   // i + 1    addr=F ba=0 bs=1
+   // i + 2    addr=X ba=0 bs=0
+   // <Start of first instruction>
+   for (int i = 0; i < num_samples - 3; i++) {
+      if (sample_q[i].ba == 0 && sample_q[i].bs == 1 && sample_q[i].addr == 0x0E) {
+         return i + 3;
+      }
+   }
+   return 0;
+}
+
 static int postbyte_cycles[] = { 2, 3, 2, 3, 0, 1, 1, 0, 1, 4, 0, 4, 1, 5, 0, 5 };
 
 static int count_bits[] =    { 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4};
@@ -511,7 +524,7 @@ static void em_6809_reset(sample_t *sample_q, int num_cycles, instruction_t *ins
    N = -1;
    V = -1;
    C = -1;
-   PC = (sample_q[num_cycles - 1].data << 8) + sample_q[num_cycles - 2].data;
+   PC = (sample_q[num_cycles - 3].data << 8) + sample_q[num_cycles - 2].data;
 }
 
 static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
@@ -1080,6 +1093,7 @@ static int em_6809_get_and_clear_fail() {
 
 cpu_emulator_t em_6809 = {
    .init = em_6809_init,
+   .match_reset = em_6809_match_reset,
    .match_interrupt = em_6809_match_interrupt,
    .count_cycles = em_6809_count_cycles,
    .reset = em_6809_reset,

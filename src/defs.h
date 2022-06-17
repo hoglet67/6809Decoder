@@ -83,6 +83,7 @@ typedef struct {
 
 typedef struct {
    void (*init)(arguments_t *args);
+   int (*match_reset)(sample_t *sample_q, int num_samples);
    int (*match_interrupt)(sample_t *sample_q, int num_samples);
    int (*count_cycles)(sample_t *sample_q);
    void (*reset)(sample_t *sample_q, int num_cycles, instruction_t *instruction);

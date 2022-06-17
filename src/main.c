@@ -396,11 +396,19 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
    static int interrupt_depth = 0;
    static int skipping_interrupted = 0;
 
-   int rst_seen = 0;
+   int num_cycles = em->count_cycles(sample_q);
 
    int intr_seen = em->match_interrupt(sample_q, num_samples);
 
-   int num_cycles = em->count_cycles(sample_q);
+   if (intr_seen) {
+      num_cycles = intr_seen;
+   }
+
+   int rst_seen = em->match_reset(sample_q, num_samples);
+
+   if (rst_seen) {
+      num_cycles = rst_seen;
+   }
 
    // Deal with partial final instruction
    if (num_samples <= num_cycles || num_cycles == 0) {
@@ -862,7 +870,7 @@ int main(int argc, char *argv[]) {
    if (arguments.idx_bs == UNSPECIFIED) {
       arguments.idx_bs = 10;
    }
-   if (arguments.idx_bs == UNSPECIFIED) {
+   if (arguments.idx_ba == UNSPECIFIED) {
       arguments.idx_ba = 11;
    }
    if (arguments.idx_addr == UNSPECIFIED) {
