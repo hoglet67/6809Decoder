@@ -675,7 +675,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
          int *reg = get_regi((pb >> 5) & 0x03);
          if (*reg >= 0 && !(pb & 0x80)) {       /* n4,R */
             if (pb & 0x10) {
-               ea = (*reg - ((pb & 0x0f) ^ 0x0f) + 1) & 0xffff;
+               ea = (*reg - ((pb & 0x0f) ^ 0x0f) - 1) & 0xffff;
             } else {
                ea = (*reg + (pb & 0x0f)) & 0xffff;
             }
