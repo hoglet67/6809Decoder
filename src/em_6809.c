@@ -108,6 +108,142 @@ static instr_mode_t instr_table_6809_map0[];
 static instr_mode_t instr_table_6809_map1[];
 static instr_mode_t instr_table_6809_map2[];
 
+
+static operation_t op_ABX  ;
+static operation_t op_ADCA ;
+static operation_t op_ADCB ;
+static operation_t op_ADDA ;
+static operation_t op_ADDB ;
+static operation_t op_ADDD ;
+static operation_t op_ANDA ;
+static operation_t op_ANDB ;
+static operation_t op_ANDC ;
+static operation_t op_ASL  ;
+static operation_t op_ASLA ;
+static operation_t op_ASLB ;
+static operation_t op_ASR  ;
+static operation_t op_ASRA ;
+static operation_t op_ASRB ;
+static operation_t op_BCC  ;
+static operation_t op_BEQ  ;
+static operation_t op_BGE  ;
+static operation_t op_BGT  ;
+static operation_t op_BHI  ;
+static operation_t op_BITA ;
+static operation_t op_BITB ;
+static operation_t op_BLE  ;
+static operation_t op_BLO  ;
+static operation_t op_BLS  ;
+static operation_t op_BLT  ;
+static operation_t op_BMI  ;
+static operation_t op_BNE  ;
+static operation_t op_BPL  ;
+static operation_t op_BRA  ;
+static operation_t op_BRN  ;
+static operation_t op_BSR  ;
+static operation_t op_BVC  ;
+static operation_t op_BVS  ;
+static operation_t op_CLR  ;
+static operation_t op_CLRA ;
+static operation_t op_CLRB ;
+static operation_t op_CMPA ;
+static operation_t op_CMPB ;
+static operation_t op_CMPD ;
+static operation_t op_CMPS ;
+static operation_t op_CMPU ;
+static operation_t op_CMPX ;
+static operation_t op_CMPY ;
+static operation_t op_COM  ;
+static operation_t op_COMA ;
+static operation_t op_COMB ;
+static operation_t op_CWAI ;
+static operation_t op_DAA  ;
+static operation_t op_DEC  ;
+static operation_t op_DECA ;
+static operation_t op_DECB ;
+static operation_t op_EORA ;
+static operation_t op_EORB ;
+static operation_t op_EXG  ;
+static operation_t op_INC  ;
+static operation_t op_INCA ;
+static operation_t op_INCB ;
+static operation_t op_JMP  ;
+static operation_t op_JSR  ;
+static operation_t op_LBCC ;
+static operation_t op_LBEQ ;
+static operation_t op_LBGE ;
+static operation_t op_LBGT ;
+static operation_t op_LBHI ;
+static operation_t op_LBLE ;
+static operation_t op_LBLO ;
+static operation_t op_LBLS ;
+static operation_t op_LBLT ;
+static operation_t op_LBMI ;
+static operation_t op_LBNE ;
+static operation_t op_LBPL ;
+static operation_t op_LBRA ;
+static operation_t op_LBRN ;
+static operation_t op_LBSR ;
+static operation_t op_LBVC ;
+static operation_t op_LBVS ;
+static operation_t op_LDA  ;
+static operation_t op_LDB  ;
+static operation_t op_LDD  ;
+static operation_t op_LDS  ;
+static operation_t op_LDU  ;
+static operation_t op_LDX  ;
+static operation_t op_LDY  ;
+static operation_t op_LEAS ;
+static operation_t op_LEAU ;
+static operation_t op_LEAX ;
+static operation_t op_LEAY ;
+static operation_t op_LSR  ;
+static operation_t op_LSRA ;
+static operation_t op_LSRB ;
+static operation_t op_MUL  ;
+static operation_t op_NEG  ;
+static operation_t op_NEGA ;
+static operation_t op_NEGB ;
+static operation_t op_NOP  ;
+static operation_t op_ORA  ;
+static operation_t op_ORB  ;
+static operation_t op_ORCC ;
+static operation_t op_PSHS ;
+static operation_t op_PSHU ;
+static operation_t op_PULS ;
+static operation_t op_PULU ;
+static operation_t op_ROL  ;
+static operation_t op_ROLA ;
+static operation_t op_ROLB ;
+static operation_t op_ROR  ;
+static operation_t op_RORA ;
+static operation_t op_RORB ;
+static operation_t op_RTI  ;
+static operation_t op_RTS  ;
+static operation_t op_SBCA ;
+static operation_t op_SBCB ;
+static operation_t op_SEX  ;
+static operation_t op_STA  ;
+static operation_t op_STB  ;
+static operation_t op_STD  ;
+static operation_t op_STS  ;
+static operation_t op_STU  ;
+static operation_t op_STX  ;
+static operation_t op_STY  ;
+static operation_t op_SUBA ;
+static operation_t op_SUBB ;
+static operation_t op_SUBD ;
+static operation_t op_SWI  ;
+static operation_t op_SWI2 ;
+static operation_t op_SWI3 ;
+static operation_t op_SYNC ;
+static operation_t op_TFR  ;
+static operation_t op_TST  ;
+static operation_t op_TSTA ;
+static operation_t op_TSTB ;
+static operation_t op_UU   ;
+static operation_t op_XX   ;
+
 // ====================================================================
 // Helper Methods
 // ====================================================================
@@ -412,7 +548,11 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
 
    switch (instr->mode) {
    case REGISTER:
-      // TODO
+      instruction->postbyte = sample_q[index].data;
+      if (PC >= 0) {
+         memory_read(instruction->postbyte, PC + index, MEM_INSTR);
+      }
+      index++;
       break;
    case INDEXED:
       instruction->postbyte = sample_q[index].data;
@@ -468,11 +608,25 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    }
    instruction->length = index;
 
-   instruction->pc = PC;
+   // Determine the current PC value
+   if (instr->op == &op_JSR) {
+      instruction->pc = (((sample_q[num_cycles - 1].data << 8) + sample_q[num_cycles - 2].data) - 3) & 0xffff;
+   } else {
+      instruction->pc = PC;
+   }
+
+   // Update the PC assuming not change of flow takes place
+   if (PC >= 0) {
+      PC = (PC + instruction->length) & 0xffff;
+   }
 
    // Calculate the operand
    operand_t operand;
-   if (instr->op->type == RMWOP) {
+   if (instr->op == &op_RTS) {
+      operand = (sample_q[2].data << 8) + sample_q[3].data;
+   } else if (instr->mode == REGISTER) {
+      operand = sample_q[1].data; // This is the postbyte
+   } else if (instr->op->type == RMWOP) {
       // Read-modify-wrie instruction
       operand = sample_q[num_cycles - 3].data;
    } else if (instr->op->size16) {
@@ -484,13 +638,23 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    // Calculate the effective address (for additional memory reads)
    ea_t ea = -1;
    switch (instr->mode) {
+   case RELATIVE_8:
+      if (PC >= 0) {
+         ea = (PC + (int8_t)instruction->op1) & 0xffff;
+      }
+      break;
+   case RELATIVE_16:
+      if (PC >= 0) {
+         ea = (PC + (int16_t)((instruction->op1 << 8) + instruction->op2)) & 0xffff;
+      }
+      break;
    case DIRECT:
       if (DP >= 0) {
          ea = (DP << 8) + instruction->op1;
       }
       break;
    case EXTENDED:
-      ea = (instruction->op2 << 8) + instruction->op1;
+      ea = (instruction->op1 << 8) + instruction->op2;
       break;
    case INDEXED:
       {
@@ -583,22 +747,10 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       break;
    }
 
+
    // Emulate the instruction
    if (instr->op->emulate) {
       instr->op->emulate(operand, ea);
-   }
-
-   // TODO: Update PC
-
-   int opcode = (instruction->prefix << 8) + instruction->opcode;
-
-   // Look for control flow changes and update the PC
-   if (opcode == 0x7e) {
-      // JMP
-      PC = (instruction->op1 << 8) + instruction->op2;
-   } else {
-      // Otherwise, increment pc by length of instuction
-      PC = (PC + instruction->length) & 0xffff;
    }
 
 }
@@ -755,7 +907,6 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
             } else {
                *ptr++ = '$';
                write_hex2(ptr, pb & 0x0f);
-               ptr += 2;
             }
             ptr += 2;
             *ptr++ = ',';
@@ -1545,8 +1696,8 @@ static int op_fn_LDB(operand_t operand, ea_t ea) {
 
 static int op_fn_LDD(operand_t operand, ea_t ea) {
    int tmp = ld_helper16(operand);
-   A = tmp & 0xff;
-   B = (tmp >> 8) & 0xff;
+   A = (tmp >> 8) & 0xff;
+   B = tmp & 0xff;
    return -1;
 }
 
