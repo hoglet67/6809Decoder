@@ -848,9 +848,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
 
    // Calculate the operand
    operand_t operand;
-   if (instr->op == &op_RTS) {
-      operand = (sample_q[2].data << 8) + sample_q[3].data;
-   } else if (instr->mode == REGISTER) {
+   if (instr->mode == REGISTER) {
       operand = sample_q[1].data; // This is the postbyte
    } else if (instr->op->type == RMWOP) {
       // Read-modify-wrie instruction
@@ -2189,10 +2187,9 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_RTS(operand_t operand, ea_t ea, sample_t *sample_q) {
-   // RTS: the operand is the data pulled from the stack (PCL, PCH)
-   pop8s(operand);
-   pop8s(operand >> 8);
-   PC = operand & 0xffff;
+   pop8s(sample_q[2].data);
+   pop8s(sample_q[3].data);
+   PC = (sample_q[2].data << 8) + sample_q[3].data;
    return -1;
 }
 
