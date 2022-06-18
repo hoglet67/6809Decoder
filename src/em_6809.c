@@ -24,7 +24,9 @@ typedef enum {
 
 typedef enum {
    READOP,
-   WRITEOP,
+   JSROP,     // JSR
+   LOADOP,    // LDx
+   STOREOP,   // STx
    RMWOP,
    BRANCHOP,
    OTHER
@@ -873,7 +875,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       PC = (PC + instruction->length) & 0xffff;
    }
 
-   // Calculate the operand
+   // Pick out the operand (Fig 17 in datasheet, esp sheet 5)
    operand_t operand;
    if (instr->op == &op_TST) {
       // There are two dead cycles at the end of TST
@@ -881,17 +883,23 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    } else if (instr->mode == REGISTER) {
       operand = sample_q[1].data; // This is the postbyte
    } else if (instr->op->type == RMWOP) {
-      // Read-modify-wrie instruction
+      // Read-modify-wrie instruction (always 8-bit)
       operand = sample_q[num_cycles - 3].data;
    } else if (instr->op->size16) {
-      operand = (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
+      if (instr->op->type == LOADOP || instr->op->type == STOREOP || instr->op->type == JSROP) {
+         // No dead cycle at the end with LDD/LDS/LDU/LDX/LDY/STD/STS/STU/STX/STY/JSR
+         operand = (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
+      } else {
+         // Dead cycle at the end in ADDD/CMPD/CMPS/CMPU/CMPX/CMPY/SUBD
+         operand = (sample_q[num_cycles - 3].data << 8) + sample_q[num_cycles - 2].data;
+      }
    } else {
       operand = sample_q[num_cycles - 1].data;
    }
 
    // Operand 2 is the value written back in a store or read-modify-write
    operand_t operand2 = operand;
-   if (instr->op->type == RMWOP || instr->op->type == WRITEOP) {
+   if (instr->op->type == RMWOP || instr->op->type == STOREOP) {
       if (instr->op->size16) {
          operand2 = (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
       } else {
@@ -1015,7 +1023,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    if (instr->op->emulate) {
       int result = instr->op->emulate(operand, ea, sample_q);
 
-      if (instr->op->type == WRITEOP || instr->op->type == RMWOP) {
+      if (instr->op->type == STOREOP || instr->op->type == RMWOP) {
 
          // WRTEOP:
          //    8-bit: STA STB
@@ -2710,7 +2718,7 @@ static operation_t op_BNE  = { "BNE ", op_fn_BNE ,  BRANCHOP , 0 };
 static operation_t op_BPL  = { "BPL ", op_fn_BPL ,  BRANCHOP , 0 };
 static operation_t op_BRA  = { "BRA ", op_fn_BRA ,  BRANCHOP , 0 };
 static operation_t op_BRN  = { "BRN ", op_fn_BRN ,  BRANCHOP , 0 };
-static operation_t op_BSR  = { "BSR ", op_fn_BSR ,  BRANCHOP , 1 };
+static operation_t op_BSR  = { "BSR ", op_fn_BSR ,     JSROP , 1 };
 static operation_t op_BVC  = { "BVC ", op_fn_BVC ,  BRANCHOP , 0 };
 static operation_t op_BVS  = { "BVS ", op_fn_BVS ,  BRANCHOP , 0 };
 static operation_t op_CLR  = { "CLR ", op_fn_CLR ,     RMWOP , 0 };
@@ -2738,7 +2746,7 @@ static operation_t op_INC  = { "INC ", op_fn_INC ,     RMWOP , 0 };
 static operation_t op_INCA = { "INCA", op_fn_INCA,    READOP , 0 };
 static operation_t op_INCB = { "INCB", op_fn_INCB,    READOP , 0 };
 static operation_t op_JMP  = { "JMP ", op_fn_JMP ,    READOP , 0 };
-static operation_t op_JSR  = { "JSR ", op_fn_JSR ,    READOP , 1 };
+static operation_t op_JSR  = { "JSR ", op_fn_JSR ,     JSROP , 1 };
 static operation_t op_LBCC = { "LBCC", op_fn_BCC ,  BRANCHOP , 0 };
 static operation_t op_LBEQ = { "LBEQ", op_fn_BEQ ,  BRANCHOP , 0 };
 static operation_t op_LBGE = { "LBGE", op_fn_BGE ,  BRANCHOP , 0 };
@@ -2753,16 +2761,16 @@ static operation_t op_LBNE = { "LBNE", op_fn_BNE ,  BRANCHOP , 0 };
 static operation_t op_LBPL = { "LBPL", op_fn_BPL ,  BRANCHOP , 0 };
 static operation_t op_LBRA = { "LBRA", op_fn_BRA ,  BRANCHOP , 0 };
 static operation_t op_LBRN = { "LBRN", op_fn_BRN ,  BRANCHOP , 0 };
-static operation_t op_LBSR = { "LBSR", op_fn_BSR ,  BRANCHOP , 0 };
+static operation_t op_LBSR = { "LBSR", op_fn_BSR ,     JSROP , 1 };
 static operation_t op_LBVC = { "LBVC", op_fn_BVC ,  BRANCHOP , 0 };
 static operation_t op_LBVS = { "LBVS", op_fn_BVS ,  BRANCHOP , 0 };
-static operation_t op_LDA  = { "LDA ", op_fn_LDA ,    READOP , 0 };
-static operation_t op_LDB  = { "LDB ", op_fn_LDB ,    READOP , 0 };
-static operation_t op_LDD  = { "LDD ", op_fn_LDD ,    READOP , 1 };
-static operation_t op_LDS  = { "LDS ", op_fn_LDS ,    READOP , 1 };
-static operation_t op_LDU  = { "LDU ", op_fn_LDU ,    READOP , 1 };
-static operation_t op_LDX  = { "LDX ", op_fn_LDX ,    READOP , 1 };
-static operation_t op_LDY  = { "LDY ", op_fn_LDY ,    READOP , 1 };
+static operation_t op_LDA  = { "LDA ", op_fn_LDA ,    LOADOP , 0 };
+static operation_t op_LDB  = { "LDB ", op_fn_LDB ,    LOADOP , 0 };
+static operation_t op_LDD  = { "LDD ", op_fn_LDD ,    LOADOP , 1 };
+static operation_t op_LDS  = { "LDS ", op_fn_LDS ,    LOADOP , 1 };
+static operation_t op_LDU  = { "LDU ", op_fn_LDU ,    LOADOP , 1 };
+static operation_t op_LDX  = { "LDX ", op_fn_LDX ,    LOADOP , 1 };
+static operation_t op_LDY  = { "LDY ", op_fn_LDY ,    LOADOP , 1 };
 static operation_t op_LEAS = { "LEAS", op_fn_LEAS,    READOP , 0 };
 static operation_t op_LEAU = { "LEAU", op_fn_LEAU,    READOP , 0 };
 static operation_t op_LEAX = { "LEAX", op_fn_LEAX,    READOP , 0 };
@@ -2793,13 +2801,13 @@ static operation_t op_RTS  = { "RTS ", op_fn_RTS ,    READOP , 0 };
 static operation_t op_SBCA = { "SBCA", op_fn_SBCA,    READOP , 0 };
 static operation_t op_SBCB = { "SBCB", op_fn_SBCB,    READOP , 0 };
 static operation_t op_SEX  = { "SEX ", op_fn_SEX ,    READOP , 0 };
-static operation_t op_STA  = { "STA ", op_fn_STA ,   WRITEOP , 0 };
-static operation_t op_STB  = { "STB ", op_fn_STB ,   WRITEOP , 0 };
-static operation_t op_STD  = { "STD ", op_fn_STD ,   WRITEOP , 1 };
-static operation_t op_STS  = { "STS ", op_fn_STS ,   WRITEOP , 1 };
-static operation_t op_STU  = { "STU ", op_fn_STU ,   WRITEOP , 1 };
-static operation_t op_STX  = { "STX ", op_fn_STX ,   WRITEOP , 1 };
-static operation_t op_STY  = { "STY ", op_fn_STY ,   WRITEOP , 1 };
+static operation_t op_STA  = { "STA ", op_fn_STA ,   STOREOP , 0 };
+static operation_t op_STB  = { "STB ", op_fn_STB ,   STOREOP , 0 };
+static operation_t op_STD  = { "STD ", op_fn_STD ,   STOREOP , 1 };
+static operation_t op_STS  = { "STS ", op_fn_STS ,   STOREOP , 1 };
+static operation_t op_STU  = { "STU ", op_fn_STU ,   STOREOP , 1 };
+static operation_t op_STX  = { "STX ", op_fn_STX ,   STOREOP , 1 };
+static operation_t op_STY  = { "STY ", op_fn_STY ,   STOREOP , 1 };
 static operation_t op_SUBA = { "SUBA", op_fn_SUBA,    READOP , 0 };
 static operation_t op_SUBB = { "SUBB", op_fn_SUBB,    READOP , 0 };
 static operation_t op_SUBD = { "SUBD", op_fn_SUBD,    READOP , 1 };
