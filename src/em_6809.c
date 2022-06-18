@@ -516,9 +516,89 @@ static int em_6809_count_cycles(sample_t *sample_q) {
    uint8_t b1 = sample_q[1].data;
    instr_mode_t *instr = get_instruction(b0, b1);
    int cycle_count = instr->cycles;
-   // TODO: Long Branch, one extra if branch talen
-   // TODO: RTI 6/15 based on E flag
-   if (b0 >= 0x34 && b0 <= 0x37) {
+   // Long Branch, one additional cycle if branch taken
+   if (b0 == 0x10) {
+      switch (b1) {
+      case 0x21: /* LBRN */
+         cycle_count++;
+         break;
+      case 0x22: /* LBHI */
+         if (Z == 0 && C == 0) {
+            cycle_count++;
+         }
+         break;
+      case 0x23: /* LBLS */
+         if (Z == 1 || C == 1) {
+            cycle_count++;
+         }
+         break;
+      case 0x24: /* LBCC */
+         if (C == 0) {
+            cycle_count++;
+         }
+         break;
+      case 0x25: /* LBLO */
+         if (C == 1) {
+            cycle_count++;
+         }
+         break;
+      case 0x26: /* LBNE */
+         if (Z == 0) {
+            cycle_count++;
+         }
+         break;
+      case 0x27: /* LBEQ */
+         if (Z == 1) {
+            cycle_count++;
+         }
+         break;
+      case 0x28: /* LBVC */
+         if (V == 0) {
+            cycle_count++;
+         }
+         break;
+      case 0x29: /* LBVS */
+         if (V == 1) {
+            cycle_count++;
+         }
+         break;
+      case 0x2A: /* LBPL */
+         if (N == 0) {
+            cycle_count++;
+         }
+         break;
+      case 0x2B: /* LBMI */
+         if (N == 1) {
+            cycle_count++;
+         }
+         break;
+      case 0x2C: /* LBGE */
+         if ((N == 0 && V == 0) || (N == 1 && V == 1))  {
+            cycle_count++;
+         }
+         break;
+      case 0x2D: /* LBLT */
+         if ((N == 1 && V == 0) || (N == 0 && V == 1))  {
+            cycle_count++;
+         }
+         break;
+      case 0x2E: /* LBGT */
+         if (Z == 0 && ((N == 0 && V == 0) || (N == 1 && V == 1)))  {
+            cycle_count++;
+         }
+         break;
+      case 0x2F: /* LBLE */
+         if (Z == 0 || (N == 1 && V == 0) || (N == 0 && V == 1))  {
+            cycle_count++;
+         }
+         break;
+      }
+   }
+
+   if (b0 == 0x3B && E == 1) {
+      // RTI takes 9 addition cycles if E = 1
+      cycle_count += 9;
+   } else if (b0 >= 0x34 && b0 <= 0x37) {
       // PSHS/PULS/PSHU/PULU
       cycle_count += count_bits[b1 & 0x0f];            // bits 0..3 are 8 bit registers
       cycle_count += count_bits[(b1 >> 4) & 0x0f] * 2; // bits 4..7 are 16 bit registers
