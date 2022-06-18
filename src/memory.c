@@ -10,7 +10,6 @@ static int *memory        = NULL;
 static int mem_model      = 0;
 static int mem_rd_logging = 0;
 static int mem_wr_logging = 0;
-static int addr_digits    = 0;
 
 static char buffer[256];
 
@@ -18,19 +17,10 @@ static char buffer[256];
 static void (*memory_read_fn)(int data, int ea);
 static int (*memory_write_fn)(int data, int ea);
 
-
-#define TO_HEX(value) ((value) + ((value) < 10 ? '0' : 'A' - 10))
-
 static inline int write_addr(char *bp, int ea) {
-   int shift = (addr_digits - 1) << 2; // 6 => 20
-   for (int i = 0; i < addr_digits; i++) {
-      int value = (ea >> shift) & 0xf;
-      *bp++ = TO_HEX(value);
-      shift -= 4;
-   }
-   return addr_digits + 2;
+   write_hex4(bp, ea);
+   return 4;
 }
-
 
 static inline void log_memory_access(char *msg, int data, int ea, int ignored) {
    char *bp = buffer;
@@ -40,7 +30,7 @@ static inline void log_memory_access(char *msg, int data, int ea, int ignored) {
    write_hex2(bp, data);
    bp += 2;
    if (ignored) {
-   bp += write_s(bp, " (ignored)");
+      bp += write_s(bp, " (ignored)");
    }
    *bp++ = 0;
    puts(buffer);
@@ -103,14 +93,6 @@ void memory_init(int size, machine_t machine) {
       init_default();
       break;
    }
-   // Calculate the number of digits to represent an address
-   addr_digits = 0;
-   size--;
-   while (size) {
-      size >>= 1;
-      addr_digits++;
-   }
-   addr_digits = (addr_digits + 3) >> 2;
 }
 
 void memory_destroy() {

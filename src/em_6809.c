@@ -361,15 +361,15 @@ static void set_NZ16(int value) {
 
 static void pop8s(int value) {
    if (S >= 0) {
-      S = (S + 1) & 0xffff;
       memory_read(value & 0xff, S, MEM_STACK);
+      S = (S + 1) & 0xffff;
    }
 }
 
 static void push8s(int value) {
    if (S >= 0) {
-      memory_write(value & 0xff, S, MEM_STACK);
       S = (S - 1) & 0xffff;
+      memory_write(value & 0xff, S, MEM_STACK);
    }
 }
 
@@ -386,15 +386,15 @@ static void push16s(int value) {
 
 static void pop8u(int value) {
    if (U >= 0) {
-      U = (U + 1) & 0xffff;
       memory_read(value & 0xff, U, MEM_STACK);
+      U = (U + 1) & 0xffff;
    }
 }
 
 static void push8u(int value) {
    if (U >= 0) {
-      memory_write(value & 0xff, U, MEM_STACK);
       U = (U - 1) & 0xffff;
+      memory_write(value & 0xff, U, MEM_STACK);
    }
 }
 
@@ -856,9 +856,14 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    }
    instruction->length = index;
 
-   // Determine the current PC value
-   if (instr->op == &op_JSR) {
+   // In main, instruction->pc is checked against the emulated PC, so in the case
+   // of JSR/BSR/LBSR this provides a means of sanity checking
+   if (instr->op == &op_JSR || instr->op == &op_LBSR) {
+      // 3 byte instruction so subtract 3
       instruction->pc = (((sample_q[num_cycles - 1].data << 8) + sample_q[num_cycles - 2].data) - 3) & 0xffff;
+   } else if (instr->op == &op_BSR) {
+      // 2 byte instruction so subtract 2
+      instruction->pc = (((sample_q[num_cycles - 1].data << 8) + sample_q[num_cycles - 2].data) - 2) & 0xffff;
    } else {
       instruction->pc = PC;
    }
@@ -882,6 +887,16 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       operand = (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
    } else {
       operand = sample_q[num_cycles - 1].data;
+   }
+
+   // Operand 2 is the value written back in a store or read-modify-write
+   operand_t operand2 = operand;
+   if (instr->op->type == RMWOP || instr->op->type == WRITEOP) {
+      if (instr->op->size16) {
+         operand2 = (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
+      } else {
+         operand2 = sample_q[num_cycles - 1].data;
+      }
    }
 
    // Calculate the effective address (for additional memory reads)
@@ -996,12 +1011,35 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       break;
    }
 
-
    // Emulate the instruction
    if (instr->op->emulate) {
-      instr->op->emulate(operand, ea, sample_q);
-   }
+      int result = instr->op->emulate(operand, ea, sample_q);
 
+      if (instr->op->type == WRITEOP || instr->op->type == RMWOP) {
+
+         // WRTEOP:
+         //    8-bit: STA STB
+         //   16-bit: STD STS STU STX STY
+         //
+         // RMWOP:
+         //    8-bit: ASL ASR CLK COM DEC INC LSR BEG ROL ROR
+
+         // Check result of instruction against bye
+         if (result >= 0 && result != operand2) {
+            failflag |= 1;
+         }
+
+         // Model memory writes based on result seen on bus
+         if (ea >= 0) {
+            if (instr->op->size16) {
+               memory_write((operand2 >> 8) & 0xff,  ea,     MEM_DATA);
+               memory_write( operand2       & 0xff,  ea + 1, MEM_DATA);
+            } else {
+               memory_write( operand2       & 0xff,  ea,     MEM_DATA);
+            }
+         }
+      }
+   }
 }
 
 static char *strinsert(char *ptr, const char *str) {
@@ -1670,7 +1708,9 @@ static int op_fn_BRN(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_BSR(operand_t operand, ea_t ea, sample_t *sample_q) {
-   push16s(operand);
+   // operand is actually byte swapped at this point
+   push8s(operand >> 8); // this pushes the low byte
+   push8s(operand);      // this pushes he high byte
    PC = ea & 0xffff;
    return -1;
 }
@@ -1923,7 +1963,9 @@ static int op_fn_JMP(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_JSR(operand_t operand, ea_t ea, sample_t *sample_q) {
-   push16s(operand);
+   // operand is actually byte swapped at this point
+   push8s(operand >> 8); // this pushes the low byte
+   push8s(operand);      // this pushes he high byte
    PC = ea & 0xffff;
    return -1;
 }
@@ -2411,7 +2453,7 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_t *sample_q) {
    //  14 ---
 
    // Number of 8-bit items unstacked
-   int n = (E == 1) ? 3 : 12;
+   int n = (E == 1) ? 12 : 3;
    for (int i = 2; i < 2 + n; i++) {
       pop8s(sample_q[i].data);
    }
@@ -2668,7 +2710,7 @@ static operation_t op_BNE  = { "BNE ", op_fn_BNE ,  BRANCHOP , 0 };
 static operation_t op_BPL  = { "BPL ", op_fn_BPL ,  BRANCHOP , 0 };
 static operation_t op_BRA  = { "BRA ", op_fn_BRA ,  BRANCHOP , 0 };
 static operation_t op_BRN  = { "BRN ", op_fn_BRN ,  BRANCHOP , 0 };
-static operation_t op_BSR  = { "BSR ", op_fn_BSR ,  BRANCHOP , 0 };
+static operation_t op_BSR  = { "BSR ", op_fn_BSR ,  BRANCHOP , 1 };
 static operation_t op_BVC  = { "BVC ", op_fn_BVC ,  BRANCHOP , 0 };
 static operation_t op_BVS  = { "BVS ", op_fn_BVS ,  BRANCHOP , 0 };
 static operation_t op_CLR  = { "CLR ", op_fn_CLR ,     RMWOP , 0 };
@@ -2696,7 +2738,7 @@ static operation_t op_INC  = { "INC ", op_fn_INC ,     RMWOP , 0 };
 static operation_t op_INCA = { "INCA", op_fn_INCA,    READOP , 0 };
 static operation_t op_INCB = { "INCB", op_fn_INCB,    READOP , 0 };
 static operation_t op_JMP  = { "JMP ", op_fn_JMP ,    READOP , 0 };
-static operation_t op_JSR  = { "JSR ", op_fn_JSR ,    READOP , 0 };
+static operation_t op_JSR  = { "JSR ", op_fn_JSR ,    READOP , 1 };
 static operation_t op_LBCC = { "LBCC", op_fn_BCC ,  BRANCHOP , 0 };
 static operation_t op_LBEQ = { "LBEQ", op_fn_BEQ ,  BRANCHOP , 0 };
 static operation_t op_LBGE = { "LBGE", op_fn_BGE ,  BRANCHOP , 0 };
