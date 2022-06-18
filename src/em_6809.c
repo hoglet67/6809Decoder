@@ -36,7 +36,7 @@ typedef int ea_t;
 
 typedef struct {
    const char *mnemonic;
-   int (*emulate)(operand_t, ea_t);
+   int (*emulate)(operand_t, ea_t, sample_t *);
    optype_t type;
    int size16;
 } operation_t;
@@ -976,7 +976,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
 
    // Emulate the instruction
    if (instr->op->emulate) {
-      instr->op->emulate(operand, ea);
+      instr->op->emulate(operand, ea, sample_q);
    }
 
 }
@@ -1331,7 +1331,7 @@ cpu_emulator_t em_6809 = {
 // Individual Instructions
 // ====================================================================
 
-static int op_fn_ABX(operand_t operand, ea_t ea) {
+static int op_fn_ABX(operand_t operand, ea_t ea, sample_t *sample_q) {
    // X = X + B
    if (X >= 0 && B >= 0) {
       X = (X + B) & 0xFFFF;
@@ -1362,27 +1362,27 @@ static int add_helper(int val, int cin, operand_t operand) {
    }
 }
 
-static int op_fn_ADCA(operand_t operand, ea_t ea) {
+static int op_fn_ADCA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = add_helper(A, C, operand);
    return -1;
 }
 
-static int op_fn_ADCB(operand_t operand, ea_t ea) {
+static int op_fn_ADCB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = add_helper(B, C, operand);
    return -1;
 }
 
-static int op_fn_ADDA(operand_t operand, ea_t ea) {
+static int op_fn_ADDA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = add_helper(A, 0, operand);
    return -1;
 }
 
-static int op_fn_ADDB(operand_t operand, ea_t ea) {
+static int op_fn_ADDB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = add_helper(B, 0, operand);
    return -1;
 }
 
-static int op_fn_ADDD(operand_t operand, ea_t ea) {
+static int op_fn_ADDD(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (A >= 0 && B >= 0) {
       int d = (A << 8) + B;
       // Perform the addition (there is no carry in)
@@ -1417,17 +1417,17 @@ static int and_helper(int val, operand_t operand) {
    return val;
 }
 
-static int op_fn_ANDA(operand_t operand, ea_t ea) {
+static int op_fn_ANDA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = and_helper(A, operand);
    return -1;
 }
 
-static int op_fn_ANDB(operand_t operand, ea_t ea) {
+static int op_fn_ANDB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = and_helper(B, operand);
    return -1;
 }
 
-static int op_fn_ANDC(operand_t operand, ea_t ea) {
+static int op_fn_ANDC(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (!(operand & 0x80)) {
       E = 0;
    }
@@ -1468,16 +1468,16 @@ static int asl_helper(int val) {
    return val;
 }
 
-static int op_fn_ASL(operand_t operand, ea_t ea) {
+static int op_fn_ASL(operand_t operand, ea_t ea, sample_t *sample_q) {
    return asl_helper(operand);
 }
 
-static int op_fn_ASLA(operand_t operand, ea_t ea) {
+static int op_fn_ASLA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = asl_helper(A);
    return -1;
 }
 
-static int op_fn_ASLB(operand_t operand, ea_t ea) {
+static int op_fn_ASLB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = asl_helper(B);
    return -1;
 }
@@ -1494,22 +1494,22 @@ static int asr_helper(int val) {
    return val;
 }
 
-static int op_fn_ASR(operand_t operand, ea_t ea) {
+static int op_fn_ASR(operand_t operand, ea_t ea, sample_t *sample_q) {
    return asr_helper(operand);
 }
 
-static int op_fn_ASRA(operand_t operand, ea_t ea) {
+static int op_fn_ASRA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = asr_helper(A);
    return -1;
 }
 
-static int op_fn_ASRB(operand_t operand, ea_t ea) {
+static int op_fn_ASRB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = asr_helper(B);
    return -1;
 }
 
 
-static int op_fn_BCC(operand_t operand, ea_t ea) {
+static int op_fn_BCC(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (C < 0) {
       PC = -1;
    } else if (C == 0) {
@@ -1518,7 +1518,7 @@ static int op_fn_BCC(operand_t operand, ea_t ea) {
    return -1;
 }
 
-static int op_fn_BEQ(operand_t operand, ea_t ea) {
+static int op_fn_BEQ(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (Z < 0) {
       PC = -1;
    } else if (Z == 1) {
@@ -1527,7 +1527,7 @@ static int op_fn_BEQ(operand_t operand, ea_t ea) {
    return -1;
 }
 
-static int op_fn_BGE(operand_t operand, ea_t ea) {
+static int op_fn_BGE(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (N < 0 || V < 0) {
       PC = -1;
    } else if (N == V) {
@@ -1536,7 +1536,7 @@ static int op_fn_BGE(operand_t operand, ea_t ea) {
    return -1;
 }
 
-static int op_fn_BGT(operand_t operand, ea_t ea) {
+static int op_fn_BGT(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (Z < 0 || N < 0 || V < 0) {
       PC = -1;
    } else if (Z == 0 && N == V) {
@@ -1545,7 +1545,7 @@ static int op_fn_BGT(operand_t operand, ea_t ea) {
    return -1;
 }
 
-static int op_fn_BHI(operand_t operand, ea_t ea) {
+static int op_fn_BHI(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (Z < 0 || C < 0) {
       PC = -1;
    } else if (Z == 0 && C == 0) {
@@ -1563,17 +1563,17 @@ static void bit_helper(int val, operand_t operand) {
    V = 0;
 }
 
-static int op_fn_BITA(operand_t operand, ea_t ea) {
+static int op_fn_BITA(operand_t operand, ea_t ea, sample_t *sample_q) {
    bit_helper(A, operand);
    return -1;
 }
 
-static int op_fn_BITB(operand_t operand, ea_t ea) {
+static int op_fn_BITB(operand_t operand, ea_t ea, sample_t *sample_q) {
    bit_helper(B, operand);
    return -1;
 }
 
-static int op_fn_BLE(operand_t operand, ea_t ea) {
+static int op_fn_BLE(operand_t operand, ea_t ea, sample_t *sample_q) {
    // TODO: Overly pessimistic
    if (Z < 0 || N < 0 || V < 0) {
       PC = -1;
@@ -1583,7 +1583,7 @@ static int op_fn_BLE(operand_t operand, ea_t ea) {
    return -1;
 }
 
-static int op_fn_BLO(operand_t operand, ea_t ea) {
+static int op_fn_BLO(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (C < 0) {
       PC = -1;
    } else if (C == 1) {
@@ -1592,7 +1592,7 @@ static int op_fn_BLO(operand_t operand, ea_t ea) {
    return -1;
 }
 
-static int op_fn_BLS(operand_t operand, ea_t ea) {
+static int op_fn_BLS(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (Z < 0 || C < 0) {
       PC = -1;
    } else if (Z == 1 || C == 1) {
@@ -1601,7 +1601,7 @@ static int op_fn_BLS(operand_t operand, ea_t ea) {
    return -1;
 }
 
-static int op_fn_BLT(operand_t operand, ea_t ea) {
+static int op_fn_BLT(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (N < 0 || V < 0) {
       PC = -1;
    } else if (N != V) {
@@ -1610,7 +1610,7 @@ static int op_fn_BLT(operand_t operand, ea_t ea) {
    return -1;
 }
 
-static int op_fn_BMI(operand_t operand, ea_t ea) {
+static int op_fn_BMI(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (N < 0) {
       PC = -1;
    } else if (N == 1) {
@@ -1619,7 +1619,7 @@ static int op_fn_BMI(operand_t operand, ea_t ea) {
    return -1;
 }
 
-static int op_fn_BNE(operand_t operand, ea_t ea) {
+static int op_fn_BNE(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (Z < 0) {
       PC = -1;
    } else if (Z == 0) {
@@ -1628,7 +1628,7 @@ static int op_fn_BNE(operand_t operand, ea_t ea) {
    return -1;
 }
 
-static int op_fn_BPL(operand_t operand, ea_t ea) {
+static int op_fn_BPL(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (N < 0) {
       PC = -1;
    } else if (N == 0) {
@@ -1637,22 +1637,22 @@ static int op_fn_BPL(operand_t operand, ea_t ea) {
    return -1;
 }
 
-static int op_fn_BRA(operand_t operand, ea_t ea) {
+static int op_fn_BRA(operand_t operand, ea_t ea, sample_t *sample_q) {
    PC = ea;
    return -1;
 }
 
-static int op_fn_BRN(operand_t operand, ea_t ea) {
+static int op_fn_BRN(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_BSR(operand_t operand, ea_t ea) {
+static int op_fn_BSR(operand_t operand, ea_t ea, sample_t *sample_q) {
    push16s(operand);
    PC = ea & 0xffff;
    return -1;
 }
 
-static int op_fn_BVC(operand_t operand, ea_t ea) {
+static int op_fn_BVC(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (V < 0) {
       PC = -1;
    } else if (V == 0) {
@@ -1661,7 +1661,7 @@ static int op_fn_BVC(operand_t operand, ea_t ea) {
    return -1;
 }
 
-static int op_fn_BVS(operand_t operand, ea_t ea) {
+static int op_fn_BVS(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (V < 0) {
       PC = -1;
    } else if (V == 1) {
@@ -1678,16 +1678,16 @@ static int clr_helper() {
    return 0;
 
 }
-static int op_fn_CLR(operand_t operand, ea_t ea) {
+static int op_fn_CLR(operand_t operand, ea_t ea, sample_t *sample_q) {
    return clr_helper();
 }
 
-static int op_fn_CLRA(operand_t operand, ea_t ea) {
+static int op_fn_CLRA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = clr_helper();
    return -1;
 }
 
-static int op_fn_CLRB(operand_t operand, ea_t ea) {
+static int op_fn_CLRB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = clr_helper();
    return -1;
 }
@@ -1719,38 +1719,38 @@ static void cmp_helper16(int val, operand_t operand) {
    }
 }
 
-static int op_fn_CMPA(operand_t operand, ea_t ea) {
+static int op_fn_CMPA(operand_t operand, ea_t ea, sample_t *sample_q) {
    cmp_helper8(A, operand);
    return -1;
 }
 
-static int op_fn_CMPB(operand_t operand, ea_t ea) {
+static int op_fn_CMPB(operand_t operand, ea_t ea, sample_t *sample_q) {
    cmp_helper8(B, operand);
    return -1;
 }
 
-static int op_fn_CMPD(operand_t operand, ea_t ea) {
+static int op_fn_CMPD(operand_t operand, ea_t ea, sample_t *sample_q) {
    int D = (A << 8) + B;
    cmp_helper16(D, operand);
    return -1;
 }
 
-static int op_fn_CMPS(operand_t operand, ea_t ea) {
+static int op_fn_CMPS(operand_t operand, ea_t ea, sample_t *sample_q) {
    cmp_helper16(S, operand);
    return -1;
 }
 
-static int op_fn_CMPU(operand_t operand, ea_t ea) {
+static int op_fn_CMPU(operand_t operand, ea_t ea, sample_t *sample_q) {
    cmp_helper16(U, operand);
    return -1;
 }
 
-static int op_fn_CMPX(operand_t operand, ea_t ea) {
+static int op_fn_CMPX(operand_t operand, ea_t ea, sample_t *sample_q) {
    cmp_helper16(X, operand);
    return -1;
 }
 
-static int op_fn_CMPY(operand_t operand, ea_t ea) {
+static int op_fn_CMPY(operand_t operand, ea_t ea, sample_t *sample_q) {
    cmp_helper16(Y, operand);
    return -1;
 }
@@ -1767,26 +1767,26 @@ static int com_helper(int val) {
    return val;
 }
 
-static int op_fn_COM(operand_t operand, ea_t ea) {
+static int op_fn_COM(operand_t operand, ea_t ea, sample_t *sample_q) {
    return com_helper(operand);
 }
 
-static int op_fn_COMA(operand_t operand, ea_t ea) {
+static int op_fn_COMA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = com_helper(A);
    return -1;
 }
 
-static int op_fn_COMB(operand_t operand, ea_t ea) {
+static int op_fn_COMB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = com_helper(B);
    return -1;
 }
 
-static int op_fn_CWAI(operand_t operand, ea_t ea) {
+static int op_fn_CWAI(operand_t operand, ea_t ea, sample_t *sample_q) {
    // TODO
    return -1;
 }
 
-static int op_fn_DAA(operand_t operand, ea_t ea) {
+static int op_fn_DAA(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (A >= 0 && H >= 0 && C >= 0) {
       int correction = 0x00;
       if (H == 1 && (A & 0x0F) > 0x09) {
@@ -1821,16 +1821,16 @@ static int dec_helper(int val) {
    return val;
 }
 
-static int op_fn_DEC(operand_t operand, ea_t ea) {
+static int op_fn_DEC(operand_t operand, ea_t ea, sample_t *sample_q) {
    return dec_helper(operand);
 }
 
-static int op_fn_DECA(operand_t operand, ea_t ea) {
+static int op_fn_DECA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = dec_helper(A);
    return -1;
 }
 
-static int op_fn_DECB(operand_t operand, ea_t ea) {
+static int op_fn_DECB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = dec_helper(B);
    return -1;
 }
@@ -1846,18 +1846,18 @@ static int eor_helper(int val, operand_t operand) {
    return val;
 }
 
-static int op_fn_EORA(operand_t operand, ea_t ea) {
+static int op_fn_EORA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = eor_helper(A, operand);
    return -1;
 }
 
-static int op_fn_EORB(operand_t operand, ea_t ea) {
+static int op_fn_EORB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = eor_helper(B, operand);
    return -1;
 }
 
 // Operand is the postbyte
-static int op_fn_EXG(operand_t operand, ea_t ea) {
+static int op_fn_EXG(operand_t operand, ea_t ea, sample_t *sample_q) {
    int reg1 = (operand >> 4) & 15;
    int reg2 = operand  & 15;
    int tmp1 = get_regp(reg1);
@@ -1880,26 +1880,26 @@ static int inc_helper(int val) {
    return val;
 }
 
-static int op_fn_INC(operand_t operand, ea_t ea) {
+static int op_fn_INC(operand_t operand, ea_t ea, sample_t *sample_q) {
    return inc_helper(operand);
 }
 
-static int op_fn_INCA(operand_t operand, ea_t ea) {
+static int op_fn_INCA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = inc_helper(A);
    return -1;
 }
 
-static int op_fn_INCB(operand_t operand, ea_t ea) {
+static int op_fn_INCB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = inc_helper(B);
    return -1;
 }
 
-static int op_fn_JMP(operand_t operand, ea_t ea) {
+static int op_fn_JMP(operand_t operand, ea_t ea, sample_t *sample_q) {
    PC = ea;
    return -1;
 }
 
-static int op_fn_JSR(operand_t operand, ea_t ea) {
+static int op_fn_JSR(operand_t operand, ea_t ea, sample_t *sample_q) {
    push16s(operand);
    PC = ea & 0xffff;
    return -1;
@@ -1919,60 +1919,60 @@ static int ld_helper16(int val) {
    return val;
 }
 
-static int op_fn_LDA(operand_t operand, ea_t ea) {
+static int op_fn_LDA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = ld_helper8(operand);
    return -1;
 }
 
-static int op_fn_LDB(operand_t operand, ea_t ea) {
+static int op_fn_LDB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = ld_helper8(operand);
    return -1;
 }
 
-static int op_fn_LDD(operand_t operand, ea_t ea) {
+static int op_fn_LDD(operand_t operand, ea_t ea, sample_t *sample_q) {
    int tmp = ld_helper16(operand);
    A = (tmp >> 8) & 0xff;
    B = tmp & 0xff;
    return -1;
 }
 
-static int op_fn_LDS(operand_t operand, ea_t ea) {
+static int op_fn_LDS(operand_t operand, ea_t ea, sample_t *sample_q) {
    S = ld_helper16(operand);
    return -1;
 }
 
-static int op_fn_LDU(operand_t operand, ea_t ea) {
+static int op_fn_LDU(operand_t operand, ea_t ea, sample_t *sample_q) {
    U = ld_helper16(operand);
    return -1;
 }
 
-static int op_fn_LDX(operand_t operand, ea_t ea) {
+static int op_fn_LDX(operand_t operand, ea_t ea, sample_t *sample_q) {
    X = ld_helper16(operand);
    return -1;
 }
 
-static int op_fn_LDY(operand_t operand, ea_t ea) {
+static int op_fn_LDY(operand_t operand, ea_t ea, sample_t *sample_q) {
    Y = ld_helper16(operand);
    return -1;
 }
 
-static int op_fn_LEAS(operand_t operand, ea_t ea) {
+static int op_fn_LEAS(operand_t operand, ea_t ea, sample_t *sample_q) {
    S = ea;
    return -1;
 }
 
-static int op_fn_LEAU(operand_t operand, ea_t ea) {
+static int op_fn_LEAU(operand_t operand, ea_t ea, sample_t *sample_q) {
    U = ea;
    return -1;
 }
 
-static int op_fn_LEAX(operand_t operand, ea_t ea) {
+static int op_fn_LEAX(operand_t operand, ea_t ea, sample_t *sample_q) {
    X = ea;
    Z = (X == 0);
    return -1;
 }
 
-static int op_fn_LEAY(operand_t operand, ea_t ea) {
+static int op_fn_LEAY(operand_t operand, ea_t ea, sample_t *sample_q) {
    Y = ea;
    Z = (Y == 0);
    return -1;
@@ -1991,21 +1991,21 @@ static int lsr_helper(int val) {
    return val;
 }
 
-static int op_fn_LSR(operand_t operand, ea_t ea) {
+static int op_fn_LSR(operand_t operand, ea_t ea, sample_t *sample_q) {
    return lsr_helper(operand);
 }
 
-static int op_fn_LSRA(operand_t operand, ea_t ea) {
+static int op_fn_LSRA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = lsr_helper(A);
    return -1;
 }
 
-static int op_fn_LSRB(operand_t operand, ea_t ea) {
+static int op_fn_LSRB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = lsr_helper(B);
    return -1;
 }
 
-static int op_fn_MUL(operand_t operand, ea_t ea) {
+static int op_fn_MUL(operand_t operand, ea_t ea, sample_t *sample_q) {
    // D = A * B
    if (A >= 0 && B >= 0) {
       uint16_t tmp = A * B;
@@ -2030,21 +2030,21 @@ static int neg_helper(int val) {
    return val;
 }
 
-static int op_fn_NEG(operand_t operand, ea_t ea) {
+static int op_fn_NEG(operand_t operand, ea_t ea, sample_t *sample_q) {
    return neg_helper(operand);
 }
 
-static int op_fn_NEGA(operand_t operand, ea_t ea) {
+static int op_fn_NEGA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = neg_helper(A);
    return -1;
 }
 
-static int op_fn_NEGB(operand_t operand, ea_t ea) {
+static int op_fn_NEGB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = neg_helper(B);
    return -1;
 }
 
-static int op_fn_NOP(operand_t operand, ea_t ea) {
+static int op_fn_NOP(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
@@ -2059,17 +2059,17 @@ static int or_helper(int val, operand_t operand) {
    return val;
 }
 
-static int op_fn_ORA(operand_t operand, ea_t ea) {
+static int op_fn_ORA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = or_helper(A, operand);
    return -1;
 }
 
-static int op_fn_ORB(operand_t operand, ea_t ea) {
+static int op_fn_ORB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = or_helper(B, operand);
    return -1;
 }
 
-static int op_fn_ORCC(operand_t operand, ea_t ea) {
+static int op_fn_ORCC(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (operand & 0x80) {
       E = 1;
    }
@@ -2098,22 +2098,22 @@ static int op_fn_ORCC(operand_t operand, ea_t ea) {
 }
 
 // Operand is the postbyte
-static int op_fn_PSHS(operand_t operand, ea_t ea) {
+static int op_fn_PSHS(operand_t operand, ea_t ea, sample_t *sample_q) {
    // TODO
    return -1;
 }
 
-static int op_fn_PSHU(operand_t operand, ea_t ea) {
+static int op_fn_PSHU(operand_t operand, ea_t ea, sample_t *sample_q) {
    // TODO
    return -1;
 }
 
-static int op_fn_PULS(operand_t operand, ea_t ea) {
+static int op_fn_PULS(operand_t operand, ea_t ea, sample_t *sample_q) {
    // TODO
    return -1;
 }
 
-static int op_fn_PULU(operand_t operand, ea_t ea) {
+static int op_fn_PULU(operand_t operand, ea_t ea, sample_t *sample_q) {
    // TODO
    return -1;
 }
@@ -2135,16 +2135,16 @@ static int rol_helper(int val) {
    return val;
 }
 
-static int op_fn_ROL(operand_t operand, ea_t ea) {
+static int op_fn_ROL(operand_t operand, ea_t ea, sample_t *sample_q) {
    return rol_helper(operand);
 }
 
-static int op_fn_ROLA(operand_t operand, ea_t ea) {
+static int op_fn_ROLA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = rol_helper(A);
    return -1;
 }
 
-static int op_fn_ROLB(operand_t operand, ea_t ea) {
+static int op_fn_ROLB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = rol_helper(B);
    return -1;
 }
@@ -2164,21 +2164,21 @@ static int ror_helper(int val) {
    return val;
 }
 
-static int op_fn_ROR(operand_t operand, ea_t ea) {
+static int op_fn_ROR(operand_t operand, ea_t ea, sample_t *sample_q) {
    return ror_helper(operand);
 }
 
-static int op_fn_RORA(operand_t operand, ea_t ea) {
+static int op_fn_RORA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = ror_helper(A);
    return -1;
 }
 
-static int op_fn_RORB(operand_t operand, ea_t ea) {
+static int op_fn_RORB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = ror_helper(B);
    return -1;
 }
 
-static int op_fn_RTI(operand_t operand, ea_t ea) {
+static int op_fn_RTI(operand_t operand, ea_t ea, sample_t *sample_q) {
    // TODO: This is the 6502 version
    // RTI: the operand is the data pulled from the stack (P, PCL, PCH, PBR)
    set_FLAGS(operand);
@@ -2188,12 +2188,10 @@ static int op_fn_RTI(operand_t operand, ea_t ea) {
    return -1;
 }
 
-static int op_fn_RTS(operand_t operand, ea_t ea) {
-   // TODO: This is the 6502 version
+static int op_fn_RTS(operand_t operand, ea_t ea, sample_t *sample_q) {
    // RTS: the operand is the data pulled from the stack (PCL, PCH)
    pop8s(operand);
    pop8s(operand >> 8);
-   // The +1 is handled elsewhere
    PC = operand & 0xffff;
    return -1;
 }
@@ -2219,17 +2217,17 @@ static int sub_helper(int val, int cin, operand_t operand) {
    }
 }
 
-static int op_fn_SBCA(operand_t operand, ea_t ea) {
+static int op_fn_SBCA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = sub_helper(A, C, operand);
    return -1;
 }
 
-static int op_fn_SBCB(operand_t operand, ea_t ea) {
+static int op_fn_SBCB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = sub_helper(B, C, operand);
    return -1;
 }
 
-static int op_fn_SEX(operand_t operand, ea_t ea) {
+static int op_fn_SEX(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (B >= 0) {
       if (B & 0x80) {
          A = 0xFF;
@@ -2266,53 +2264,53 @@ static int st_helper16(int val, operand_t operand) {
    return operand;
 }
 
-static int op_fn_STA(operand_t operand, ea_t ea) {
+static int op_fn_STA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = st_helper8(A, operand);
    return operand;
 }
 
-static int op_fn_STB(operand_t operand, ea_t ea) {
+static int op_fn_STB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = st_helper8(B, operand);
    return operand;
 }
 
-static int op_fn_STD(operand_t operand, ea_t ea) {
+static int op_fn_STD(operand_t operand, ea_t ea, sample_t *sample_q) {
    int D = (A >= 0 && B >= 0) ? (A << 8) + B : -1;
    D = st_helper16(D, operand);
    return operand;
 }
 
-static int op_fn_STS(operand_t operand, ea_t ea) {
+static int op_fn_STS(operand_t operand, ea_t ea, sample_t *sample_q) {
    S = st_helper16(S, operand);
    return operand;
 }
 
-static int op_fn_STU(operand_t operand, ea_t ea) {
+static int op_fn_STU(operand_t operand, ea_t ea, sample_t *sample_q) {
    U = st_helper16(U, operand);
    return operand;
 }
 
-static int op_fn_STX(operand_t operand, ea_t ea) {
+static int op_fn_STX(operand_t operand, ea_t ea, sample_t *sample_q) {
    X = st_helper16(X, operand);
    return operand;
 }
 
-static int op_fn_STY(operand_t operand, ea_t ea) {
+static int op_fn_STY(operand_t operand, ea_t ea, sample_t *sample_q) {
    Y = st_helper16(Y, operand);
    return operand;
 }
 
-static int op_fn_SUBA(operand_t operand, ea_t ea) {
+static int op_fn_SUBA(operand_t operand, ea_t ea, sample_t *sample_q) {
    A = sub_helper(A, 0, operand);
    return -1;
 }
 
-static int op_fn_SUBB(operand_t operand, ea_t ea) {
+static int op_fn_SUBB(operand_t operand, ea_t ea, sample_t *sample_q) {
    B = sub_helper(B, 0, operand);
    return -1;
 }
 
-static int op_fn_SUBD(operand_t operand, ea_t ea) {
+static int op_fn_SUBD(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (A >= 0 && B >= 0) {
       int d = (A << 8) + B;
       // Perform the addition (there is no carry in)
@@ -2336,53 +2334,53 @@ static int op_fn_SUBD(operand_t operand, ea_t ea) {
    return -1;
 }
 
-static int op_fn_SWI(operand_t operand, ea_t ea) {
+static int op_fn_SWI(operand_t operand, ea_t ea, sample_t *sample_q) {
    // TODO
    return -1;
 }
 
-static int op_fn_SWI2(operand_t operand, ea_t ea) {
+static int op_fn_SWI2(operand_t operand, ea_t ea, sample_t *sample_q) {
    // TODO
    return -1;
 }
 
-static int op_fn_SWI3(operand_t operand, ea_t ea) {
+static int op_fn_SWI3(operand_t operand, ea_t ea, sample_t *sample_q) {
    // TODO
    return -1;
 }
 
-static int op_fn_SYNC(operand_t operand, ea_t ea) {
+static int op_fn_SYNC(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
 // Operand is the postbyte
-static int op_fn_TFR(operand_t operand, ea_t ea) {
+static int op_fn_TFR(operand_t operand, ea_t ea, sample_t *sample_q) {
    int reg1 = (operand >> 4) & 15;
    int reg2 = operand  & 15;
    set_regp(reg2, get_regp(reg1));
    return -1;
 }
 
-static int op_fn_TST(operand_t operand, ea_t ea) {
+static int op_fn_TST(operand_t operand, ea_t ea, sample_t *sample_q) {
    set_NZ(operand);
    return -1;
 }
 
-static int op_fn_TSTA(operand_t operand, ea_t ea) {
+static int op_fn_TSTA(operand_t operand, ea_t ea, sample_t *sample_q) {
    set_NZ(A);
    return -1;
 }
 
-static int op_fn_TSTB(operand_t operand, ea_t ea) {
+static int op_fn_TSTB(operand_t operand, ea_t ea, sample_t *sample_q) {
    set_NZ(B);
    return -1;
 }
 
-static int op_fn_UU(operand_t operand, ea_t ea) {
+static int op_fn_UU(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_XX(operand_t operand, ea_t ea) {
+static int op_fn_XX(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
