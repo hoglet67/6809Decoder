@@ -2177,12 +2177,53 @@ static int op_fn_RORB(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_RTI(operand_t operand, ea_t ea, sample_t *sample_q) {
-   // TODO: This is the 6502 version
-   // RTI: the operand is the data pulled from the stack (P, PCL, PCH, PBR)
-   set_FLAGS(operand);
-   pop8s(operand);
-   pop8s(operand >> 8);
-   pop8s(operand >> 16);
+   // E = 0
+   //   0 Opcode
+   //   1 ---
+   //   2 flags
+   //   3 PCH
+   //   4 PCL
+   //   5 ---
+   //
+   // E = 1
+   //   0 Opcode
+   //   1 ---
+   //   2 flags
+   //   3 A
+   //   4 B
+   //   5 DP
+   //   6 XHI
+   //   7 XLO
+   //   8 YHI
+   //   9 YLO
+   //  10 UHI
+   //  11 HLO
+   //  12 PCH
+   //  13 PCL
+   //  14 ---
+
+   // Number of 8-bit items unstacked
+   int n = (E == 1) ? 3 : 12;
+   for (int i = 2; i < 2 + n; i++) {
+      pop8s(sample_q[i].data);
+   }
+
+   // Update the register state
+   if (E == 1) {
+      A  = sample_q[3].data;
+      B  = sample_q[4].data;
+      DP = sample_q[5].data;
+      X  = (sample_q[6].data << 8) + sample_q[7].data;
+      Y  = (sample_q[8].data << 8) + sample_q[9].data;
+      U  = (sample_q[10].data << 8) + sample_q[11].data;
+      PC = (sample_q[12].data << 8) + sample_q[13].data;
+   } else {
+      PC = (sample_q[3].data << 8) + sample_q[4].data;
+   }
+
+   // Do the flags last, so as not to clobber the E test above
+   set_FLAGS(sample_q[2].data);
+
    return -1;
 }
 
