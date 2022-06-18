@@ -464,6 +464,33 @@ static void em_6809_init(arguments_t *args) {
 }
 
 static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
+   // FIQ:
+   //    m +  7   addr=6 ba=0 bs=1
+   //    m +  8   addr=7 ba=0 bs=1
+   //    m +  9   addr=X ba=0 bs=0
+   //    m + 10   <Start of first instruction>
+   //
+   if (sample_q[7].ba == 0 && sample_q[7].bs == 1 && sample_q[7].addr == 0x6) {
+      return 19;
+   }
+   // IRQ:
+   //    m + 16    addr=8 ba=0 bs=1
+   //    m + 17    addr=9 ba=0 bs=1
+   //    m + 18    addr=X ba=0 bs=0
+   //    m + 19    <Start of first instruction>
+   //
+   if (sample_q[16].ba == 0 && sample_q[16].bs == 1 && sample_q[16].addr == 0x8) {
+      return 19;
+   }
+   // NMI:
+   //    m + 16    addr=C ba=0 bs=1
+   //    m + 17    addr=D ba=0 bs=1
+   //    m + 18    addr=X ba=0 bs=0
+   //    m + 19    <Start of first instruction>
+   //
+   if (sample_q[16].ba == 0 && sample_q[16].bs == 1 && sample_q[16].addr == 0xC) {
+      return 19;
+   }
    return 0;
 }
 
@@ -528,6 +555,112 @@ static void em_6809_reset(sample_t *sample_q, int num_cycles, instruction_t *ins
 }
 
 static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
+
+   // Try to establish the type of interrupt
+   int isFIQ = (num_cycles == 10);
+   int isNMI = (num_cycles == 19) && (sample_q[16].addr == 0x06);
+
+   // The PC is handled the same in all cases
+   int flags;
+   int vector;
+   int pc = (sample_q[4].data << 8) + sample_q[3].data;
+   push16s(pc);
+   instruction->pc = pc;
+
+   if (isFIQ) {
+      // FIQ
+      //  0
+      //  1
+      //  2
+      //  3 PCL
+      //  4 PCH
+      //  5 Flags
+      //  6
+      //  7 New PCH
+      //  8 New PCL
+      //  9
+      flags  = sample_q[5].data;
+      vector = (sample_q[7].data << 8) + sample_q[8].data;
+      // Clear E to indicate just PC/flags were saved
+      E = 0;
+   } else {
+      // IRQ / NMI
+      //  0
+      //  1
+      //  2
+      //  3 PCL
+      //  4 PCH
+      //  5 USL
+      //  6 USH
+      //  7 IYL
+      //  8 IYH
+      //  9 IXL
+      // 10 IXH
+      // 11 DP
+      // 12 ACCB
+      // 13 ACCA
+      // 14 Flags
+      // 15
+      // 16 New PCH
+      // 17 New PCL
+      // 18
+      int u  = (sample_q[6].data << 8) + sample_q[5].data;
+      int y  = (sample_q[8].data << 8) + sample_q[7].data;
+      int x  = (sample_q[10].data << 8) + sample_q[9].data;
+      int dp = sample_q[11].data;
+      int b  = sample_q[12].data;
+      int a  = sample_q[13].data;
+      flags  = sample_q[14].data;
+      vector = (sample_q[16].data << 8) + sample_q[17].data;
+      // Stack values for memory modelling
+      push16s(pc);
+      push16s(u);
+      push16s(y);
+      push16s(x);
+      push8s(dp);
+      push8s(b);
+      push8s(a);
+      push8s(flags);
+      // Validate the existing registers
+      if (U >= 0 && u != U) {
+         failflag = 1;
+      }
+      U = u;
+      if (X >= 0 && x != X) {
+         failflag = 1;
+      }
+      X = x;
+      if (Y >= 0 && y != Y) {
+         failflag = 1;
+      }
+      Y = y;
+      if (DP >= 0 && dp != DP) {
+         failflag = 1;
+      }
+      DP = dp;
+      if (B >= 0 && b != B) {
+         failflag = 1;
+      }
+      B = b;
+      if (A >= 0 && a != A) {
+         failflag = 1;
+      }
+      A = a;
+      // Set E to indicate the full state was saved
+      E = 1;
+   }
+
+   // Validate the flags (after E was updates)
+   check_FLAGS(flags);
+   // And make them consistent
+   set_FLAGS(flags);
+   // Stack values for memory modelling
+   push8s(flags);
+
+   // Setup expected state for the ISR
+   F  = isFIQ | isNMI;
+   I  = 1;
+   PC = vector;
 }
 
 static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
@@ -543,7 +676,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    index++;
    instr = instr_table_6809_map0;
 
-   // Handle the tw prefixes
+   // Handle the 0x10/0x11 prefixes
    if (instruction->opcode == 0x10 || instruction->opcode == 0x11) {
       // The first byte is the prefix
       instruction->prefix = instruction->opcode;
@@ -794,6 +927,14 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
       {
          int pb = instruction->postbyte;
          switch (instruction->opcode) {
+         case 0x1a:
+         case 0x1c:
+            /* orr, andc */
+            *ptr++ = '#';
+            *ptr++ = '$';
+            write_hex2(ptr, pb);
+            ptr += 2;
+            break;
          case 0x1e:
          case 0x1f:
             /* exg tfr */
@@ -2334,9 +2475,9 @@ static instr_mode_t instr_table_6809_map0[] = {
    /* 17 */    { &op_LBSR, RELATIVE_16  , 9 },
    /* 18 */    { &op_XX  , ILLEGAL      , 1 },
    /* 19 */    { &op_DAA , INHERENT     , 2 },
-   /* 1A */    { &op_ORCC, IMMEDIATE_8  , 3 },
+   /* 1A */    { &op_ORCC, REGISTER     , 3 },
    /* 1B */    { &op_XX  , ILLEGAL      , 1 },
-   /* 1C */    { &op_ANDC, IMMEDIATE_8  , 3 },
+   /* 1C */    { &op_ANDC, REGISTER     , 3 },
    /* 1D */    { &op_SEX , INHERENT     , 2 },
    /* 1E */    { &op_EXG , REGISTER     , 8 },
    /* 1F */    { &op_TFR , REGISTER     , 6 },
