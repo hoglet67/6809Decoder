@@ -854,7 +854,10 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
 
    // Calculate the operand
    operand_t operand;
-   if (instr->mode == REGISTER) {
+   if (instr->op == &op_TST) {
+      // There are two dead cycles at the end of TST
+      operand = sample_q[num_cycles - 3].data;
+   } else if (instr->mode == REGISTER) {
       operand = sample_q[1].data; // This is the postbyte
    } else if (instr->op->type == RMWOP) {
       // Read-modify-wrie instruction
