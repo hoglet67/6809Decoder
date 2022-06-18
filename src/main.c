@@ -71,7 +71,7 @@ The default sample bit assignments for the 6809 signals are:\n\
  -  lic: bit  9\n\
  -   bs: bit 10\n\
  -   ba: bit 11\n\
- - addr: bit 12\n\
+ - addr: bit 12 (assumes 4 consecutive bits)\n\
 \n\
 To specify that an input is unconnected, include the option with an empty\n\
 BITNUM. e.g. --lic=\n\
