@@ -373,10 +373,16 @@ static void push8s(int value) {
    }
 }
 
-static void push16s(int value) {
-   push8s(value >> 8);
-   push8s(value);
+static void pop16s(int value) {
+   pop8s(value >> 8);
+   pop8s(value);
 }
+
+static void push16s(int value) {
+   push8s(value);
+   push8s(value >> 8);
+}
+
 
 static void pop8u(int value) {
    if (U >= 0) {
@@ -392,14 +398,14 @@ static void push8u(int value) {
    }
 }
 
-static void push16u(int value) {
-   push8u(value >> 8);
-   push8u(value);
+static void pop16u(int value) {
+   pop8u(value >> 8);
+   pop8u(value);
 }
 
-
-static uint8_t get_opcode(uint8_t b0, uint8_t b1) {
-   return (b0 == 0x10 || b0 == 0x11) ? b1 : b0;
+static void push16u(int value) {
+   push8u(value);
+   push8u(value >> 8);
 }
 
 static instr_mode_t *get_instruction(uint8_t b0, uint8_t b1) {
@@ -2095,24 +2101,207 @@ static int op_fn_ORCC(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-// Operand is the postbyte
+static void push_helper(sample_t *sample_q, int system) {
+   //  0 opcode
+   //  1 postbyte
+   //  2 ---
+   //  3 ---
+   //  4 ---
+   //  5 PCL    skipped if bit 7=0
+   //  6 PCH    skipped if bit 7=0
+   //  7 UL/SL  skipped if bit 6=0
+   //  8 UH/SH  skipped if bit 6=0
+   //  9 YL     skipped if bit 5=0
+   // 10 YH     skipped if bit 5=0
+   // 11 XL     skipped if bit 4=0
+   // 12 XH     skipped if bit 4=0
+   // 13 DP     skipped if bit 3=0
+   // 14 B      skipped if bit 2=0
+   // 15 A      skipped if bit 1=0
+   // 16 Flags  skipped if bit 0=0
+   int *us;
+   void (*push8)(int);
+   void (*push16)(int);
+   if (system) {
+      push8 = push8s;
+      push16 = push16s;
+      us = &U;
+   } else {
+      push8 = push8u;
+      push16 = push16u;
+      us = &S;
+   }
+
+   int pb = sample_q[1].data;
+   int tmp;
+   int i = 5;
+   if (pb & 0x80) {
+      tmp = (sample_q[i + 1].data << 8) + sample_q[i].data;
+      i += 2;
+      push16(tmp);
+      if (PC >= 0 && PC != tmp) {
+         failflag = 1;
+      }
+      PC = tmp;
+   }
+   if (pb & 0x40) {
+      tmp = (sample_q[i + 1].data << 8) + sample_q[i].data;
+      i += 2;
+      push16(tmp);
+      if (*us >= 0 && *us != tmp) {
+         failflag = 1;
+      }
+      *us = tmp;
+   }
+   if (pb & 0x20) {
+      tmp = (sample_q[i + 1].data << 8) + sample_q[i].data;
+      i += 2;
+      push16(tmp);
+      if (Y >= 0 && Y != tmp) {
+         failflag = 1;
+      }
+      Y = tmp;
+   }
+   if (pb & 0x10) {
+      tmp = (sample_q[i + 1].data << 8) + sample_q[i].data;
+      i += 2;
+      push16(tmp);
+      if (X >= 0 && X != tmp) {
+         failflag = 1;
+      }
+      X = tmp;
+   }
+   if (pb & 0x08) {
+      tmp = sample_q[i++].data;
+      push8(tmp);
+      if (DP >= 0 && DP != tmp) {
+         failflag = 1;
+      }
+      DP = tmp;
+   }
+   if (pb & 0x04) {
+      tmp = sample_q[i++].data;
+      push8(tmp);
+      if (B >= 0 && B != tmp) {
+         failflag = 1;
+      }
+      B = tmp;
+   }
+   if (pb & 0x02) {
+      tmp = sample_q[i++].data;
+      push8(tmp);
+      if (A >= 0 && A != tmp) {
+         failflag = 1;
+      }
+      A = tmp;
+   }
+   if (pb & 0x01) {
+      tmp = sample_q[i++].data;
+      push8(tmp);
+      check_FLAGS(tmp);
+      set_FLAGS(tmp);
+   }
+}
+
 static int op_fn_PSHS(operand_t operand, ea_t ea, sample_t *sample_q) {
-   // TODO
+   push_helper(sample_q, 1); // 1 = PSHS
    return -1;
 }
 
 static int op_fn_PSHU(operand_t operand, ea_t ea, sample_t *sample_q) {
-   // TODO
+   push_helper(sample_q, 0); // 0 = PSHU
    return -1;
 }
 
+
+static void pull_helper(sample_t *sample_q, int system) {
+   //  0 opcode
+   //  1 postbyte
+   //  2 ---
+   //  3 ---
+   //  4 Flags  skipped if bit 0=0
+   //  5 A      skipped if bit 1=0
+   //  6 B      skipped if bit 2=0
+   //  7 DP     skipped if bit 3=0
+   //  8 XH     skipped if bit 4=0
+   //  9 XL     skipped if bit 4=0
+   // 10 YH     skipped if bit 5=0
+   // 11 YL     skipped if bit 5=0
+   // 12 UH/SH  skipped if bit 6=0
+   // 13 UL/SL  skipped if bit 6=0
+   // 14 PCH    skipped if bit 7=0
+   // 15 PCL    skipped if bit 7=0
+   // 16 --
+
+   int *us;
+   void (*pop8)(int);
+   void (*pop16)(int);
+   if (system) {
+      pop8 = pop8s;
+      pop16 = pop16s;
+      us = &U;
+   } else {
+      pop8 = pop8u;
+      pop16 = pop16u;
+      us = &S;
+   }
+
+   int pb = sample_q[1].data;
+   int tmp;
+   int i = 4;
+   if (pb & 0x01) {
+      tmp = sample_q[i++].data;
+      pop8(tmp);
+      set_FLAGS(tmp);
+   }
+   if (pb & 0x02) {
+      tmp = sample_q[i++].data;
+      pop8(tmp);
+      A = tmp;
+   }
+   if (pb & 0x04) {
+      tmp = sample_q[i++].data;
+      pop8(tmp);
+      B = tmp;
+   }
+   if (pb & 0x08) {
+      tmp = sample_q[i++].data;
+      pop8(tmp);
+      DP = tmp;
+   }
+   if (pb & 0x10) {
+      tmp = (sample_q[i].data << 8) + sample_q[i + 1].data;
+      i += 2;
+      pop16(tmp);
+      X = tmp;
+   }
+   if (pb & 0x20) {
+      tmp = (sample_q[i].data << 8) + sample_q[i + 1].data;
+      i += 2;
+      pop16(tmp);
+      Y = tmp;
+   }
+   if (pb & 0x40) {
+      tmp = (sample_q[i].data << 8) + sample_q[i + 1].data;
+      i += 2;
+      pop16(tmp);
+      *us = tmp;
+   }
+   if (pb & 0x80) {
+      tmp = (sample_q[i].data << 8) + sample_q[i + 1].data;
+      i += 2;
+      pop16(tmp);
+      PC = tmp;
+   }
+}
+
 static int op_fn_PULS(operand_t operand, ea_t ea, sample_t *sample_q) {
-   // TODO
+   pull_helper(sample_q, 1); // 1 = PULS
    return -1;
 }
 
 static int op_fn_PULU(operand_t operand, ea_t ea, sample_t *sample_q) {
-   // TODO
+   pull_helper(sample_q, 0); // 0 = PULU
    return -1;
 }
 
