@@ -640,113 +640,129 @@ static void em_6809_reset(sample_t *sample_q, int num_cycles, instruction_t *ins
    PC = (sample_q[num_cycles - 3].data << 8) + sample_q[num_cycles - 2].data;
 }
 
-static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
+// Returns the old PC value
+static int interrupt_helper(sample_t *sample_q, int offset, int full) {
 
-   // Try to establish the type of interrupt
-   int isFIQ = (num_cycles == 10);
-   int isNMI = (num_cycles == 19) && (sample_q[16].addr == 0x06);
+   // FIQ
+   //  0
+   //  1
+   //  2
+   //  3 PCL
+   //  4 PCH
+   //  5 Flags
+   //  6
+   //  7 New PCH
+   //  8 New PCL
+   //  9
 
-   // The PC is handled the same in all cases
-   int flags;
-   int vector;
-   int pc = (sample_q[4].data << 8) + sample_q[3].data;
+   // IRQ / NMI / SWI / SWI2 / SWI3
+   //  0
+   //  1
+   //  2
+   //  3 PCL
+   //  4 PCH
+   //  5 USL
+   //  6 USH
+   //  7 IYL
+   //  8 IYH
+   //  9 IXL
+   // 10 IXH
+   // 11 DP
+   // 12 ACCB
+   // 13 ACCA
+   // 14 Flags
+   // 15
+   // 16 New PCH
+   // 17 New PCL
+   // 18
+   //
+   // Note there is a one cycle offset for SWI2/3 due to the additiona prefix byte
+
+   int i = offset;
+
+   // The PC is pushed in all cases
+   int pc = (sample_q[i + 1].data << 8) + sample_q[i].data;
+   i += 2;
    push16s(pc);
-   instruction->pc = pc;
 
-   if (isFIQ) {
-      // FIQ
-      //  0
-      //  1
-      //  2
-      //  3 PCL
-      //  4 PCH
-      //  5 Flags
-      //  6
-      //  7 New PCH
-      //  8 New PCL
-      //  9
-      flags  = sample_q[5].data;
-      vector = (sample_q[7].data << 8) + sample_q[8].data;
-      // Clear E to indicate just PC/flags were saved
-      E = 0;
-   } else {
-      // IRQ / NMI
-      //  0
-      //  1
-      //  2
-      //  3 PCL
-      //  4 PCH
-      //  5 USL
-      //  6 USH
-      //  7 IYL
-      //  8 IYH
-      //  9 IXL
-      // 10 IXH
-      // 11 DP
-      // 12 ACCB
-      // 13 ACCA
-      // 14 Flags
-      // 15
-      // 16 New PCH
-      // 17 New PCL
-      // 18
-      int u  = (sample_q[6].data << 8) + sample_q[5].data;
-      int y  = (sample_q[8].data << 8) + sample_q[7].data;
-      int x  = (sample_q[10].data << 8) + sample_q[9].data;
-      int dp = sample_q[11].data;
-      int b  = sample_q[12].data;
-      int a  = sample_q[13].data;
-      flags  = sample_q[14].data;
-      vector = (sample_q[16].data << 8) + sample_q[17].data;
-      // Stack values for memory modelling
-      push16s(pc);
+   // The full state is pushed in IRQ/NMI/SWI/SWI2/SWI3
+   if (full) {
+
+      int u  = (sample_q[i + 1].data << 8) + sample_q[i].data;
+      i += 2;
       push16s(u);
-      push16s(y);
-      push16s(x);
-      push8s(dp);
-      push8s(b);
-      push8s(a);
-      push8s(flags);
-      // Validate the existing registers
       if (U >= 0 && u != U) {
          failflag = 1;
       }
       U = u;
-      if (X >= 0 && x != X) {
-         failflag = 1;
-      }
-      X = x;
+
+      int y  = (sample_q[i + 1].data << 8) + sample_q[i].data;
+      i += 2;
+      push16s(y);
       if (Y >= 0 && y != Y) {
          failflag = 1;
       }
       Y = y;
+
+      int x  = (sample_q[i + 1].data << 8) + sample_q[i].data;
+      i += 2;
+      push16s(x);
+      if (X >= 0 && x != X) {
+         failflag = 1;
+      }
+      X = x;
+
+      int dp = sample_q[i++].data;
+      push8s(dp);
       if (DP >= 0 && dp != DP) {
          failflag = 1;
       }
       DP = dp;
+
+      int b  = sample_q[i++].data;
+      push8s(b);
       if (B >= 0 && b != B) {
          failflag = 1;
       }
       B = b;
+
+      int a  = sample_q[i++].data;
+      push8s(a);
       if (A >= 0 && a != A) {
          failflag = 1;
       }
       A = a;
       // Set E to indicate the full state was saved
       E = 1;
+   } else {
+      // Clear E to indicate just PC/flags were saved
+      E = 0;
    }
 
-   // Validate the flags (after E was updates)
-   check_FLAGS(flags);
-   // And make them consistent
-   set_FLAGS(flags);
-   // Stack values for memory modelling
+   // The flags are pushed in all cases
+   int flags = sample_q[i].data;
    push8s(flags);
+   check_FLAGS(flags);
+   set_FLAGS(flags);
 
-   // Setup expected state for the ISR
+   // The vector is read in all cases
+   i += 2;
+   PC = (sample_q[i].data << 8) + sample_q[i + 1].data;
+
+   // Return the old PC value that was pushed to the stack
+   return pc;
+}
+
+static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
+   // Try to establish the type of interrupt
+   int isFIQ = (num_cycles == 10);
+   int isNMI = (num_cycles == 19) && (sample_q[16].addr == 0x06);
+
+   instruction->pc = interrupt_helper(sample_q, 3, !isFIQ);
+
+   // Setup the appropriate interrupt mask flags
    F  = isFIQ | isNMI;
    I  = 1;
-   PC = vector;
 }
 
 static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
@@ -2564,18 +2580,19 @@ static int op_fn_SUBD(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
+
 static int op_fn_SWI(operand_t operand, ea_t ea, sample_t *sample_q) {
-   // TODO
+   interrupt_helper(sample_q, 3, 1);
    return -1;
 }
 
 static int op_fn_SWI2(operand_t operand, ea_t ea, sample_t *sample_q) {
-   // TODO
+   interrupt_helper(sample_q, 4, 1);
    return -1;
 }
 
 static int op_fn_SWI3(operand_t operand, ea_t ea, sample_t *sample_q) {
-   // TODO
+   interrupt_helper(sample_q, 4, 1);
    return -1;
 }
 
