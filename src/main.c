@@ -231,6 +231,13 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
          arguments->vec_rst = UNDEFINED;
       }
       break;
+   case KEY_SKIP:
+      if (arg && strlen(arg) > 0) {
+         arguments->skip = strtol(arg, (char **)NULL, 16);
+      } else {
+         arguments->skip = 0;
+      }
+      break;
    case KEY_MEM:
       if (arg && strlen(arg) > 0) {
          arguments->mem_model = strtol(arg, (char **)NULL, 16);
