@@ -189,6 +189,9 @@ static int Z = -1;
 static int V = -1;
 static int C = -1;
 
+// Misc
+static int show_cycle_errors = 0;
+
 // ====================================================================
 // Forward declarations
 // ====================================================================
@@ -560,6 +563,7 @@ static void set_regp(int i, int val) {
 // ====================================================================
 
 static void em_6809_init(arguments_t *args) {
+   show_cycle_errors = args->show_cycles;
 }
 
 static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
@@ -721,10 +725,12 @@ static int count_cycles_with_lic(sample_t *sample_q) {
       if (sample_q[i].lic == 1) {
          i++;
          // Validate the num_cycles passed in
-         int expected = get_num_cycles(sample_q);
-         if (expected >= 0) {
-            if (i != expected) {
-               failflag |= FAIL_CYCLES;
+         if (show_cycle_errors) {
+            int expected = get_num_cycles(sample_q);
+            if (expected >= 0) {
+               if (i != expected) {
+                  failflag |= FAIL_CYCLES;
+               }
             }
          }
          return i;
