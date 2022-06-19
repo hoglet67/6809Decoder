@@ -344,54 +344,48 @@ static operation_t op_XRES ; // Reset
 // Helper Methods
 // ====================================================================
 
-static int compare_FLAGS(int operand) {
+static void check_FLAGS(int operand) {
    if (E >= 0) {
       if (E != ((operand >> 7) & 1)) {
-         return FAIL_E;
+         failflag |= FAIL_E;
       }
    }
    if (F >= 0) {
       if (F != ((operand >> 6) & 1)) {
-         return FAIL_F;
+         failflag |= FAIL_F;
       }
    }
    if (H >= 0) {
       if (H != ((operand >> 5) & 1)) {
-         return FAIL_H;
+         failflag |= FAIL_H;
       }
    }
    if (I >= 0) {
       if (I != ((operand >> 4) & 1)) {
-         return FAIL_I;
+         failflag |= FAIL_I;
       }
    }
    if (N >= 0) {
       if (N != ((operand >> 3) & 1)) {
-         return FAIL_N;
+         failflag |= FAIL_N;
       }
    }
    if (Z >= 0) {
       if (Z != ((operand >> 2) & 1)) {
-         return FAIL_Z;
+         failflag |= FAIL_Z;
       }
    }
    if (V >= 0) {
       if (V != ((operand >> 1) & 1)) {
-         return FAIL_V;
+         failflag |= FAIL_V;
       }
    }
    if (C >= 0) {
       if (C != ((operand >> 0) & 1)) {
-         return FAIL_C;
+         failflag |= FAIL_C;
       }
    }
-   return 0;
 }
-
-static void check_FLAGS(int operand) {
-   failflag |= compare_FLAGS(operand);
-}
-
 
 static int get_FLAGS() {
    if (E < 0 || F < 0 || H < 0 || I < 0 || N < 0 || Z < 0 || V < 0 || C < 0) {
