@@ -15,6 +15,9 @@ typedef enum {
    CPU_6809E,
 } cpu_t;
 
+// SWI2/3 are the longest instructions, at 22 cycles
+#define LONGEST_INSTRUCTION 22
+
 // Sample Queue Depth - needs to fit the longest instruction
 #define DEPTH 32
 

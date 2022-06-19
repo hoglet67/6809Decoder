@@ -548,7 +548,7 @@ static int postbyte_cycles[] = { 2, 3, 2, 3, 0, 1, 1, 0, 1, 4, 0, 4, 1, 5, 0, 5 
 
 static int count_bits[] =    { 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4};
 
-static int em_6809_count_cycles(sample_t *sample_q) {
+static int get_num_cycles(sample_t *sample_q) {
    uint8_t b0 = sample_q[0].data;
    uint8_t b1 = sample_q[1].data;
    instr_mode_t *instr = get_instruction(b0, b1);
@@ -649,6 +649,43 @@ static int em_6809_count_cycles(sample_t *sample_q) {
       }
    }
    return cycle_count;
+}
+
+static int count_cycles_with_lic(sample_t *sample_q) {
+   for (int i = 0; i < LONGEST_INSTRUCTION; i++) {
+      if (sample_q[i].type == LAST) {
+         return 0;
+      }
+      if (sample_q[i].lic == 1) {
+         i++;
+         // Validate the num_cycles passed in
+         int expected = get_num_cycles(sample_q);
+         if (expected >= 0) {
+            if (i != expected) {
+               printf ("opcode %02x: cycle prediction fail: expected %d actual %d\n", sample_q[0].data, expected, i);
+            }
+         }
+         return i;
+      }
+   }
+   return 1;
+}
+
+static int count_cycles_without_lic(sample_t *sample_q) {
+   int num_cycles = get_num_cycles(sample_q);
+   if (num_cycles >= 0) {
+      return num_cycles;
+   }
+   printf ("cycle prediction unknown\n");
+   return 1;
+}
+   
+static int em_6809_count_cycles(sample_t *sample_q) {
+   if (sample_q[0].lic < 0) {
+      return count_cycles_without_lic(sample_q);
+   } else {
+      return count_cycles_with_lic(sample_q);
+   }
 }
 
 static void em_6809_reset(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
