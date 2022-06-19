@@ -606,7 +606,7 @@ static int em_6809_match_reset(sample_t *sample_q, int num_samples) {
    return 0;
 }
 
-static int postbyte_cycles[] = { 2, 3, 2, 3, 0, 1, 1, 0, 1, 4, 0, 4, 1, 5, 0, 5 };
+static int postbyte_cycles[] = { 2, 3, 2, 3, 0, 1, 1, 0, 1, 4, 0, 4, 1, 5, 0, 2 };
 
 static int count_bits[] =    { 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4};
 
@@ -702,10 +702,15 @@ static int get_num_cycles(sample_t *sample_q) {
       cycle_count += count_bits[b1 & 0x0f];            // bits 0..3 are 8 bit registers
       cycle_count += count_bits[(b1 >> 4) & 0x0f] * 2; // bits 4..7 are 16 bit registers
    } else if (instr->mode == INDEXED) {
+      // For INDEXED address, the instruction table cycles
+      // are the minimum the instruction will execute in
       int postindex = (b0 == 0x10 || b0 == 0x11) ? 2 : 1;
       int postbyte = sample_q[postindex].data;
       if (postbyte & 0x80) {
          cycle_count += postbyte_cycles[postbyte & 0x0F];
+         if (postbyte & 0x10) {
+            cycle_count += 3;
+         }
       } else {
          cycle_count += 1;
       }
