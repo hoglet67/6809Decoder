@@ -771,7 +771,8 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
 
    instr_mode_t *instr;
    int index = 0;
-
+   int oi = 0;
+   
    instruction->prefix = 0;
    instruction->opcode = sample_q[index].data;
    if (PC >= 0) {
@@ -791,6 +792,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       }
       index++;
       instr = instruction->prefix == 0x11 ? instr_table_6809_map2 : instr_table_6809_map1;
+      oi = 1;
    }
 
    // Move down to the instruction metadata
@@ -813,16 +815,14 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       if (instruction->postbyte & 0x80) {
          int type = instruction->postbyte & 0x0f;
          if (type == 8 || type == 9 || type == 12 || type == 13 || type == 15) {
-            instruction->op1 = sample_q[index].data;
             if (PC >= 0) {
-               memory_read(instruction->op1, PC + index, MEM_INSTR);
+               memory_read(sample_q[index].data, PC + index, MEM_INSTR);
             }
             index++;
          }
          if (type == 9 || type == 13 || type == 15) {
-            instruction->op2 = sample_q[index].data;
             if (PC >= 0) {
-               memory_read(instruction->op2, PC + index, MEM_INSTR);
+               memory_read(sample_q[index].data, PC + index, MEM_INSTR);
             }
             index++;
          }
@@ -831,20 +831,17 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    case IMMEDIATE_8:
    case RELATIVE_8:
    case DIRECT:
-      instruction->op1 = sample_q[index].data;
       if (PC >= 0) {
-         memory_read(instruction->op1, PC + index, MEM_INSTR);
+         memory_read(sample_q[index].data, PC + index, MEM_INSTR);
       }
       index++;
       break;
    case IMMEDIATE_16:
    case RELATIVE_16:
    case EXTENDED:
-      instruction->op1 = sample_q[index].data;
-      instruction->op2 = sample_q[index + 1].data;
       if (PC >= 0) {
-         memory_read(instruction->op1, PC + index, MEM_INSTR);
-         memory_read(instruction->op2, PC + index + 1, MEM_INSTR);
+         memory_read(sample_q[index].data, PC + index, MEM_INSTR);
+         memory_read(sample_q[index + 1].data, PC + index + 1, MEM_INSTR);
       }
       index += 2;
       break;
@@ -908,25 +905,26 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    }
 
    // Calculate the effective address (for additional memory reads)
+   // Note: oi is the opcode index (0 = no prefix, 1 = prefix)
    ea_t ea = -1;
    switch (instr->mode) {
    case RELATIVE_8:
       if (PC >= 0) {
-         ea = (PC + (int8_t)instruction->op1) & 0xffff;
+         ea = (PC + (int8_t)sample_q[oi + 1].data) & 0xffff;
       }
       break;
    case RELATIVE_16:
       if (PC >= 0) {
-         ea = (PC + (int16_t)((instruction->op1 << 8) + instruction->op2)) & 0xffff;
+         ea = (PC + (int16_t)((sample_q[oi + 1].data << 8) + sample_q[oi + 2].data)) & 0xffff;
       }
       break;
    case DIRECT:
       if (DP >= 0) {
-         ea = (DP << 8) + instruction->op1;
+         ea = (DP << 8) + sample_q[oi + 1].data;
       }
       break;
    case EXTENDED:
-      ea = (instruction->op1 << 8) + instruction->op2;
+      ea = (sample_q[oi + 1].data << 8) + sample_q[oi + 2].data;
       break;
    case INDEXED:
       {
@@ -983,12 +981,12 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                break;
             case 8:                 /* n7,R */
                if (*reg >= 0) {
-                  ea = (*reg + (int8_t)(instruction->op1)) & 0xffff;
+                  ea = (*reg + (int8_t)(sample_q[oi + 2].data)) & 0xffff;
                }
                break;
             case 9:                 /* n15,R */
                if (*reg >= 0) {
-                  ea = (*reg + (int16_t)((instruction->op1 << 8) + instruction->op2)) & 0xffff;
+                  ea = (*reg + (int16_t)((sample_q[oi + 2].data << 8) + sample_q[oi + 3].data)) & 0xffff;
                }
                break;
             case 11:                /* D,R */
@@ -998,16 +996,16 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                break;
             case 12:                /* n7,PCR */
                if (PC >= 0) {
-                  ea = (PC + (int8_t)(instruction->op1)) & 0xffff;
+                  ea = (PC + (int8_t)(sample_q[oi + 2].data)) & 0xffff;
                }
                break;
             case 13:                /* n15,PCR */
                if (PC >= 0) {
-                  ea = (PC + (int16_t)((instruction->op1 << 8) + instruction->op2)) & 0xffff;
+                  ea = (PC + (int16_t)((sample_q[oi + 2].data << 8) + sample_q[oi + 2].data)) & 0xffff;
                }
                break;
             case 15:                /* [n] */
-               ea = ((instruction->op1 << 8) + instruction->op2) & 0xffff;
+               ea = ((sample_q[oi + 2].data << 8) + sample_q[oi + 3].data) & 0xffff;
                break;
             }
             // TODO: Handle indexed indirect
@@ -1063,6 +1061,20 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
    uint8_t b0 = instruction->instr[0];
    uint8_t b1 = instruction->instr[1];
    instr_mode_t *instr = get_instruction(b0, b1);
+
+   // Work out where in the instruction the operand is
+   // [Prefix] Opcode [ Postbyte] Op1 Op2
+   int oi = 1;
+   if (b0 == 0x10 || b0 == 0x11) {
+      // Skip over the prefix
+      oi++;
+   }
+   if (instr->mode == INDEXED) {
+      // Skip over the post byte
+      oi++;
+   }   
+   int op8 = instruction->instr[oi];
+   int op16 = (instruction->instr[oi] << 8) + instruction->instr[oi + 1];
 
    /// Output the mnemonic
    char *ptr = buffer;
@@ -1159,13 +1171,13 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
    case IMMEDIATE_8:
       *ptr++ = '#';
       *ptr++ = '$';
-      write_hex2(ptr, instruction->op1);
+      write_hex2(ptr, op8);
       ptr += 2;
       break;
    case IMMEDIATE_16:
       *ptr++ = '#';
       *ptr++ = '$';
-      write_hex4(ptr, (instruction->op1 << 8) + instruction->op2);
+      write_hex4(ptr, op16);
       ptr += 4;
       break;
    case RELATIVE_8:
@@ -1173,9 +1185,9 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
       {
          int16_t offset;
          if (instr->mode == RELATIVE_8) {
-            offset = (int16_t)((int8_t)instruction->op1);
+            offset = (int16_t)((int8_t)op8);
          } else {
-            offset = (int16_t)((instruction->op1 << 8) + instruction->op2);
+            offset = (int16_t)(op16);
          }
          if (instruction->pc < 0) {
             if (offset < 0) {
@@ -1192,12 +1204,12 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
       break;
    case DIRECT:
       *ptr++ = '$';
-      write_hex2(ptr, instruction->op1);
+      write_hex2(ptr, op8);
       ptr += 2;
       break;
    case EXTENDED:
       *ptr++ = '$';
-      write_hex4(ptr, (instruction->op1 << 8) + instruction->op2);
+      write_hex4(ptr, op16);
       ptr += 4;
       break;
    case INDEXED:
@@ -1259,17 +1271,15 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
                break;
             case 8:                 /* n7,R */
                *ptr++ = '$';
-               write_hex2(ptr, instruction->op1);
+               write_hex2(ptr, op8);
                ptr += 2;
                *ptr++ = ',';
                *ptr++ = reg;
                break;
             case 9:                 /* n15,R */
                *ptr++ = '$';
-               write_hex2(ptr, instruction->op1);
-               ptr += 2;
-               write_hex2(ptr, instruction->op2);
-               ptr += 2;
+               write_hex4(ptr, op16);
+               ptr += 4;
                *ptr++ = ',';
                *ptr++ = reg;
                break;
@@ -1280,7 +1290,7 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
                break;
             case 12:                /* n7,PCR */
                *ptr++ = '$';
-               write_hex2(ptr, instruction->op1);
+               write_hex2(ptr, op8);
                ptr += 2;
                *ptr++ = ',';
                *ptr++ = 'P';
@@ -1289,7 +1299,7 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
                break;
             case 13:                /* n15,PCR */
                *ptr++ = '$';
-               write_hex4(ptr, (instruction->op1 << 8) + instruction->op2);
+               write_hex4(ptr, op16);
                ptr += 4;
                *ptr++ = ',';
                *ptr++ = 'P';
@@ -1298,7 +1308,7 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
                break;
             case 15:                /* [n] */
                *ptr++ = '$';
-               write_hex4(ptr, (instruction->op1 << 8) + instruction->op2);
+               write_hex4(ptr, op16);
                ptr += 4;
                break;
             default:

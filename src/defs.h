@@ -43,8 +43,6 @@ typedef struct {
    uint8_t       prefix;
    uint8_t       opcode;
    uint8_t       postbyte;
-   uint8_t       op1;
-   uint8_t       op2;
    uint8_t       length;
 } instruction_t;
 
