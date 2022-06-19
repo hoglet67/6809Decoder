@@ -1578,6 +1578,7 @@ static int em_6809_write_fail(char *bp, uint32_t fail) {
                *ptr++ = ',';
             }
             ptr += write_s(ptr, fail_hints[i]);
+            comma = 1;
          }
          fail >>= 1;
       }
