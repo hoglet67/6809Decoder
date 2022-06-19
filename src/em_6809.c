@@ -932,11 +932,13 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       {
          int pb = instruction->postbyte;
          int *reg = get_regi((pb >> 5) & 0x03);
-         if (*reg >= 0 && !(pb & 0x80)) {       /* n4,R */
-            if (pb & 0x10) {
-               ea = (*reg - ((pb & 0x0f) ^ 0x0f) - 1) & 0xffff;
-            } else {
-               ea = (*reg + (pb & 0x0f)) & 0xffff;
+         if (!(pb & 0x80)) {       /* n4,R */
+            if (*reg >= 0) {
+               if (pb & 0x10) {
+                  ea = (*reg - ((pb & 0x0f) ^ 0x0f) - 1) & 0xffff;
+               } else {
+                  ea = (*reg + (pb & 0x0f)) & 0xffff;
+               }
             }
          } else {
             switch (pb & 0x0f) {
@@ -1011,7 +1013,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
             // TODO: Handle indexed indirect
             if (pb & 0x10) {
                // Pick out the indirect address from the middle of the instruction
-               printf("*** INDEXED INDIRECT ***\n");
+               printf("*** INDEXED INDIRECT pb=%02x ***\n", pb);
             }
          }
       }
