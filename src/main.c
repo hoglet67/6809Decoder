@@ -29,6 +29,7 @@ uint16_t buffer[BUFSIZE];
 const char *machine_names[] = {
    "default",
    "dragon32",
+   "beeb",
    "positron9000",
    0
 };
@@ -849,6 +850,7 @@ int main(int argc, char *argv[]) {
       case MACHINE_POSITRON9000:
          arguments.cpu_type = CPU_6809;
          break;
+      case MACHINE_BEEB:
       case MACHINE_DRAGON32:
          arguments.cpu_type = CPU_6809E;
          break;

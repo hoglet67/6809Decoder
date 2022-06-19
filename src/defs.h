@@ -11,6 +11,7 @@
 typedef enum {
    MACHINE_DEFAULT,
    MACHINE_DRAGON32,
+   MACHINE_BEEB,
    MACHINE_POSITRON9000
 } machine_t;
 
