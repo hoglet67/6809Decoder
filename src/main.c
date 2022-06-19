@@ -842,11 +842,26 @@ int main(int argc, char *argv[]) {
          arguments.vec_rst = 0xFFFF;
       }
    }
+
+   // Default CPU from machine type
    if (arguments.cpu_type == CPU_UNKNOWN) {
       switch (arguments.machine) {
-      default:
+      case MACHINE_POSITRON9000:
          arguments.cpu_type = CPU_6809;
          break;
+      case MACHINE_DRAGON32:
+         arguments.cpu_type = CPU_6809E;
+         break;
+      default:
+         arguments.cpu_type = CPU_6809E;
+         break;
+      }
+   }
+
+   if (arguments.cpu_type == CPU_6809) {
+      if (arguments.idx_lic != UNSPECIFIED) {
+         fprintf(stderr, "--lic= is incompatible with the 6809 CPU as it doesn't have this pin\n");
+         return 1;
       }
    }
 
@@ -870,7 +885,7 @@ int main(int argc, char *argv[]) {
    if (arguments.idx_rnw == UNSPECIFIED) {
       arguments.idx_rnw = 8;
    }
-   if (arguments.idx_lic == UNSPECIFIED) {
+   if (arguments.idx_lic == UNSPECIFIED && arguments.cpu_type != CPU_6809) {
       arguments.idx_lic = 9;
    }
    if (arguments.idx_bs == UNSPECIFIED) {
