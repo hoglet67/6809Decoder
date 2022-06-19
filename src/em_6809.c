@@ -82,6 +82,30 @@ static const char *pshuregi[] = { "PC", "S", "Y", "X", "DP", "B", "A", "CC" };
 
 static const char default_state[] = "A=?? B=?? X=???? Y=???? U=???? S=???? DP=?? E=? F=? H=? I=? N=? Z=? V=? C=?";
 
+// Indexed indirect modes, an extra level of indirection occurs
+//
+// Cycle numbers from http://atjs.mbnet.fi/mc6809/Information/6809cyc.txt
+// and cross-checked with Figure 17 in the 6809E datasheet.
+
+static const int indirect_offset[] = {
+   0, //  0 : [,R+]       illegal
+   6, //  1 : [,R++]
+   0, //  2 : [,-R]       illegal
+   6, //  3 : [,--R]
+   3, //  4 : [,R]
+   4, //  5 : [B,R]
+   4, //  6 : [A,R]
+   0, //  7 :             undefined
+   4, //  8 : [n7,R]
+   7, //  9 : [n15,R]
+   0, // 10 :             undefined
+   7, // 11 : [D,R]
+   4, // 12 : [n7,PCR]
+   8, // 13 : [n15,PCR]
+   0, // 14 :             undefined
+   5  // 15 : [n]
+};
+
 // 6809 registers: -1 means unknown
 static int A = -1;
 static int B = -1;
@@ -1004,10 +1028,18 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                ea = ((sample_q[oi + 2].data << 8) + sample_q[oi + 3].data) & 0xffff;
                break;
             }
-            // TODO: Handle indexed indirect
             if (pb & 0x10) {
-               // Pick out the indirect address from the middle of the instruction
-               printf("*** INDEXED INDIRECT pb=%02x ***\n", pb);
+               // In this mode there is a further level of indirection to find the ea
+               int offset = oi + indirect_offset[pb & 0x0F];
+               if (offset) {
+                  if (ea >= 0) {
+                     memory_read(sample_q[offset    ].data, ea,     MEM_POINTER);
+                     memory_read(sample_q[offset + 1].data, ea + 1, MEM_POINTER);
+                  }
+                  ea = ((sample_q[offset].data << 8) + sample_q[offset + 1].data) & 0xffff;
+               } else {
+                  printf("*** ILLEGAL INDEXED INDORECT pb=%02x ***\n", pb);
+               }
             }
          }
       }
