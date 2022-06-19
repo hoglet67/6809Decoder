@@ -857,12 +857,8 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
 
    // In main, instruction->pc is checked against the emulated PC, so in the case
    // of JSR/BSR/LBSR this provides a means of sanity checking
-   if (instr->op == &op_JSR || instr->op == &op_LBSR) {
-      // 3 byte instruction so subtract 3
-      instruction->pc = (((sample_q[num_cycles - 1].data << 8) + sample_q[num_cycles - 2].data) - 3) & 0xffff;
-   } else if (instr->op == &op_BSR) {
-      // 2 byte instruction so subtract 2
-      instruction->pc = (((sample_q[num_cycles - 1].data << 8) + sample_q[num_cycles - 2].data) - 2) & 0xffff;
+   if (instr->op->type == JSROP) {
+      instruction->pc = ((sample_q[num_cycles - 1].data << 8) + sample_q[num_cycles - 2].data - instruction->length) & 0xffff;
    } else {
       instruction->pc = PC;
    }
