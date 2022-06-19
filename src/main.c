@@ -46,7 +46,7 @@ arguments_t arguments;
 int triggered = 0;
 
 // indicate state prediction failed
-int failflag = 0;
+uint32_t failflag = 0;
 
 // ====================================================================
 // Argp processing
@@ -553,7 +553,7 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
       }
       // Show any errors
       if (fail) {
-         bp += write_s(bp, " prediction failed");
+         bp += em->write_fail(bp, fail);
       }
       // End the line
       *bp++ = 0;

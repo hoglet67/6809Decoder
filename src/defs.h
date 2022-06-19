@@ -3,6 +3,11 @@
 
 #include <inttypes.h>
 
+// Standard failures
+
+#define FAIL_PC     0x00000001
+#define FAIL_MEMORY 0x00000002
+
 typedef enum {
    MACHINE_DEFAULT,
    MACHINE_DRAGON32,
@@ -95,9 +100,10 @@ typedef struct {
    int (*get_PC)();
    int (*read_memory)(int address);
    char *(*get_state)();
-   int (*get_and_clear_fail)();
+   uint32_t (*get_and_clear_fail)();
+   int (*write_fail)(char *bp, uint32_t fail);
 } cpu_emulator_t;
 
-extern int failflag;
+extern uint32_t failflag;
 
 #endif

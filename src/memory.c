@@ -66,7 +66,7 @@ static int *init_ram(int size) {
 static void memory_read_default(int data, int ea) {
    if (memory[ea] >= 0 && memory[ea] != data) {
       log_memory_fail(ea,memory[ea], data);
-      failflag |= 1;
+      failflag |= FAIL_MEMORY;
    }
    memory[ea] = data;
 }

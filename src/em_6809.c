@@ -6,6 +6,68 @@
 #include "em_6809.h"
 
 // ====================================================================
+// Fail flags
+// ====================================================================
+
+enum {
+   FAIL_A      = 0x00000010,
+   FAIL_B      = 0x00000020,
+   FAIL_X      = 0x00000040,
+   FAIL_Y      = 0x00000080,
+   FAIL_U      = 0x00000100,
+   FAIL_S      = 0x00000200,
+   FAIL_DP     = 0x00000400,
+   FAIL_E      = 0x00000800,
+   FAIL_F      = 0x00001000,
+   FAIL_H      = 0x00002000,
+   FAIL_I      = 0x00004000,
+   FAIL_N      = 0x00008000,
+   FAIL_Z      = 0x00010000,
+   FAIL_V      = 0x00020000,
+   FAIL_C      = 0x00040000,
+   FAIL_RESULT = 0x00080000,
+   FAIL_VECTOR = 0x00100000,
+   FAIL_CYCLES = 0x00200000,
+   FAIL_UNDOC  = 0x00400000,
+   FAIL_BADM   = 0x00800000,
+};
+
+static const char * fail_hints[32] = {
+   "PC",
+   "Memory",
+   "?",
+   "?",
+   "A",
+   "B",
+   "X",
+   "Y",
+   "U",
+   "S",
+   "DP",
+   "E",
+   "F",
+   "H",
+   "I",
+   "N",
+   "Z",
+   "V",
+   "C",
+   "Result",
+   "Vector",
+   "Cycles",
+   "Undoc",
+   "BadMode",
+   "?",
+   "?",
+   "?",
+   "?",
+   "?",
+   "?",
+   "?",
+   "?"
+};
+
+// ====================================================================
 // Type Defs
 // ====================================================================
 
@@ -282,42 +344,42 @@ static operation_t op_XRES ; // Reset
 static int compare_FLAGS(int operand) {
    if (E >= 0) {
       if (E != ((operand >> 7) & 1)) {
-         return 1;
+         return FAIL_E;
       }
    }
    if (F >= 0) {
       if (F != ((operand >> 6) & 1)) {
-         return 1;
+         return FAIL_F;
       }
    }
    if (H >= 0) {
       if (H != ((operand >> 5) & 1)) {
-         return 1;
+         return FAIL_H;
       }
    }
    if (I >= 0) {
       if (I != ((operand >> 4) & 1)) {
-         return 1;
+         return FAIL_I;
       }
    }
    if (N >= 0) {
       if (N != ((operand >> 3) & 1)) {
-         return 1;
+         return FAIL_N;
       }
    }
    if (Z >= 0) {
       if (Z != ((operand >> 2) & 1)) {
-         return 1;
+         return FAIL_Z;
       }
    }
    if (V >= 0) {
       if (V != ((operand >> 1) & 1)) {
-         return 1;
+         return FAIL_V;
       }
    }
    if (C >= 0) {
       if (C != ((operand >> 0) & 1)) {
-         return 1;
+         return FAIL_C;
       }
    }
    return 0;
@@ -508,7 +570,7 @@ static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
    //    m + 10   <Start of first instruction>
    //
    if (sample_q[7].ba == 0 && sample_q[7].bs == 1 && sample_q[7].addr == 0x6) {
-      return 19;
+      return 10;
    }
    // IRQ:
    //    m + 16    addr=8 ba=0 bs=1
@@ -662,7 +724,7 @@ static int count_cycles_with_lic(sample_t *sample_q) {
          int expected = get_num_cycles(sample_q);
          if (expected >= 0) {
             if (i != expected) {
-               printf ("opcode %02x: cycle prediction fail: expected %d actual %d\n", sample_q[0].data, expected, i);
+               failflag |= FAIL_CYCLES;
             }
          }
          return i;
@@ -679,7 +741,7 @@ static int count_cycles_without_lic(sample_t *sample_q) {
    printf ("cycle prediction unknown\n");
    return 1;
 }
-   
+
 static int em_6809_count_cycles(sample_t *sample_q) {
    if (sample_q[0].lic < 0) {
       return count_cycles_without_lic(sample_q);
@@ -760,7 +822,7 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
       i += 2;
       push16s(u);
       if (U >= 0 && u != U) {
-         failflag = 1;
+         failflag |= FAIL_U;
       }
       U = u;
 
@@ -768,7 +830,7 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
       i += 2;
       push16s(y);
       if (Y >= 0 && y != Y) {
-         failflag = 1;
+         failflag |= FAIL_Y;
       }
       Y = y;
 
@@ -776,28 +838,28 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
       i += 2;
       push16s(x);
       if (X >= 0 && x != X) {
-         failflag = 1;
+         failflag |= FAIL_X;
       }
       X = x;
 
       int dp = sample_q[i++].data;
       push8s(dp);
       if (DP >= 0 && dp != DP) {
-         failflag = 1;
+         failflag |= FAIL_DP;
       }
       DP = dp;
 
       int b  = sample_q[i++].data;
       push8s(b);
       if (B >= 0 && b != B) {
-         failflag = 1;
+         failflag |= FAIL_B;
       }
       B = b;
 
       int a  = sample_q[i++].data;
       push8s(a);
       if (A >= 0 && a != A) {
-         failflag = 1;
+         failflag |= FAIL_A;
       }
       A = a;
       // Set E to indicate the full state was saved
@@ -816,21 +878,19 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
 
    // Skip a dead cycle becfore the vector
    i++;
-      
+
    // Read the vector and compare against what's expected
    int vechi = sample_q[i].data;
-   if (sample_q[i].addr == (vector & 0x000F)) {
-      memory_read(vechi, vector, MEM_POINTER);
-   } else {
-      failflag = 1;
+   memory_read(vechi, vector, MEM_POINTER);
+   if (sample_q[i].addr >= 0 && (sample_q[i].addr != (vector & 0x000F))) {
+      failflag |= FAIL_VECTOR;
    }
    i++;
    int veclo = sample_q[i].data;
-   if (sample_q[i].addr == ((vector + 1) & 0x000F)) {
-      memory_read(veclo, vector + 1, MEM_POINTER);
-   } else {
-      failflag = 1;
-   }   
+   memory_read(veclo, vector + 1, MEM_POINTER);
+   if (sample_q[i].addr >= 0 && (sample_q[i].addr != ((vector + 1) & 0x000F))) {
+      failflag  |= FAIL_VECTOR;
+   }
    PC = (vechi << 8) + veclo;
 
    // Return the old PC value that was pushed to the stack
@@ -861,7 +921,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    instr_mode_t *instr;
    int index = 0;
    int oi = 0;
-   
+
    instruction->prefix = 0;
    instruction->opcode = sample_q[index].data;
    if (PC >= 0) {
@@ -869,6 +929,10 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    }
    index++;
    instr = instr_table_6809_map0;
+
+   if (instr->undocumented) {
+      failflag |= FAIL_UNDOC;
+   }
 
    // Handle the 0x10/0x11 prefixes
    if (instruction->opcode == 0x10 || instruction->opcode == 0x11) {
@@ -1103,7 +1167,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                   }
                   ea = ((sample_q[offset].data << 8) + sample_q[offset + 1].data) & 0xffff;
                } else {
-                  printf("*** ILLEGAL INDEXED INDORECT pb=%02x ***\n", pb);
+                  failflag |= FAIL_BADM;
                }
             }
          }
@@ -1127,7 +1191,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
 
          // Check result of instruction against bye
          if (result >= 0 && result != operand2) {
-            failflag |= 1;
+            failflag |= FAIL_RESULT;
          }
 
          // Model memory writes based on result seen on bus
@@ -1165,7 +1229,7 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
    if (instr->mode == INDEXED) {
       // Skip over the post byte
       oi++;
-   }   
+   }
    int op8 = instruction->instr[oi];
    int op16 = (instruction->instr[oi] << 8) + instruction->instr[oi + 1];
 
@@ -1480,10 +1544,30 @@ static char *em_6809_get_state(char *buffer) {
    return buffer + OFFSET_END;
 }
 
-static int em_6809_get_and_clear_fail() {
-   int ret = failflag;
+static uint32_t em_6809_get_and_clear_fail() {
+   uint32_t ret = failflag;
    failflag = 0;
    return ret;
+}
+
+static int em_6809_write_fail(char *bp, uint32_t fail) {
+   char *ptr = bp;
+   if (fail) {
+      ptr += write_s(ptr, " : Prediction failed for: ");
+      int comma = 0;
+      for (int i = 0; i < 32; i++) {
+         if (fail & 1) {
+            if (comma) {
+               *ptr++ = ',';
+            }
+            ptr += write_s(ptr, fail_hints[i]);
+         }
+         fail >>= 1;
+      }
+      return ptr - bp;
+   } else {
+      return 0;
+   }
 }
 
 cpu_emulator_t em_6809 = {
@@ -1499,6 +1583,7 @@ cpu_emulator_t em_6809 = {
    .read_memory = em_6809_read_memory,
    .get_state = em_6809_get_state,
    .get_and_clear_fail = em_6809_get_and_clear_fail,
+   .write_fail = em_6809_write_fail,
 };
 
 // ====================================================================
@@ -2296,14 +2381,17 @@ static void push_helper(sample_t *sample_q, int system) {
    int *us;
    void (*push8)(int);
    void (*push16)(int);
+   int fail_us;
    if (system) {
       push8 = push8s;
       push16 = push16s;
       us = &U;
+      fail_us = FAIL_U;
    } else {
       push8 = push8u;
       push16 = push16u;
       us = &S;
+      fail_us = FAIL_S;
    }
 
    int pb = sample_q[1].data;
@@ -2314,7 +2402,7 @@ static void push_helper(sample_t *sample_q, int system) {
       i += 2;
       push16(tmp);
       if (PC >= 0 && PC != tmp) {
-         failflag = 1;
+         failflag |= FAIL_PC;
       }
       PC = tmp;
    }
@@ -2323,7 +2411,7 @@ static void push_helper(sample_t *sample_q, int system) {
       i += 2;
       push16(tmp);
       if (*us >= 0 && *us != tmp) {
-         failflag = 1;
+         failflag |= fail_us;
       }
       *us = tmp;
    }
@@ -2332,7 +2420,7 @@ static void push_helper(sample_t *sample_q, int system) {
       i += 2;
       push16(tmp);
       if (Y >= 0 && Y != tmp) {
-         failflag = 1;
+         failflag |= FAIL_Y;
       }
       Y = tmp;
    }
@@ -2341,7 +2429,7 @@ static void push_helper(sample_t *sample_q, int system) {
       i += 2;
       push16(tmp);
       if (X >= 0 && X != tmp) {
-         failflag = 1;
+         failflag |= FAIL_X;
       }
       X = tmp;
    }
@@ -2349,7 +2437,7 @@ static void push_helper(sample_t *sample_q, int system) {
       tmp = sample_q[i++].data;
       push8(tmp);
       if (DP >= 0 && DP != tmp) {
-         failflag = 1;
+         failflag |= FAIL_DP;
       }
       DP = tmp;
    }
@@ -2357,7 +2445,7 @@ static void push_helper(sample_t *sample_q, int system) {
       tmp = sample_q[i++].data;
       push8(tmp);
       if (B >= 0 && B != tmp) {
-         failflag = 1;
+         failflag |= FAIL_B;
       }
       B = tmp;
    }
@@ -2365,7 +2453,7 @@ static void push_helper(sample_t *sample_q, int system) {
       tmp = sample_q[i++].data;
       push8(tmp);
       if (A >= 0 && A != tmp) {
-         failflag = 1;
+         failflag |= FAIL_A;
       }
       A = tmp;
    }
@@ -2643,10 +2731,10 @@ static int op_fn_SEX(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int st_helper8(int val, operand_t operand) {
+   static int st_helper8(int val, operand_t operand, int fail) {
    if (val >= 0) {
       if (operand != val) {
-         failflag = 1;
+         failflag |= fail;
       }
    }
    V = 0;
@@ -2654,10 +2742,10 @@ static int st_helper8(int val, operand_t operand) {
    return operand;
 }
 
-static int st_helper16(int val, operand_t operand) {
+   static int st_helper16(int val, operand_t operand, int fail) {
    if (val >= 0) {
       if (operand != val) {
-         failflag = 1;
+         failflag |= fail;
       }
    }
    V = 0;
@@ -2666,38 +2754,38 @@ static int st_helper16(int val, operand_t operand) {
 }
 
 static int op_fn_STA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = st_helper8(A, operand);
+   A = st_helper8(A, operand, FAIL_A);
    return operand;
 }
 
 static int op_fn_STB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = st_helper8(B, operand);
+   B = st_helper8(B, operand, FAIL_B);
    return operand;
 }
 
 static int op_fn_STD(operand_t operand, ea_t ea, sample_t *sample_q) {
    int D = (A >= 0 && B >= 0) ? (A << 8) + B : -1;
-   D = st_helper16(D, operand);
+   D = st_helper16(D, operand, FAIL_A | FAIL_B);
    return operand;
 }
 
 static int op_fn_STS(operand_t operand, ea_t ea, sample_t *sample_q) {
-   S = st_helper16(S, operand);
+   S = st_helper16(S, operand, FAIL_S);
    return operand;
 }
 
 static int op_fn_STU(operand_t operand, ea_t ea, sample_t *sample_q) {
-   U = st_helper16(U, operand);
+   U = st_helper16(U, operand, FAIL_U);
    return operand;
 }
 
 static int op_fn_STX(operand_t operand, ea_t ea, sample_t *sample_q) {
-   X = st_helper16(X, operand);
+   X = st_helper16(X, operand, FAIL_X);
    return operand;
 }
 
 static int op_fn_STY(operand_t operand, ea_t ea, sample_t *sample_q) {
-   Y = st_helper16(Y, operand);
+   Y = st_helper16(Y, operand, FAIL_Y);
    return operand;
 }
 
@@ -3002,7 +3090,7 @@ static instr_mode_t instr_table_6809_map0[] = {
    /* 35 */    { &op_PULS, REGISTER     , 5, 0 },
    /* 36 */    { &op_PSHU, REGISTER     , 5, 0 },
    /* 37 */    { &op_PULU, REGISTER     , 5, 0 },
-   /* 38 */    { &op_XX  , INHERENT     , 2, 1 },  // CWAIT or something similar 
+   /* 38 */    { &op_XX  , INHERENT     , 2, 1 },  // CWAIT or something similar
    /* 39 */    { &op_RTS , INHERENT     , 5, 0 },
    /* 3A */    { &op_ABX , INHERENT     , 3, 0 },
    /* 3B */    { &op_RTI , INHERENT     , 6, 0 },
