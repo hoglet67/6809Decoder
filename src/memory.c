@@ -82,6 +82,28 @@ static void init_default() {
 }
 
 // ==================================================
+// Dragon Memory Handlers
+// ==================================================
+
+static void memory_read_dragon(int data, int ea) {
+   if (memory[ea] >= 0 && memory[ea] != data && (ea < 0xff00 || ea >= 0xfff0)) {
+      log_memory_fail(ea,memory[ea], data);
+      failflag |= FAIL_MEMORY;
+   }
+   memory[ea] = data;
+}
+
+static int memory_write_dragon(int data, int ea) {
+   memory[ea] = data;
+   return 0;
+}
+
+static void init_dragon() {
+   memory_read_fn  = memory_read_dragon;
+   memory_write_fn = memory_write_dragon;
+}
+
+// ==================================================
 // Public Methods
 // ==================================================
 
@@ -89,6 +111,9 @@ void memory_init(int size, machine_t machine) {
    memory = init_ram(size);
    // Setup the machine specific memory read/write handler
    switch (machine) {
+   case MACHINE_DRAGON32:
+      init_dragon();
+      break;
    default:
       init_default();
       break;
