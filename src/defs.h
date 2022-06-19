@@ -69,6 +69,7 @@ typedef struct {
    int show_instruction;
    int show_state;
    int show_cycles;
+   int show_samplenums;
    int show_something;
    int byte;
    int debug;

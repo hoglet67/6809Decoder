@@ -118,6 +118,7 @@ enum {
    KEY_STATE = 's',
    KEY_TRIGGER = 't',
    KEY_CYCLES = 'y',
+   KEY_SAMPLES = 'Y',
    KEY_VECRST = 1,
    KEY_MEM,
    KEY_SKIP,
@@ -164,7 +165,8 @@ static struct argp_option options[] = {
    { "hex",            KEY_HEX,         0,                   0, "Show hex bytes of instruction",                     GROUP_OUTPUT},
    { "instruction",  KEY_INSTR,         0,                   0, "Show instruction disassembly",                      GROUP_OUTPUT},
    { "state",        KEY_STATE,         0,                   0, "Show register/flag state",                          GROUP_OUTPUT},
-   { "cycles",      KEY_CYCLES,         0,                   0, "Show number of bus cycles",                         GROUP_OUTPUT},
+   { "cycles",      KEY_CYCLES,         0,                   0, "Show instruction cycles",                           GROUP_OUTPUT},
+   { "samplenum",  KEY_SAMPLES,         0,                   0, "Show bus cycle numbers",                            GROUP_OUTPUT},
 
    { 0, 0, 0, 0, "Signal defintion options:", GROUP_SIGDEFS},
 
@@ -271,6 +273,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
       arguments->show_instruction = 0;
       arguments->show_state = 0;
       arguments->show_cycles = 0;
+      arguments->show_samplenums = 0;
       break;
    case KEY_ADDRESS:
       arguments->show_address = 1;
@@ -286,6 +289,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
       break;
    case KEY_CYCLES:
       arguments->show_cycles = 1;
+      break;
+   case KEY_SAMPLES:
+      arguments->show_samplenums = 1;
       break;
    case KEY_TRIGGER:
       if (arg && strlen(arg) > 0) {
@@ -475,10 +481,9 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
 
    if ((fail | arguments.show_something) && triggered && !skipping_interrupted) {
       int numchars = 0;
-      // Show sample count
-      if (arguments.show_cycles) {
-         write_hex8(bp, sample_q->sample_count);
-         bp += 8;
+      // Show cumulative sample number
+      if (arguments.show_samplenums) {
+         bp += sprintf(bp, "%8d", sample_q->sample_count);
          *bp++ = ' ';
          *bp++ = ':';
          *bp++ = ' ';
@@ -536,8 +541,8 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
          *bp++ = ' ';
          *bp++ = ':';
          *bp++ = ' ';
-         // No instruction is more then 8 cycles
-         write_hex1(bp++, num_cycles);
+         *bp++ = (num_cycles < 10) ? ' ' : ('0' + num_cycles / 10);
+         *bp++ = '0' + (num_cycles % 10);
       }
       // Show register state
       if (fail || arguments.show_state) {
@@ -783,6 +788,7 @@ int main(int argc, char *argv[]) {
    arguments.show_instruction = 1;
    arguments.show_state       = 0;
    arguments.show_cycles      = 0;
+   arguments.show_samplenums  = 0;
 
    // Signal definition options
    arguments.idx_data         = UNSPECIFIED;
@@ -798,7 +804,7 @@ int main(int argc, char *argv[]) {
       triggered = 1;
    }
 
-   arguments.show_something = arguments.show_address | arguments.show_hex | arguments.show_instruction | arguments.show_state | arguments.show_cycles;
+   arguments.show_something = arguments.show_samplenums | arguments.show_address | arguments.show_hex | arguments.show_instruction | arguments.show_state | arguments.show_cycles ;
 
    // Normally the data file should be 16 bit samples. In byte mode
    // the data file is 8 bit samples, and all the control signals are
