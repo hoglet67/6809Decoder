@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# A3..0
+cat $1 | grep -v "[.;]" | cut -c16 > 1
+
+# BA
+cat $1 | grep -v "[.;]" | cut -c27 > 2a
+
+# BS
+cat $1 | grep -v "[.;]" | cut -c24 > 2b
+
+# 0 RnW
+cat $1 | grep -v "[.;]" | cut -c32 | awk '{print "0"$1}' > 2c
+
+# D7..0
+cat $1 | grep -v "[.;]" | cut -c20-21 > 34
+
+paste 2a 2b 2c | sed "s/\t//g" | ascii2binary -b 2 | binary2ascii -b 16 | cut -c4 > 2
+
+paste 34 1 2 | sed "s/\t//g" | xxd -r -p > $2
+
+rm 1 2a 2b 2c 2 34
