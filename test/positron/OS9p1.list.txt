@@ -1,0 +1,2239 @@
+F040	87CD0F39000DC088 mod   OS9End,OS9Name,Type,Revs,0,0
+	C600000000	
+		
+	000D	OS9Name equ *
+F04D	4F533970B1	fcs   /OS9p1/
+F052	0B		fcb   11
+		
+			ttl Coldstart Routines
+			pag
+	************************************************************
+	*
+	*     Routine Cold
+	*
+	*   System Coldstart; determines system state, initializes
+	* system data structures, searches for the remainder of the
+	* system and attempts to start operation.
+	*
+	0020	LoRAM set $20 			set low RAM limit
+	1800	HiRAM set $1800
+		
+F053	8E0346	COLD    ldx   #$0346 		First ACIA page	(1)A3000
+F056	8603		lda   #$03
+F058	5F		clrb
+F059	BFFF80	L0019    stx   >DAT.Regs	Map in ACIA
+F05C	B70000		sta   >$0000		Reset device
+F05F	3002		leax  $02,x		Inc page number + 2 for next device
+F061	5C		incb			Add onr to the count we have done
+F062	C105		cmpb  #$05		Have we done 5?
+F064	26F3		bne   L0019		No keep going
+F066	CE0000		ldu   #$0000
+F069	5F		clrb
+F06A	8E0344	L002A    ldx   #$0344		First ACIA DIP switches page? (1)A2000 This code looks shit... remember the review!
+F06D	BFFF80		stx   >DAT.Regs		Map in first switch page
+F070	A6C5		lda   b,u		Read byte
+F072	3004		leax  $04,x		Inc page + 4 (2000)
+F074	58		lslb			Double b
+F075	3085		leax  b,x		Inc page a bit more? When b <> 0
+F077	54		lsrb			Put b back
+F078	BFFF80		stx   >DAT.Regs		Select calc'd page (ACIA page?)
+F07B	B70002		sta   >$0002		Put read value in Page address 2
+F07E	5C		incb			Done one more
+F07F	C104		cmpb  #$04		Have we done 4 yet?
+F081	26E7		bne   L002A		Do next 
+F083	8E0144		ldx   #$0144		DIP switch page again? (0)A2000
+F086	BFFF80		stx   >DAT.Regs		Map into page 0
+F089	B60000		lda   >$0000		Get byte
+F08C	84E0		anda  #$E0		Top 3 bits only please
+F08E	2630		bne   L0080		If not zero then L0080
+F090	8E0350		ldx   #$0350		Otherwise page (1)A8000 (TMS9914 IEEE-488 GPIB adapter)
+F093	BFFF80		stx   >DAT.Regs		Map it in at 0 
+F096	8680		lda   #$80		Reset command
+F098	B70003		sta   >$0003		Write to aux command reg
+F09B	7F0000		clr   >$0000		Clear interrupt mask reg
+F09E	7F0001		clr   >$0001		Clear interrupt status reg
+F0A1	868F		lda   #$8F		Set Interface clear
+F0A3	B70003		sta   >$0003		Issue interface clear command
+F0A6	7F0003		clr   >$0003		Read / clear bus status
+F0A9	8614		lda   #$14		Delay loop
+F0AB	4A	L006B    deca			
+F0AC	26FD		bne   L006B		Until done
+F0AE	860F		lda   #$0F		Clear Interface clear
+F0B0	B70003		sta   >$0003		Write to aux command reg
+F0B3	FC0000		ldd   >$0000		Read interrupt status 0 and 1
+F0B6	8690		lda   #$90		Set Send remote enable
+F0B8	B70003		sta   >$0003		Write to aux command reg
+F0BB	8612		lda   #$12		Set Release control 
+F0BD	B70003		sta   >$0003		Write to aux command reg
+F0C0	8E0300	L0080   ldx   #$0300		Set X to page number for (1)80000 Low res RAM
+F0C3	108E0000	ldy   #$0000
+F0C7	4F	L0087   clra
+F0C8	5F		clrb
+F0C9	BFFF80		stx   >DAT.Regs		Map LowRes RAM in
+F0CC	6FAB	L008C   clr   d,y		Clear byte
+F0CE	5C		incb
+F0CF	C150		cmpb  #$50		Done first 80 bytes?
+F0D1	26F9		bne   L008C		No keep clearing
+F0D3	5F		clrb			Zero b
+F0D4	4C		inca			Next a
+F0D5	8108		cmpa  #$08		Have we done 2k?
+F0D7	26F3		bne   L008C		No loop
+F0D9	3001		leax  $01,x		Inc next page 
+F0DB	8C0340		cmpx  #$0340		At (1)A0000 yet?
+F0DE	26E7		bne   L0087		No do next page
+F0E0	8E0308		ldx   #$0308		Set X to page number for (1)84000  ?Videotext display?
+F0E3	BFFF80		stx   >DAT.Regs		Map it in
+F0E6	CC0702		ldd   #$0702
+F0E9	EDA1		std   ,y++
+F0EB	CC0401		ldd   #$0401
+F0EE	EDA4		std   ,y
+F0F0	8E0200		ldx   #$0200		200 First page of RAM (1)00000
+F0F3	BFFF80		stx   >DAT.Regs
+F0F6	8E0020		ldx #LoRAM 		get low limit ptr
+F0F9	108E17E0	ldy #HiRAM-LoRAM 	get byte count
+F0FD	4F		clra clear d
+F0FE	5F		clrb
+F0FF	ED81	Cold10  std   ,x++
+F101	313E		leay  -$02,y
+F103	26FA		bne   Cold10
+F105	4C		inca
+F106	DD20		std   D.Tasks
+F108	CB08		addb  #$08
+F10A	DD22		std   D.TmpDAT
+F10C	5F		clrb
+F10D	4C		inca
+F10E	DD40		std   D.BlkMap
+F110	8B02		adda  #$02
+F112	DD42		std   D.BlkMap+2
+F114	DDC2		std   D.SysDis
+F116	4C		inca
+F117	DDC8		std   D.UsrDis
+F119	4C		inca
+F11A	DD48		std   D.PrcDBT
+F11C	4C		inca
+F11D	DD4A		std   D.SysPrc
+F11F	DD50		std   D.Proc
+F121	8B02		adda  #$02
+F123	1F04		tfr   d,s
+F125	4C		inca
+F126	DDCC		std   D.SysStk
+F128	DD4E		std   D.SysMem
+F12A	4C		inca
+F12B	DD44		std   D.ModDir
+F12D	DD58		std   D.ModEnd
+F12F	8B07		adda  #$07
+F131	DD46		std   D.ModDir+2
+F133	DD5A		std   D.ModDAT
+F135	308D01FC	leax IntXfr,pcr get interrupt transfer
+F139	1F10		tfr   x,d
+F13B	8E00F2		ldx   #$00F2
+F13E	ED81	Cold14  std   ,x++
+F140	8C00FC		cmpx  #$00FC
+F143	23F9		bls   Cold14
+F145	308D0EB7	leax  >ROMEnd,pcr
+F149	3410		pshs  x
+F14B	318D0E91	leay  >HdlrVec,pcr
+F14F	8E00E0		ldx   #$00E0
+F152	ECA1	Cold15  ldd   ,y++
+F154	E3E4		addd  ,s
+F156	ED81		std   ,x++
+F158	8C00EC		cmpx  #$00EC
+F15B	23F5		bls   Cold15
+F15D	3262		leas  $02,s
+F15F	9EE4		ldx   D.XSWI2
+F161	9FC6		stx   D.UsrSvc
+F163	9EE8		ldx   D.XIRQ
+F165	9FCA		stx   D.UsrIRQ
+F167	308D0276	leax  >SysSvc,pcr
+F16B	9FC0		stx   D.SysSvc
+F16D	9FE4		stx   D.XSWI2
+F16F	308D0D67	leax  >SysIRQ,pcr
+F173	9FC4		stx   D.SysIRQ
+F175	9FE8		stx   D.XIRQ
+F177	308D0D74	leax  >GoPoll,pcr
+F17B	9FCE		stx   D.SvcIRQ
+F17D	308D0D72	leax  >IOPoll,pcr
+F181	9F26		stx   D.Poll
+F183	318D0140	leay  >SvcTbl,pcr
+F187	1702AF		lbsr  SetSvc
+F18A	DE48		ldu   D.PrcDBT
+F18C	9E4A		ldx   D.SysPrc
+F18E	AFC4		stx   ,u
+F190	AF41		stx   $01,u
+F192	8601		lda   #$01
+F194	A784		sta   ,x
+F196	8680		lda   #$80
+F198	A70C		sta   $0C,x
+F19A	8680		lda   #$80
+F19C	97D0		sta   D.SysTsk
+F19E	A706		sta   $06,x
+F1A0	86FF		lda   #$FF
+F1A2	A70A		sta   $0A,x
+F1A4	A70B		sta   $0B,x
+F1A6	308840		leax  <$40,x
+F1A9	9F4C		stx   D.SysDAT
+F1AB	CC0200		ldd   #$0200
+F1AE	ED81		std   ,x++
+F1B0	5C		incb
+F1B1	ED81		std   ,x++
+F1B3	5C		incb
+F1B4	ED81		std   ,x++
+F1B6	108E0019	ldy   #$0019
+F1BA	CC015F		ldd   #DAT.Free
+F1BD	ED81	Cold16  std   ,x++
+F1BF	313F		leay  -$01,y
+F1C1	26FA		bne   Cold16
+F1C3	CC0350		ldd   #$0350	tms9914 IEEE-488 controller page
+F1C6	ED81		std   ,x++
+F1C8	CC0340		ldd   #$0340	motorola 6840 timer page
+F1CB	ED81		std   ,x++
+F1CD	CC01FE		ldd   #$01FE	8k Rom1 3rd page
+F1D0	ED81	L0190   std   ,x++	
+F1D2	5C		incb
+F1D3	26FB		bne   L0190		Loop to set 4th page of Rom1 at top of address space
+F1D5	9E20		ldx   D.Tasks
+F1D7	6C84		inc   ,x
+F1D9	6C01		inc   $01,x
+F1DB	9E4E		ldx   D.SysMem
+F1DD	D646		ldb   D.ModDir+2
+F1DF	6C80	Cold17  inc   ,x+
+F1E1	5A		decb
+F1E2	26FB		bne   Cold17
+F1E4	108E1800	ldy   #$1800
+F1E8	9E40		ldx   D.BlkMap
+F1EA	3410	L01AA   pshs  x
+F1EC	ECE4		ldd   ,s
+F1EE	9340		subd  D.BlkMap
+F1F0	10830100	cmpd  #$0100
+F1F4	241D		bcc   Cold30
+F1F6	8A02		ora   #$02
+F1F8	FDFF86		std   >$FF86
+F1FB	EE20		ldu 0,y get current contents
+F1FD	8E00FF		ldx #$00FF get first test pattern
+F200	AF20		stx 0,Y store it
+F202	ACA4		cmpx  ,y
+F204	260D		bne   Cold30
+F206	8EFF00		ldx   #$FF00
+F209	AFA4		stx   ,y
+F20B	ACA4		cmpx  ,y
+F20D	2604		bne   Cold30
+F20F	EFA4		stu   ,y
+F211	2004		bra   L01D7
+F213	C680	Cold30  ldb   #$80
+F215	E7F4		stb   [,s]
+F217	3510	L01D7   puls  x
+F219	3001		leax  $01,x
+F21B	9C42		cmpx  D.BlkMap+2
+F21D	25CB		bcs   L01AA
+F21F	9E40		ldx   D.BlkMap
+F221	6C84		inc   ,x
+F223	6C01		inc   $01,x
+F225	6C02		inc   $02,x
+F227	9E42		ldx   D.BlkMap+2
+F229	3089FFC0	leax  >-$0040,x
+F22D	A684	L01ED    lda   ,x
+F22F	2757		beq   L0248
+F231	1F10		tfr   x,d
+F233	9340		subd  D.BlkMap
+F235	1083015F	cmpd  #DAT.Free
+F239	274D		beq   L0248
+F23B	32E8C0		leas  <-$40,s
+F23E	31E4		leay  ,s
+F240	8D76		bsr   MovDAT
+F242	3410		pshs  x
+F244	8E0000		ldx   #$0000
+F247	3430	L0207   pshs  y,x
+F249	170947		lbsr  AdjImg
+F24C	ECA4		ldd   ,y
+F24E	FDFF80		std   >DAT.Regs
+F251	A684		lda   ,x
+F253	8E0200		ldx   #$0200
+F256	BFFF80		stx   >DAT.Regs
+F259	3530		puls  y,x
+F25B	8187		cmpa  #$87
+F25D	2613		bne   L0232
+F25F	1702D1		lbsr  ValMod
+F262	2404		bcc   L0228
+F264	C1E7		cmpb  #$E7
+F266	260A		bne   L0232
+F268	CC0002	L0228   ldd   #$0002
+F26B	170937		lbsr  LDDDXY
+F26E	308B		leax  d,x
+F270	2002		bra   L0234
+F272	3001	L0232   leax  $01,x
+F274	1F10	L0234   tfr   x,d
+F276	5D		tstb
+F277	26CE		bne   L0207
+F279	8507		bita  #$07
+F27B	26CA		bne   L0207
+F27D	44		lsra
+F27E	44		lsra
+F27F	44	L023F   lsra
+F280	4A		deca
+F281	3510		puls  x
+F283	3086		leax  a,x
+F285	32E840		leas  <$40,s
+F288	3001	L0248   leax  $01,x
+F28A	9C42		cmpx  D.BlkMap+2
+F28C	259F		bcs   L01ED
+F28E	308D0096	Cold.z1    leax  >InitName,pcr
+F292	8D1E		bsr   LinkSys
+F294	2407		bcc   Cold.z2
+F296	103F35		os9   F$Boot
+F299	24F3		bcc   Cold.z1
+F29B	200F		bra   ColdErr
+F29D	DF24	Cold.z2 stu   D.Init
+F29F	308D0089 Cold.z3 leax  >P2Name,pcr
+F2A3	8D0D		bsr   LinkSys
+F2A5	2409		bcc   Cold.xit
+F2A7	103F35		os9   F$Boot
+F2AA	24F3		bcc   Cold.z3
+		
+F2AC	6E9FFFFE	ColdErr    jmp   [>$FFFE]
+		
+F2B0	6EA4	Cold.xit jmp   ,y
+F2B2	86C0	LinkSys lda   #$C0
+F2B4	103F00		os9   F$Link
+F2B7	39		rts
+		
+F2B8	3436	MovDAT  pshs  y,x,b,a
+F2BA	C620		ldb   #$20
+F2BC	AEE4		ldx   ,s
+F2BE	AFA1	L027E   stx   ,y++
+F2C0	3001		eax  $01,x
+F2C2	5A		decb
+F2C3	26F9		bne   L027E
+F2C5	35B6		puls  pc,y,x,b,a
+		
+		ttl Coldstart Constants
+		page
+	************************************************************
+	*
+	*     Service Routines Initialization Table
+	*
+	0287	SvcTbl equ *
+F2C7	00		fcb F$Link
+F2C8	0183		fdb Link-*-2
+F2CA	10		fcb F$PrsNam
+F2CB	052E		fdb PNam-*-2
+F2CD	11		fcb F$CmpNam
+F2CE	05B5		fdb UCNam-*-2
+F2D0	91		fcb F$CmpNam+SysState
+F2D1	05BD		fdb SCNam-*-2
+F2D3	17		fcb F$CRC
+F2D4	042C		fdb CRCGen-*-2
+F2D6	A8		fcb F$SRqMem+SysState
+F2D7	0614		fdb SRqMem-*-2
+F2D9	A9		fcb F$SRtMem+SysState
+F2DA	0685		fdb SRtMem-*-2
+F2DC	AC		fcb F$AProc+SysState
+F2DD	0B0B		fdb AProc-*-2
+F2DF	AD		fcb F$NProc+SysState
+F2E0	0B69		fdb NextProc-*-2
+F2E2	AE		fcb F$VModul+SysState
+F2E3	023F		fdb VModule-*-2
+F2E5	32		fcb F$SSvc
+F2E6	013A		fdb SSvc-*-2
+F2E8	B4		fcb F$SLink+SysState
+F2E9	0155		fdb SLink-*-2
+F2EB	B5		fcb F$Boot+SysState
+F2EC	06D2		fdb Boot-*-2
+F2EE	B6		fcb F$BtMem+SysState
+F2EF	05FC		fdb SRqMem-*-2
+F2F1	B8		fcb F$Move+SysState
+F2F2	08E0		fdb Move-*-2
+F2F4	39		fcb F$AllRAM
+F2F5	072E		fdb AllRAM-*-2
+F2F7	BA		fcb F$AllImg+SysState
+F2F8	0760		fdb AllImg-*-2
+F2FA	BC		fcb F$SetImg+SysState
+F2FB	0826		fdb SetImg-*-2
+F2FD	BD		fcb F$FreeLB+SysState
+F2FE	07E3		fdb FreeLB-*-2
+F300	BE		fcb F$FreeHB+SysState
+F301	07C6		fdb FreeHB-*-2
+F303	BF		fcb F$AllTsk+SysState
+F304	0A27		fdb AllTsk-*-2
+F306	C0		fcb F$DelTsk+SysState
+F307	0A34		fdb DelTsk-*-2
+F309	C1		fcb F$SetTsk+SysState
+F30A	0A42		fdb SetTsk-*-2
+F30C	C2		fcb F$ResTsk+SysState
+F30D	0A6D		fdb ResTsk-*-2
+F30F	C3		fcb F$RelTsk+SysState
+F310	0A8A		fdb RelTsk-*-2
+F312	C4		fcb F$DATLog+SysState
+F313	082E		fdb DATLog-*-2
+F315	C6		fcb F$LDAXY+SysState
+F316	0840		fdb F.LDAXY-*-2
+F318	C8		fcb F$LDDDXY+SysState
+F319	087E		fdb F.LDDDXY-*-2
+F31B	C9		fcb F$LDABX+SysState
+F31C	08A5		fdb F.LDABX-*-2
+F31E	CA		fcb F$STABX+SysState
+F31F	08AC		fdb F.STABX-*-2
+F321	CD		fcb F$ELink+SysState
+F322	0121		fdb ELink-*-2
+F324	CE		fcb F$FModul+SysState
+F325	041E		fdb FMod-*-2
+F327	80		fcb $80
+		************************************************************
+		*
+		*     Module Names
+		*
+F328	496E69F4   InitName fcs "Init"
+F32C	4F533970B2 P2Name   fcs "OS9p2"
+F331	426F6FF4   BootName fcs "Boot"
+		
+		
+		
+			ttl System Service Request Routines
+			pag
+		************************************************************
+		*
+		*     Interrupt Transfer
+		*
+F335	6E98F0	IntXfr  jmp [-16,x] transfer to interrupt routine
+		
+		
+		
+		************************************************************
+		*
+		*     User State Interrupt Routines
+		*
+		*   Checks for user defined routine; uses system if none
+		*
+		* Data: D.Proc
+		*
+		* Calls: UserSvc
+		*
+F338	9E50	UserSWI3 ldx D.Proc get current process ptr
+F33A	EE8817		ldu P$SWI3,X get user interrupt routine
+F33D	2713		beq UserSvc branch if none
+F33F	160C00	UsrSWI10 lbra PassSWI
+		
+F342	9E50	UserSWI2 ldx D.Proc get current process ptr
+F344	EE8815		ldu P$SWI2,X get user interrupt routine
+F347	2709		beq UserSvc branch if none
+F349	20F4		bra UsrSWI10
+		
+F34B	9E50	UserSWI ldx D.Proc get current process ptr
+F34D	EE8813		ldu P$SWI,X get SWI routine
+F350	26ED		bne UsrSWI10 branch if set
+		*
+		*     fall through to UserSvc
+		*
+			page
+		************************************************************
+		*
+		*     User Service Request Routine
+		*
+		*   Process User service requests
+		*
+		* Input: X = Process descriptor ptr
+		*        S = value of stack after interrupt
+		*
+		* Output: none
+		*
+		* Data: D.SysSvc, D.SWI2, D.SysIRQ, D.IRQ, D.Proc, D.UsrDis
+		*
+		* Calls: GetRegs, PutRegs, LDBBX, Dispatch, UserRet
+		*
+F352	DCC0	UserSvc ldd   D.SysSvc
+F354	DDE4		std   D.XSWI2
+F356	DCC4		ldd   D.SysIRQ
+F358	DDE8		std   D.XIRQ
+F35A	A60C		lda   $0C,x
+F35C	8A80		ora   #$80
+F35E	A70C		sta   $0C,x
+F360	10EF04		sts   $04,x
+F363	328901F4	leas  >$01F4,x
+F367	1CAF		andcc #$AF
+F369	33E4		leau  ,s
+F36B	8D22		bsr   L034F
+F36D	E606		ldb   $06,x
+F36F	AE4A		ldx   $0A,u
+F371	170997		lbsr  L0CCB
+F374	3001		leax  $01,x
+F376	AF4A		stx   $0A,u
+F378	109EC8		ldy   D.UsrDis
+F37B	170077		lbsr  Dispatch
+F37E	E6C4		ldb   ,u
+F380	C4AF		andb  #$AF
+F382	E7C4		stb   ,u
+F384	9E50		ldx   D.Proc
+F386	8D16		bsr   L035E
+F388	A60C		lda   $0C,x
+F38A	847F		anda  #$7F
+F38C	160AB3		lbra  L0E02
+F38F	3471	L034F   pshs  u,y,x,cc
+F391	E606		ldb   $06,x
+F393	AE04		ldx   $04,x
+F395	170917		lbsr  L0C6F
+F398	3089E000	leax  >-$2000,x
+F39C	200F		bra   L036D
+F39E	3471	L035E   pshs  u,y,x,cc
+F3A0	E606		ldb   $06,x
+F3A2	AE04		ldx   $04,x
+F3A4	170908		lbsr  L0C6F
+F3A7	3089E000	leax  >-$2000,x
+F3AB	1E13		exg   x,u
+F3AD	3440	L036D   pshs  u
+F3AF	CEFF80		ldu   #DAT.Regs
+F3B2	33C6		leau  a,u
+F3B4	1A50		orcc  #$50
+F3B6	F7FFCA		stb   >$FFCA
+F3B9	3726		pulu  y,b,a
+F3BB	7FFFCA		clr   >$FFCA
+F3BE	CEFFBC		ldu   #$FFBC
+F3C1	3626		pshu  y,b,a
+F3C3	3540		puls  u
+F3C5	108E000C	ldy   #$000C
+F3C9	EC81	L0389   ldd   ,x++
+F3CB	EDC1		std   ,u++
+F3CD	313E		leay  -$02,y
+F3CF	26F8		bne   L0389
+F3D1	9E4C		ldx   D.SysDAT
+F3D3	EC8838		ldd   <$38,x
+F3D6	FDFFB8		std   >$FFB8
+F3D9	EC883A		ldd   <$3A,x
+F3DC	FDFFBA		std   >$FFBA
+F3DF	35F1		puls  pc,u,y,x,cc
+		
+F3E1	33E4	SysSvc  leau  ,s
+F3E3	A6C4		lda   ,u
+F3E5	1F8A		tfr   a,cc
+F3E7	AE4A		ldx   $0A,u
+F3E9	E680		ldb   ,x+
+F3EB	AF4A		stx   $0A,u
+F3ED	109EC2		ldy   D.SysDis
+F3F0	8D03		bsr   Dispatch
+F3F2	160AF2		lbra  SysRet
+		
+F3F5	58	Dispatch lslb
+F3F6	2407		bcc   L03BF
+F3F8	56		rorb
+F3F9	AEA900FE	ldx   >$00FE,y
+F3FD	200A		bra   L03C9
+F3FF	4F	L03BF   clra
+F400	AEAB		ldx   d,y
+F402	2605		bne   L03C9
+F404	53		comb
+F405	C6D0		ldb   #$D0
+F407	2006		bra   L03CF
+F409	3440	L03C9   pshs  u
+F40B	AD84		jsr   ,x
+F40D	3540		puls  u
+F40F	1FA8	L03CF   tfr   cc,a
+F411	2402		bcc   L03D5
+F413	E742		stb   $02,u
+F415	E6C4	L03D5   ldb   ,u
+F417	C4D0		andb  #$D0
+F419	E7C4		stb   ,u
+F41B	842F		anda  #$2F
+F41D	AAC4		ora   ,u
+F41F	A7C4		sta   ,u
+F421	39		rts
+		
+F422	10AE46	SSvc    ldy   $06,u
+F425	2012		bra   SetSvc
+		
+F427	4F	L03E7   clra
+F428	58		lslb
+F429	1F03		tfr   d,u
+F42B	ECA1		ldd   ,y++
+F42D	30AB		leax  d,y
+F42F	DCC2		ldd   D.SysDis
+F431	AFCB		stx   d,u
+F433	2504		bcs   SetSvc
+F435	DCC8		ldd   D.UsrDis
+F437	AFCB		stx   d,u
+F439	E6A0	SetSvc  ldb   ,y+
+F43B	C180		cmpb  #$80
+F43D	26E8		bne   L03E7
+F43F	39		rts
+		
+F440	10AE46	SLink   ldy   $06,u
+F443	200D		bra   SysLink
+		
+F445	3440	ELink   pshs  u
+F447	E642		ldb   $02,u
+F449	AE44		ldx   $04,u
+F44B	201C		bra   EntLink
+		
+F44D	9E50	Link    ldx   D.Proc
+F44F	318840		leay  <$40,x
+F452	3440	SysLink pshs  u
+F454	AE44		ldx   $04,u
+F456	A641		lda   $01,u
+F458	1702FE		lbsr  FModule
+F45B	1025008D	lbcs  LinkErr
+F45F	31C4		leay  ,u
+F461	EEE4		ldu   ,s
+F463	AF44		stx   $04,u
+F465	ED41		std   $01,u
+F467	30A4		leax  ,y
+F469	C580	EntLink bitb  #$80
+F46B	2608		bne   Link10
+F46D	EC06		ldd   $06,x
+F46F	2704		beq   Link10
+F471	C6D1		ldb   #$D1
+F473	2077		bra   LinkErr
+F475	EC04	Link10  ldd   $04,x
+F477	3416		pshs  x,b,a
+F479	10AE84		ldy   ,x
+F47C	EC02		ldd   $02,x
+F47E	C307FF		addd #DAT.BlSz-1 round to next block
+F481	1F89		tfr a,b copy MSB size
+F483	54		lsrb get block count
+F484	54		lsrb
+F485	54		lsrb
+
+F486	3404		pshs  b
+F488	33A4		leau  ,y
+F48A	8D64		bsr   SrchPDAT
+F48C	242B		bcc   L0479
+F48E	170644		lbsr  FreeHBlk
+F491	2406		bcc   L0459
+F493	3265		leas  $05,s
+F495	C6CF		ldb   #$CF
+F497	2053		bra   LinkErr
+F499	17068D	L0459   lbsr  SetImage
+F49C	3446		pshs  u,b,a
+F49E	48		lsla
+F49F	33A6		leau  a,y
+F4A1	10AE69		ldy   $09,s
+F4A4	A622		lda   $02,y
+F4A6	8540		bita  #$40
+F4A8	270D		beq   L0477
+F4AA	4F		clra
+F4AB	1F02		tfr   d,y
+F4AD	ECC4	L046D   ldd   ,u
+F4AF	8A02		ora   #$02
+F4B1	EDC1		std   ,u++
+F4B3	313F		leay  -$01,y
+F4B5	26F6		bne   L046D
+F4B7	3546	L0477   puls  u,b,a
+F4B9	30890080 L0479  leax  >$0080,x
+F4BD	A7E4		sta   ,s
+F4BF	48		lsla
+F4C0	3386		leau  a,x
+F4C2	AEC4		ldx   ,u
+F4C4	3001		leax  $01,x
+F4C6	2702		beq   L048A
+F4C8	AFC4		stx   ,u
+F4CA	EE63	L048A   ldu   $03,s
+F4CC	AE46		ldx   $06,u
+F4CE	3001		leax  $01,x
+F4D0	2702		beq   L0494
+F4D2	AF46		stx   $06,u
+F4D4	3574	L0494   puls  u,y,x,b
+F4D6	170674		lbsr  DATtoLog
+F4D9	AF48		stx   $08,u
+F4DB	AE24		ldx   $04,y
+F4DD	10AEA4		ldy   ,y
+F4E0	CC0009		ldd   #$0009
+F4E3	1706BF		lbsr  LDDDXY
+F4E6	E348		addd  $08,u
+F4E8	ED46		std   $06,u
+F4EA	5F		clrb
+F4EB	39		rts
+F4EC	1A01	LinkErr orcc  #$01
+F4EE	35C0		puls  pc,u
+		
+F4F0	9E50	SrchPDAT ldx   D.Proc
+F4F2	318840		leay  <$40,x
+		
+F4F5	4F	SrchDAT clra
+F4F6	3436		pshs  y,x,b,a
+F4F8	C020		subb  #$20
+F4FA	50		negb
+F4FB	58		lslb
+F4FC	31A5		leay  b,y
+F4FE	AEE4	L04BE   ldx   ,s
+F500	3460		pshs  u,y
+F502	ECA1	L04C2   ldd   ,y++
+F504	8401		anda  #$01
+F506	10A3C1		cmpd  ,u++
+F509	260E		bne   SrchD30
+F50B	301F		leax  -$01,x
+F50D	26F3		bne   L04C2
+F50F	3546		puls  u,b,a
+F511	A364		subd  $04,s
+F513	54		lsrb
+F514	E7E4		stb   ,s
+F516	5F		clrb
+F517	35B6		puls  pc,y,x,b,a
+F519	3560	SrchD30 puls  u,y
+F51B	313E		leay  -$02,y
+F51D	10AC64		cmpy  $04,s
+F520	24DC		bcc   L04BE
+F522	35B6		puls  pc,y,x,b,a
+		
+F524	3440	VModule pshs  u			VModule (F$VModul)
+F526	AE44		ldx   $04,u
+F528	10AE41		ldy   $01,u
+F52B	8D06		bsr   ValMod
+F52D	AEE4		ldx   ,s
+F52F	EF08		stu   $08,x
+F531	35C0		puls  pc,u
+		
+F533	3430	ValMod  pshs  y,x			ValMod
+F535	17011A		lbsr  ModCheck
+F538	2529		bcs   L0523
+F53A	CC0006		ldd   #$0006
+F53D	170665		lbsr  LDDDXY
+F540	C40F		andb  #$0F
+F542	3406		pshs  b,a
+F544	CC0004		ldd   #$0004
+F547	17065B		lbsr  LDDDXY
+F54A	308B		leax  d,x
+F54C	3502		puls  a
+F54E	170208		lbsr  FModule
+F551	3502		puls  a
+F553	2512		bcs   ValMod20
+F555	3402		pshs  a
+F557	C40F		andb  #$0F
+F559	E0E0		subb  ,s+
+F55B	250A		bcs   ValMod20
+F55D	C6E7		ldb   #$E7
+F55F	2002		bra   L0523
+F561	C6CE	L0521   ldb   #$CE
+F563	1A01	L0523   orcc  #$01
+F565	35B0		puls  pc,y,x
+F567	AEE4	ValMod20 ldx   ,s
+F569	170086		lbsr  SetMoImg
+F56C	25F3		bcs   L0521
+F56E	10AFC4		sty   ,u
+F571	AF44		stx   $04,u
+F573	4F		clra
+F574	5F		clrb
+F575	ED46		std   $06,u
+F577	CC0002		ldd   #$0002
+F57A	170628		lbsr  LDDDXY
+F57D	3410		pshs  x
+F57F	E3E1		addd  ,s++
+F581	ED42		std   $02,u
+F583	10AED4		ldy   [,u]
+F586	9E44		ldx   D.ModDir
+F588	3440		pshs  u
+F58A	2002		bra   L054E
+F58C	3008	L054C   leax  $08,x
+F58E	9C58	L054E   cmpx  D.ModEnd
+F590	240B		bcc   ValMod55
+F592	ACE4		cmpx  ,s
+F594	27F6		beq   L054C
+F596	10AC94		cmpy  [,x]
+F599	26F1		bne   L054C
+F59B	8D23		bsr   FreDATI
+F59D	3540	ValMod55 puls U rid pos ptr
+F59F	9E40		ldx D.BlkMap get block map ptr
+F5A1	EC42		ldd MD$MBSiz,u get block size
+F5A3	C307FF		addd #DAT.BlSz-1 round to next block
+F5A6	44		lsra get block count
+F5A7	44		lsra
+F5A8	44		lsra
+F5A9	10AEC4		ldy MD$MPDAT,u get ptr to DAT img
+F5AC	3412	L056C   pshs  x,a
+F5AE	ECA1		ldd   ,y++
+F5B0	308B		leax  d,x
+F5B2	E684		ldb   ,x
+F5B4	CA02		orb   #$02
+F5B6	E784		stb   ,x
+F5B8	3512		puls  x,a
+F5BA	4A		deca
+F5BB	26EF		bne   L056C
+F5BD	5F		clrb
+F5BE	35B0		puls  pc,y,x
+		
+F5C0	3476	FreDATI pshs  u,y,x,b,a
+F5C2	AE84		ldx   ,x
+F5C4	3410		pshs  x
+F5C6	4F		clra
+F5C7	5F		clrb
+F5C8	10AE84	L0588   ldy   ,x
+F5CB	2704		beq   L0591
+F5CD	ED81		std   ,x++
+F5CF	20F7		bra   L0588
+F5D1	3510	L0591   puls  x
+F5D3	10AE62		ldy   $02,s
+F5D6	EEC4		ldu   ,u
+F5D8	3506		puls  b,a
+F5DA	ACA4	L059A   cmpx  ,y
+F5DC	260B		bne   L05A9
+F5DE	EFA4		stu   ,y
+F5E0	10A322		cmpd  $02,y
+F5E3	2402		bcc   L05A7
+F5E5	EC22		ldd   $02,y
+F5E7	ED22	L05A7   std   $02,y
+F5E9	3128	L05A9   leay  $08,y
+F5EB	109C58		cmpy  D.ModEnd
+F5EE	26EA		bne   L059A
+F5F0	35F0		puls  pc,u,y,x
+		
+F5F2	3470	SetMoImg pshs  u,y,x
+F5F4	CC0002		ldd   #$0002
+F5F7	1705AB		lbsr  LDDDXY
+F5FA	E3E4		addd  ,s
+F5FC	C307FF		addd  #$07FF
+F5FF	44		lsra
+F600	44		lsra
+F601	44		lsra
+F602	1F89		tfr   a,b
+F604	3404		pshs  b
+F606	5C		incb
+F607	58		lslb
+F608	50		negb
+F609	1D		sex
+F60A	8D0E		bsr   chkspce
+F60C	240A		bcc   L05D8
+F60E	103F52		os9   F$GCMDir
+F611	CE0000		ldu   #$0000
+F614	EF65		stu   $05,s
+F616	8D02		bsr   chkspce
+F618	35F4	L05D8   puls  pc,u,y,x,b
+		
+F61A	9E5A	chkspce ldx   D.ModDAT
+F61C	308B		leax  d,x
+F61E	9C58		cmpx  D.ModEnd
+F620	252D		bcs   L060F
+F622	EE67		ldu   $07,s
+F624	2614		bne   L05FA
+F626	3410		pshs  x
+F628	109E58		ldy   D.ModEnd
+F62B	3128		leay  $08,y
+F62D	10ACE1		cmpy  ,s++
+F630	221D		bhi   L060F
+F632	109F58		sty   D.ModEnd
+F635	3138		leay  -$08,y
+F637	10AF67		sty   $07,s
+F63A	9F5A	L05FA   stx   D.ModDAT
+F63C	10AE65		ldy   $05,s
+F63F	E662		ldb   $02,s
+F641	AF65		stx   $05,s
+F643	EEA1	L0603   ldu   ,y++
+F645	EF81		stu   ,x++
+F647	5A		decb
+F648	26F9		bne   L0603
+F64A	6F84		clr   ,x
+F64C	6F01		clr   $01,x
+F64E	39		rts
+F64F	1A01	L060F   orcc  #$01
+F651	39		rts
+		
+F652	3430	ModCheck pshs  y,x		Module Check
+F654	4F		clra
+F655	5F		clrb
+F656	17054C		lbsr  LDDDXY
+F659	108387CD	cmpd  #$87CD
+F65D	2704		beq   L0623
+F65F	C6CD		ldb   #$CD
+F661	205C		bra   L067F
+F663	327F	L0623   leas  -$01,s
+F665	3002		leax  $02,x
+F667	170529		lbsr  AdjImg
+F66A	C607		ldb   #$07
+F66C	864A		lda   #$4A
+F66E	A7E4	L062E   sta   ,s
+F670	170503		lbsr  LDAXYP
+F673	A8E4		eora  ,s
+F675	5A		decb
+F676	26F6		bne   L062E
+F678	3261		leas  $01,s
+F67A	4C		inca
+F67B	2704		beq   L0641
+F67D	C6EC		ldb   #$EC
+F67F	203E		bra   L067F
+F681	3530	L0641   puls  y,x
+F683	CC0002		ldd   #$0002
+F686	17051C		lbsr  LDDDXY
+F689	3436		pshs  y,x,b,a
+F68B	CCFFFF		ldd   #$FFFF
+F68E	3406		pshs  b,a
+F690	3404		pshs  b
+F692	1704FE		lbsr  AdjImg
+F695	33E4		leau  ,s
+F697	5D	L0657   tstb
+F698	260A		bne   L0664
+F69A	3410		pshs  x
+F69C	8E0001		ldx   #$0001
+F69F	103F0A		os9   F$Sleep
+F6A2	3510		puls  x
+F6A4	1704CF	L0664   lbsr  LDAXYP
+F6A7	8D1A		bsr   CRCCal
+F6A9	EC63		ldd   $03,s
+F6AB	830001		subd  #$0001
+F6AE	ED63		std   $03,s
+F6B0	26E5		bne   L0657
+F6B2	3534		puls  y,x,b
+F6B4	C180		cmpb  #$80
+F6B6	2605		bne   L067D
+F6B8	8C0FE3		cmpx  #$0FE3
+F6BB	2704		beq   L0681
+F6BD	C6E8	L067D   ldb   #$E8
+F6BF	1A01	L067F   orcc  #$01
+F6C1	35B0	L0681   puls  pc,y,x
+		
+F6C3	A8C4	CRCCal  eora  ,u
+F6C5	3402		pshs  a
+F6C7	EC41		ldd   $01,u
+F6C9	EDC4		std   ,u
+F6CB	4F		clra
+F6CC	E6E4		ldb   ,s
+F6CE	58		lslb
+F6CF	49		rola
+F6D0	A841		eora  $01,u
+F6D2	ED41		std   $01,u
+F6D4	5F		clrb
+F6D5	A6E4		lda   ,s
+F6D7	44		lsra
+F6D8	56		rorb
+F6D9	44		lsra
+F6DA	56		rorb
+F6DB	A841		eora  $01,u
+F6DD	E842		eorb  $02,u
+F6DF	ED41		std   $01,u
+F6E1	A6E4		lda   ,s
+F6E3	48		lsla
+F6E4	A8E4		eora  ,s
+F6E6	A7E4		sta   ,s
+F6E8	48		lsla
+F6E9	48		lsla
+F6EA	A8E4		eora  ,s
+F6EC	A7E4		sta   ,s
+F6EE	48		lsla
+F6EF	48		lsla
+F6F0	48		lsla
+F6F1	48		lsla
+F6F2	A8E0		eora  ,s+
+F6F4	2A0B		bpl   L06C1
+F6F6	CC8021		ldd   #$8021
+F6F9	A8C4		eora  ,u
+F6FB	A7C4		sta   ,u
+F6FD	E842		eorb  $02,u
+F6FF	E742		stb   $02,u
+F701	39	L06C1   rts
+		
+F702	EC46	CRCGen  ldd   $06,u
+F704	273D		beq   L0703
+F706	AE44		ldx   $04,u
+F708	3416		pshs  x,b,a
+F70A	327D		leas  -$03,s
+F70C	9E50		ldx   D.Proc
+F70E	A606		lda   $06,x
+F710	D6D0		ldb   D.SysTsk
+F712	AE48		ldx   $08,u
+F714	108E0003	ldy   #$0003
+F718	33E4		leau  ,s
+F71A	3436		pshs  y,x,b,a
+F71C	1704BE		lbsr  Mover
+F71F	9E50		ldx   D.Proc
+F721	318840		leay  <$40,x
+F724	AE6B		ldx   $0B,s
+F726	17046A		lbsr  AdjImg
+F729	17044A	L06E9   lbsr  LDAXYP
+F72C	17FF94		lbsr  CRCCal
+F72F	EC69		ldd   $09,s
+F731	830001		subd  #$0001
+F734	ED69		std   $09,s
+F736	26F1		bne   L06E9
+F738	3536		puls  y,x,b,a
+F73A	1E89		exg   a,b
+F73C	1E13		exg   x,u
+F73E	17049C		lbsr  Mover
+F741	3267		leas  $07,s
+F743	5F	L0703   clrb
+F744	39		rts
+		
+F745	3440	FMod    pshs  u
+F747	A641		lda   $01,u
+F749	AE44		ldx   $04,u
+F74B	10AE46		ldy   $06,u
+F74E	8D09		bsr   FModule
+F750	3520		puls  y
+F752	ED21		std   $01,y
+F754	AF24		stx   $04,y
+F756	EF28		stu   $08,y
+F758	39		rts
+F759	CE0000	FModule ldu   #$0000
+F75C	3446		pshs  u,b,a
+F75E	8D7F		bsr   SkipSpc
+F760	812F		cmpa  #$2F
+F762	2774		beq   L0798
+F764	1700A7		lbsr  PrsNam
+F767	2572		bcs   L079B
+F769	DE44		ldu   D.ModDir
+F76B	2061		bra   L078E
+F76D	3436	L072D   pshs  y,x,b,a
+F76F	3430		pshs  y,x
+F771	10AEC4		ldy   ,u
+F774	274C		beq   L0782
+F776	AE44		ldx   $04,u
+F778	3430		pshs  y,x
+F77A	CC0004		ldd   #$0004
+F77D	170425		lbsr  LDDDXY
+F780	308B		leax  d,x
+F782	3430		pshs  y,x
+F784	3068		leax  $08,s
+F786	E66D		ldb   $0D,s
+F788	31E4		leay  ,s
+F78A	17011E		lbsr  ChkNam
+F78D	3264		leas  $04,s
+F78F	3530		puls  y,x
+F791	3264		leas  $04,s
+F793	2535		bcs   L078A
+F795	CC0006		ldd   #$0006
+F798	17040A		lbsr  LDDDXY
+F79B	A7E4		sta   ,s
+F79D	E767		stb   $07,s
+F79F	A666		lda   $06,s
+F7A1	2716		beq   L0779
+F7A3	84F0		anda  #$F0
+F7A5	2706		beq   L076D
+F7A7	A8E4		eora  ,s
+F7A9	84F0		anda  #$F0
+F7AB	261D		bne   L078A
+F7AD	A666	L076D   lda   $06,s
+F7AF	840F		anda  #$0F
+F7B1	2706		beq   L0779
+F7B3	A8E4		eora  ,s
+F7B5	840F		anda  #$0F
+F7B7	2611		bne   L078A
+F7B9	3536	L0779   puls  y,x,b,a
+F7BB	3A		abx
+F7BC	5F		clrb
+F7BD	E661		ldb   $01,s
+F7BF	3264		leas  $04,s
+F7C1	39		rts
+		
+F7C2	3264	L0782   leas  $04,s
+F7C4	EC68		ldd   $08,s
+F7C6	2602		bne   L078A
+F7C8	EF68		stu   $08,s
+F7CA	3536	L078A   puls  y,x,b,a
+F7CC	3348		leau  $08,u
+F7CE	119358	L078E   cmpu  D.ModEnd
+F7D1	259A		bcs   L072D
+F7D3	53		comb
+F7D4	C6DD		ldb   #$DD
+F7D6	2003		bra   L079B
+F7D8	53	L0798   comb
+F7D9	C6EB		ldb   #$EB
+F7DB	E761	L079B   stb   $01,s
+F7DD	35C6		puls  pc,u,b,a
+		
+F7DF	3420	SkipSpc pshs  y
+F7E1	1703AF	L07A1   lbsr  AdjImg
+F7E4	17037C		lbsr  LDAXY
+F7E7	3001		leax  $01,x
+F7E9	8120		cmpa  #$20
+F7EB	27F4		beq   L07A1
+F7ED	301F		leax  -$01,x
+F7EF	3402		pshs  a
+F7F1	1F20		tfr   y,d
+F7F3	A361		subd  $01,s
+F7F5	57		asrb
+F7F6	170354		lbsr  DATtoLog
+F7F9	35A2		puls  pc,y,a
+		
+F7FB	9E50	PNam    ldx   D.Proc
+F7FD	318840		leay  <$40,x
+F800	AE44		ldx   $04,u
+F802	8D0A		bsr   PrsNam
+F804	ED41		std   $01,u
+F806	2503		bcs   L07CB
+F808	AF44		stx   $04,u
+F80A	3A		abx
+F80B	AF46	L07CB   stx   $06,u
+F80D	39		rts
+		
+F80E	3420	PrsNam  pshs  y
+F810	170380		lbsr  AdjImg
+F813	3430		pshs  y,x
+F815	17035E		lbsr  LDAXYP
+F818	812F		cmpa  #$2F
+F81A	2607		bne   L07E3
+F81C	3264		leas  $04,s
+F81E	3430		pshs  y,x
+F820	170353		lbsr  LDAXYP
+F823	8D49	L07E3   bsr   Alpha
+F825	2510		bcs   L07F7
+F827	5F		clrb
+F828	5C	L07E8   incb
+F829	4D		tsta
+F82A	2B07		bmi   L07F3
+F82C	170347		lbsr  LDAXYP
+F82F	8D26		bsr   AlphaNum
+F831	24F5		bcc   L07E8
+F833	1CFE	L07F3   andcc #$FE
+F835	2012		bra   L0809
+F837	812C	L07F7   cmpa  #$2C
+F839	2607		bne   L0802
+F83B	3264	L07FB   leas  $04,s
+F83D	3430		pshs  y,x
+F83F	170334		lbsr  LDAXYP
+F842	8120	L0802   cmpa  #$20
+F844	27F5		beq   L07FB
+F846	53		comb
+F847	C6EB		ldb   #$EB
+F849	3530	L0809   puls  y,x
+F84B	3407		pshs  b,a,cc
+F84D	1F20		tfr   y,d
+F84F	A363		subd  $03,s
+F851	57		asrb
+F852	1702F8		lbsr  DATtoLog
+F855	35A7		puls  pc,y,b,a,cc
+		
+F857	3402	AlphaNum pshs  a
+F859	847F		anda  #$7F
+F85B	812E		cmpa  #$2E
+F85D	270C		beq   L082B
+F85F	8130		cmpa  #$30
+F861	251F		bcs   L0842
+F863	8139		cmpa  #$39
+F865	2304		bls   L082B
+F867	815F		cmpa  #$5F
+F869	2607		bne   L0832
+F86B	4F	L082B   clra
+F86C	3582		puls  pc,a
+F86E	3402	Alpha   pshs  a
+F870	847F		anda  #$7F
+F872	8141	L0832   cmpa  #$41
+F874	250C		bcs   L0842
+F876	815A		cmpa  #$5A
+F878	23F1		bls   L082B
+F87A	8161		cmpa  #$61
+F87C	2504		bcs   L0842
+F87E	817A		cmpa  #$7A
+F880	23E9		bls   L082B
+F882	43	L0842   coma
+F883	3582		puls  pc,a
+		
+F885	9E50	UCNam   ldx   D.Proc
+F887	318840		leay  <$40,x
+F88A	AE44		ldx   $04,u
+F88C	3430		pshs  y,x
+F88E	200C		bra   L085C
+		
+		
+F890	9E50	SCNam   ldx   D.Proc
+F892	318840		leay  <$40,x
+F895	AE44		ldx   $04,u
+F897	3430		pshs  y,x
+F899	109E4C		ldy   D.SysDAT
+F89C	AE46	L085C   ldx   $06,u
+F89E	3430		pshs  y,x
+F8A0	EC41		ldd   $01,u
+F8A2	3064		leax  $04,s
+F8A4	31E4		leay  ,s
+F8A6	8D03		bsr   ChkNam
+F8A8	3268		leas  $08,s
+F8AA	39		rts
+		
+F8AB	3476	ChkNam  pshs  u,y,x,b,a
+F8AD	EE62		ldu   $02,s
+F8AF	3730		pulu  y,x
+F8B1	1702DF		lbsr  AdjImg
+F8B4	3630		pshu  y,x
+F8B6	EE64		ldu   $04,s
+F8B8	3730		pulu  y,x
+F8BA	1702D6		lbsr  AdjImg
+F8BD	2004		bra   L0883
+F8BF	EE64	L087F   ldu   $04,s
+F8C1	3730		pulu  y,x
+F8C3	1702B0	L0883   lbsr  LDAXYP
+F8C6	3630		pshu  y,x
+F8C8	3402		pshs  a
+F8CA	EE63		ldu   $03,s
+F8CC	3730		pulu  y,x
+F8CE	1702A5		lbsr  LDAXYP
+F8D1	3630		pshu  y,x
+F8D3	A8E4		eora  ,s
+F8D5	6DE0		tst   ,s+
+F8D7	2B0A		bmi   L08A3
+F8D9	5A		decb
+F8DA	2704		beq   L08A0
+F8DC	84DF		anda  #$DF
+F8DE	27DF		beq   L087F
+F8E0	53	L08A0   comb
+F8E1	35F6		puls  pc,u,y,x,b,a
+F8E3	5A	L08A3   decb
+F8E4	26FA		bne   L08A0
+F8E6	845F		anda  #$5F
+F8E8	26F6		bne   L08A0
+F8EA	5F		clrb
+F8EB	35F6		puls  pc,u,y,x,b,a
+
+F8ED	EC41	SRqMem  ldd   $01,u
+F8EF	C300FF		addd  #$00FF
+F8F2	5F		clrb
+F8F3	ED41		std   $01,u
+F8F5	109E4E		ldy   D.SysMem
+F8F8	327E		leas  -$02,s
+F8FA	E7E4		stb   ,s
+F8FC	9E4C	L08BC   ldx   D.SysDAT
+F8FE	58		lslb
+F8FF	EC85		ldd   b,x
+F901	1083015F	cmpd  #DAT.Free
+F905	270E		beq   L08D5
+F907	9E40		ldx   D.BlkMap
+F909	8401		anda  #$01
+F90B	A68B		lda   d,x
+F90D	8101		cmpa  #$01
+F90F	2605		bne   L08D6
+F911	3128		leay  $08,y
+F913	2008		bra   SRqMem40
+F915	4F	L08D5   clra
+F916	C608	L08D6   ldb   #$08
+F918	A7A0	L08D8   sta   ,y+
+F91A	5A		decb
+F91B	26FB		bne   L08D8
+F91D	6CE4	SRqMem40 inc   ,s
+F91F	E6E4		ldb   ,s
+F921	C120		cmpb  #DAT.BlCt
+F923	25D7		bcs   L08BC
+F925	E641	L08E5   ldb   $01,u
+F927	109C4E	L08E7   cmpy  D.SysMem
+F92A	2205		bhi   L08F1
+F92C	53		comb
+F92D	C6CF		ldb   #$CF
+F92F	202D		bra   L091E
+F931	A6A2	L08F1   lda   ,-y
+F933	26F0		bne   L08E5
+F935	5A		decb
+F936	26EF		bne   L08E7
+F938	10AFE4		sty   ,s
+F93B	A661		lda   $01,s
+F93D	44		lsra
+F93E	44		lsra
+F93F	44		lsra
+F940	E661		ldb   $01,s
+F942	C407		andb  #$07
+F944	EB41		addb  $01,u
+F946	CB07		addb  #$07
+F948	54		lsrb
+F949	54		lsrb
+F94A	54		lsrb
+F94B	9E4A		ldx   D.SysPrc
+F94D	17010E		lbsr  AllImage
+F950	250C		bcs   L091E
+F952	E641		ldb   $01,u
+F954	6CA0	L0914   inc   ,y+
+F956	5A		decb
+F957	26FB		bne   L0914
+F959	A661		lda   $01,s
+F95B	ED48		std   $08,u
+F95D	5F		clrb
+F95E	3262	L091E   leas  $02,s
+F960	39		rts
+		
+F961	EC41	SRtMem  ldd   $01,u
+F963	2759		beq   SrTM.F
+F965	C300FF		addd  #$00FF
+F968	E649		ldb   $09,u
+F96A	2704		beq   L0930
+F96C	53		comb
+F96D	C6D2		ldb   #$D2
+F96F	39		rts
+F970	E648	L0930   ldb   $08,u
+F972	274A		beq   SrTM.F
+F974	9E4E		ldx   D.SysMem
+F976	3A		abx
+F977	E684	L0937   ldb   ,x
+F979	C4FE		andb  #$FE
+F97B	E780		stb   ,x+
+F97D	4A		deca
+F97E	26F7		bne   L0937
+F980	9E4C		ldx   D.SysDAT
+F982	108E0020	ldy   #DAT.BlCt
+F986	EC84	L0946   ldd   ,x
+F988	1083015F	cmpd  #DAT.Free
+F98C	272A		beq   L0978
+F98E	DE40		ldu   D.BlkMap
+F990	8401		anda  #$01
+F992	A6CB		lda   d,u
+F994	8101		cmpa  #$01
+F996	2620		bne   L0978
+F998	1F10		tfr   x,d
+F99A	934C		subd  D.SysDAT
+F99C	58		lslb
+F99D	58		lslb
+F99E	DE4E		ldu   D.SysMem
+F9A0	33CB		leau  d,u
+F9A2	C608		ldb   #$08
+F9A4	A6C0	L0964   lda   ,u+
+F9A6	2610		bne   L0978
+F9A8	5A		decb
+F9A9	26F9		bne   L0964
+F9AB	EC84		ldd   ,x
+F9AD	DE40		ldu   D.BlkMap
+F9AF	8401		anda  #$01
+F9B1	6FCB		clr   d,u
+F9B3	CC015F		ldd   #DAT.Free
+F9B6	ED84		std   ,x
+F9B8	3002	L0978   leax  $02,x
+F9BA	313F		leay  -$01,y
+F9BC	26C8		bne   L0946
+F9BE	5F	SrTM.F  clrb
+F9BF	39		rts
+		
+F9C0	53	Boot    comb
+F9C1	9631		lda   D.Boot $0031
+F9C3	265F		bne   BootXX
+F9C5	0C31		inc   D.Boot
+F9C7	9E24		ldx   D.Init
+F9C9	2709		beq   L0994
+F9CB	EC8814		ldd   <$14,x
+F9CE	2704		beq   L0994
+F9D0	308B		leax  d,x
+F9D2	2004		bra   L0998
+F9D4	308DF959	L0994    leax BootName,pcr
+F9D8	86C1	L0998   lda   #$C1
+F9DA	103F00		os9   F$Link
+F9DD	2545		bcs   BootXX
+F9DF	ADA4		jsr   ,y
+F9E1	2541		bcs   BootXX
+F9E3	338B		leau  d,x
+F9E5	1F10		tfr   x,d
+F9E7	84F8		anda  #$F8
+F9E9	5F		clrb
+F9EA	3446		pshs  u,b,a
+F9EC	44		lsra
+F9ED	44		lsra
+F9EE	109E4C		ldy   D.SysDAT
+F9F1	31A6		leay  a,y
+F9F3	EC84	L09B3   ldd   ,x
+F9F5	108387CD	cmpd  #$87CD
+F9F9	2621		bne   L09DC
+F9FB	1F10		tfr   x,d
+F9FD	A3E4		subd  ,s
+F9FF	1F01		tfr   d,x
+FA01	1F20		tfr   y,d
+FA03	84FD		anda  #$FD
+FA05	103F2E		os9   F$VModul
+FA08	3404		pshs  b
+FA0A	EC61		ldd   $01,s
+FA0C	308B		leax  d,x
+FA0E	3504		puls  b
+FA10	2404		bcc   L09D6
+FA12	C1E7		cmpb  #$E7
+FA14	2606		bne   L09DC
+FA16	EC02	L09D6   ldd   $02,x
+FA18	308B		leax  d,x
+FA1A	2002		bra   L09DE
+FA1C	3001	L09DC   leax  $01,x
+FA1E	AC62	L09DE   cmpx  $02,s
+FA20	25D1		bcs   L09B3
+FA22	3264		leas  $04,s
+FA24	39	BootXX  rts
+		
+FA25	E642	AllRAM  ldb   $02,u
+FA27	8D05		bsr   RAMBlk
+FA29	2502		bcs   L09ED
+FA2B	ED41		std   $01,u
+FA2D	39	L09ED   rts
+		
+FA2E	3436	RAMBlk  pshs  y,x,b,a
+FA30	9E40		ldx   D.BlkMap
+FA32	3184	L09F2   leay  ,x
+FA34	E661		ldb   $01,s
+FA36	9C42	L09F6   cmpx  D.BlkMap+2
+FA38	2419		bcc   RAMBlk30
+FA3A	A680		lda   ,x+
+FA3C	26F4		bne   L09F2
+FA3E	5A		decb
+FA3F	26F5		bne   L09F6
+FA41	1F20		tfr   y,d
+FA43	9340		subd  D.BlkMap
+FA45	A7E4		sta   ,s
+FA47	A661		lda   $01,s
+FA49	E761		stb   $01,s
+FA4B	6CA0	L0A0B   inc   ,y+
+FA4D	4A		deca
+FA4E	26FB		bne   L0A0B
+FA50	5F		clrb
+FA51	35B6		puls  pc,y,x,b,a
+FA53	53	RAMBlk30 comb
+FA54	C6ED		ldb   #$ED
+FA56	E761		stb   $01,s
+FA58	35B6		puls  pc,y,x,b,a
+		
+FA5A	EC41	AllImg  ldd   $01,u
+FA5C	AE44		ldx   $04,u
+		
+		
+FA5E	3476	AllImage pshs  u,y,x,b,a
+FA60	48		lsla
+FA61	318840		leay  <$40,x
+FA64	31A6		leay  a,y
+FA66	4F		clra
+FA67	1F01		tfr   d,x
+FA69	DE40		ldu   D.BlkMap
+FA6B	3476		pshs  u,y,x,b,a
+FA6D	ECA1	L0A2D   ldd   ,y++
+FA6F	1083015F	cmpd  #DAT.Free
+FA73	270F		beq   AllI.B
+FA75	8401		anda  #$01
+FA77	A6CB		lda   d,u
+FA79	8101		cmpa  #$01
+FA7B	3506		puls  b,a
+FA7D	261A		bne   L0A59
+FA7F	830001		subd  #$0001
+FA82	3406		pshs  b,a
+FA84	301F	AllI.B  leax  -$01,x
+FA86	26E5		bne   L0A2D
+FA88	AEE1		ldx   ,s++
+FA8A	2716		beq   AllI.E
+FA8C	A6C0	AllI.C  lda   ,u+
+FA8E	2604		bne   L0A54
+FA90	301F		leax  -$01,x
+FA92	270E		beq   AllI.E
+FA94	119342	L0A54   cmpu  D.BlkMap+2
+FA97	25F3		bcs   AllI.C
+FA99	C6CF	L0A59   ldb   #$CF
+FA9B	3266		leas  $06,s
+FA9D	E761		stb   $01,s
+FA9F	53		comb
+FAA0	35F6		puls  pc,u,y,x,b,a
+FAA2	3570	AllI.E  puls  u,y,x
+FAA4	ECA1	AllI.F  ldd   ,y++
+FAA6	1083015F	cmpd  #DAT.Free
+FAAA	260E		bne   AllI.H
+FAAC	A6C0	L0A6C   lda   ,u+
+FAAE	26FC		bne   L0A6C
+FAB0	6CC2		inc   ,-u
+FAB2	1F30		tfr   u,d
+FAB4	9340		subd  D.BlkMap
+FAB6	8A02		ora   #$02
+FAB8	ED3E		std   -$02,y
+FABA	301F	AllI.H  leax  -$01,x
+FABC	26E6		bne   AllI.F
+FABE	AE62		ldx   $02,s
+FAC0	A60C		lda   $0C,x
+FAC2	8A10		ora   #$10
+FAC4	A70C		sta   $0C,x
+FAC6	5F		clrb
+FAC7	35F6		puls  pc,u,y,x,b,a
+		
+		***********************************************************
+		*
+		*     Subroutine FreeHB
+		*
+		*   Free High Block Service routine
+		*
+		* Input: U = registers ptr
+		*
+		* Output: Carry clear if successful; set otherwise
+		*
+		* Data: none
+		*
+		* Calls: FreeHBlk
+		*
+FAC9	E642	FreeHB  ldb   $02,u
+FACB	10AE46		ldy   $06,u
+FACE	8D05		bsr   FreeHBlk
+FAD0	2502		bcs   L0A94
+FAD2	A741		sta   $01,u
+FAD4	39	L0A94   rts
+		
+FAD5	1F98	FreeHBlk tfr   b,a
+FAD7	8021	FreeHB10 suba #DAT.BlCt+1 get negative beginning
+FAD9	40		nega
+FADA	3416		pshs  x,b,a
+FADC	CCFFFF		ldd   #$FFFF
+FADF	3406		pshs  b,a
+FAE1	2019		bra   FreeBlk
+		
+FAE3	E642	FreeLB  ldb   $02,u
+FAE5	10AE46		ldy   $06,u
+FAE8	8D05		bsr   FreeLBlk
+FAEA	2502		bcs   FrLB10
+FAEC	A741		sta   $01,u
+FAEE	39	FrLB10  rts
+		
+FAEF	86FF	FreeLBlk lda   #$FF
+FAF1	3416		pshs  x,b,a
+FAF3	8601		lda   #$01
+FAF5	C021		subb #DAT.BlCt+1 get negative limit
+FAF7	50		negb
+FAF8	3406		pshs  b,a
+FAFA	2000		bra   FreeBlk
+		
+FAFC	4F	FreeBlk clra
+FAFD	E662		ldb   $02,s
+FAFF	EBE4		addb  ,s
+FB01	E762		stb   $02,s
+FB03	E161		cmpb  $01,s
+FB05	260B		bne   L0AD2
+FB07	C6CF		ldb   #$CF
+FB09	E763		stb   $03,s
+FB0B	53		comb
+FB0C	2011		bra   FreeBXit
+FB0E	1F89	L0ACE   tfr   a,b
+FB10	EB62		addb  $02,s
+FB12	58	L0AD2   lslb
+FB13	AEA5		ldx   b,y
+FB15	8C015F		cmpx  #DAT.Free
+FB18	26E2		bne   FreeBlk
+FB1A	4C		inca
+FB1B	A163		cmpa  $03,s
+FB1D	26EF		bne   L0ACE
+FB1F	3262	FreeBXit leas  $02,s
+FB21	3596		puls  pc,x,b,a
+		
+FB23	EC41	SetImg  ldd   $01,u
+FB25	AE44		ldx   $04,u
+FB27	EE48		ldu   $08,u
+		
+FB29	3476	SetImage pshs  u,y,x,b,a
+FB2B	318840		leay  <$40,x
+FB2E	48		lsla
+FB2F	31A6		leay  a,y
+FB31	AEC1	L0AF1   ldx   ,u++
+FB33	AFA1		stx   ,y++
+FB35	5A		decb
+FB36	26F9		bne   L0AF1
+FB38	AE62		ldx   $02,s
+FB3A	A60C		lda   $0C,x
+FB3C	8A10		ora   #$10
+FB3E	A70C		sta   $0C,x
+FB40	5F		clrb
+FB41	35F6		puls  pc,u,y,x,b,a
+		
+FB43	E642	DATLog  ldb   $02,u
+FB45	AE44		ldx   $04,u
+FB47	8D04		bsr   DATtoLog
+FB49	AF44		stx   $04,u
+FB4B	5F		clrb
+FB4C	39		rts
+		
+FB4D	3416	DATtoLog pshs  x,b,a
+FB4F	58		lslb
+FB50	58		lslb
+FB51	58		lslb
+FB52	EB62		addb  $02,s
+FB54	E762		stb   $02,s
+FB56	3596		puls  pc,x,b,a
+		
+FB58	AE44	F.LDAXY ldx   $04,u
+FB5A	10AE46		ldy   $06,u
+FB5D	8D04		bsr   LDAXY
+FB5F	A741		sta   $01,u
+FB61	5F		clrb
+FB62	39		rts
+		
+		
+		
+		***********************************************************
+		*
+		*     Subroutine LDAXY
+		*
+		*   Load A register from X offset of Y block
+		*
+		* Input: X = Block offset
+		*        Y = DAT Image ptr
+		*
+		* Output: A = [X,Y]
+		*
+		* Data: none
+		*
+		* Calls: none
+		*
+FB63	3415	LDAXY   pshs  x,b,cc
+FB65	ECA4		ldd   ,y
+FB67	1A50		orcc  #$50
+FB69	FDFF80		std   >DAT.Regs
+FB6C	A684		lda   ,x
+FB6E	8E0200		ldx   #$0200
+FB71	BFFF80		stx   >DAT.Regs
+FB74	3595		puls  pc,x,b,cc
+			page
+		***********************************************************
+		*
+		*     Subroutine LDAXYP
+		*
+		*   Load A register from X offset of Y block; post increment
+		*
+		* Input: X = Block offset
+		*        Y = DAT Image ptr
+		*
+		* Output: A = [X,Y]
+		*         X,Y updated
+		*
+		* Data: none
+		*
+		* Calls: AdjImg
+		*
+FB76	3415	LDAXYP  pshs  x,b,cc
+FB78	ECA4		ldd   ,y
+FB7A	1A50		orcc  #$50
+FB7C	FDFF80		std   >DAT.Regs
+FB7F	A684		lda   ,x
+FB81	8E0200		ldx   #$0200
+FB84	BFFF80		stx   >DAT.Regs
+FB87	3515		puls  x,b,cc
+FB89	3001		leax  $01,x
+FB8B	2006		bra   AdjImg
+		
+FB8D	3089F800 AdjImg10 leax  >-$0800,x
+FB91	3122		leay  $02,y
+FB93	8C0800		AdjImg    cmpx  #$0800
+FB96	24F5		bcc   AdjImg10
+FB98	39		rts
+		
+FB99	EC41	F.LDDDXY ldd   $01,u
+FB9B	3344		leau  $04,u
+FB9D	3730		pulu  y,x
+FB9F	8D04		bsr   LDDDXY
+FBA1	ED59		std   -$07,u
+FBA3	5F		clrb
+FBA4	39		rts
+		
+		
+		***********************************************************
+		*
+		*     Subroutine LDDDXY
+		*
+		*   Load D register from X+D offset of Y block
+		*
+		* Input: D = Address offset
+		*        X = Block offset
+		*        Y = DAT Image ptr
+		*
+		* Output: D = [D+X,Y]
+		*
+		* Data: none
+		*
+		* Calls: AdjImg, LDAXYP, LDAXY
+		*
+FBA5	3430	LDDDXY  pshs  y,x
+FBA7	308B		leax  d,x
+FBA9	170103		lbsr  L0C6F
+FBAC	31A6		leay  a,y
+FBAE	8DC6		bsr   LDAXYP
+FBB0	3403		pshs  a,cc
+FBB2	ECA4		ldd   ,y
+FBB4	1A50		orcc  #$50
+FBB6	FDFF80		std   >DAT.Regs
+FBB9	E684		ldb   ,x
+FBBB	8E0200		ldx   #$0200
+FBBE	BFFF80		stx   >DAT.Regs
+FBC1	35B3		puls  pc,y,x,a,cc
+		
+FBC3	E642	F.LDABX ldb R$B,u get task number
+FBC5	AE44		ldx   $04,u
+FBC7	1700F7		lbsr  LDABX
+FBCA	A741		sta   $01,u
+FBCC	39		rts
+		
+FBCD	EC41	F.STABX ldd R$D,u get data & task number
+FBCF	AE44		ldx   $04,u
+FBD1	16010F		lbra  STABX
+		
+FBD4	EC41	Move    ldd   $01,u
+FBD6	AE44		ldx   $04,u
+FBD8	10AE46		ldy   $06,u
+FBDB	EE48		ldu   $08,u
+		*
+		*     fall through to Mover
+		*
+		***********************************************************
+		*
+		*     Subroutine Mover
+		*
+		*   Move data from one task to another
+		*
+		* Input: A = Source Task number
+		*        B = Destination Task number
+		*        X = Source ptr
+		*        Y = Byte count
+		*        U = Destination ptr
+		*
+		* Output: Carry clear
+		*
+		* Data: none
+		*
+		* Calls: Mover00
+		*
+FBDD	3476	Mover   pshs  u,y,x,b,a
+FBDF	31A4		leay  ,y
+FBE1	102700C7	lbeq  MoveNone
+FBE5	3426		pshs  y,b,a
+FBE7	CEFF80		ldu   #DAT.Regs
+FBEA	1700C2		lbsr  L0C6F
+FBED	31C6		leay  a,u
+FBEF	3430		pshs  y,x
+FBF1	AE6E		ldx   $0E,s
+FBF3	1700B9		lbsr  L0C6F
+FBF6	31C6		leay  a,u
+FBF8	3430		pshs  y,x
+FBFA	CC0800		ldd   #$0800
+FBFD	A3E4		subd  ,s
+FBFF	3406		pshs  b,a
+FC01	CC0800		ldd   #$0800
+FC04	A366		subd  $06,s
+FC06	3406		pshs  b,a
+FC08	AE68		ldx   $08,s
+FC0A	3089E000	leax  >-$2000,x
+FC0E	EE64		ldu   $04,s
+FC10	33C9E800	leau  >-$1800,u
+FC14	3401	L0BD4   pshs  cc
+FC16	1A50		orcc  #$50
+FC18	A6E811		lda   <$11,s
+FC1B	B7FFCA		sta   >$FFCA
+FC1E	ECF80B		ldd   [<$0B,s]
+FC21	7FFFCA		clr   >$FFCA
+FC24	FDFFB8		std   >$FFB8
+FC27	A6E812		lda   <$12,s
+FC2A	B7FFCA		sta   >$FFCA
+FC2D	ECF807		ldd   [<$07,s]
+FC30	7FFFCA		clr   >$FFCA
+FC33	FDFFBA		std   >$FFBA
+FC36	EC6F		ldd   $0F,s
+FC38	10A361		cmpd  $01,s
+FC3B	2302		bls   L0BFF
+FC3D	EC61		ldd   $01,s
+FC3F	10A363	L0BFF   cmpd  $03,s
+FC42	2302		bls   L0C06
+FC44	EC63		ldd   $03,s
+FC46	10830040 L0C06  cmpd  #$0040
+FC4A	2303		bls   L0C0F
+FC4C	CC0040		ldd   #$0040
+FC4F	ED6D	L0C0F   std   $0D,s
+FC51	44		lsra
+FC52	56		rorb
+FC53	1F02		tfr   d,y
+FC55	2408		bcc   L0C1F
+FC57	A680		lda   ,x+
+FC59	A7C0		sta   ,u+
+FC5B	31A4		leay  ,y
+FC5D	2708		beq   L0C27
+FC5F	EC81	L0C1F   ldd   ,x++
+FC61	EDC1		std   ,u++
+FC63	313F		leay  -$01,y
+FC65	26F8		bne   L0C1F
+FC67	109E4C	L0C27   ldy   D.SysDAT
+FC6A	ECA838		ldd   <$38,y
+FC6D	FDFFB8		std   >$FFB8
+FC70	ECA83A		ldd   <$3A,y
+FC73	FDFFBA		std   >$FFBA
+FC76	3501		puls  cc
+FC78	EC6E		ldd   $0E,s
+FC7A	A36C		subd  $0C,s
+FC7C	272B		beq   L0C69
+FC7E	ED6E		std   $0E,s
+FC80	ECE4		ldd   ,s
+FC82	A36C		subd  $0C,s
+FC84	260B		bne   L0C51
+FC86	CC0800		ldd   #$0800
+FC89	3089F800	leax  >-$0800,x
+FC8D	6C6B		inc   $0B,s
+FC8F	6C6B		inc   $0B,s
+FC91	EDE4	L0C51   std   ,s
+FC93	EC62		ldd   $02,s
+FC95	A36C		subd  $0C,s
+FC97	260B		bne   L0C64
+FC99	CC0800		ldd   #$0800
+FC9C	33C9F800	leau  >-$0800,u
+FCA0	6C67		inc   $07,s
+FCA2	6C67		inc   $07,s
+FCA4	ED62	L0C64   std   $02,s
+FCA6	16FF6B		lbra  L0BD4
+FCA9	32E810	L0C69   leas  <$10,s
+FCAC	5F		MoveNone    clrb
+FCAD	35F6		puls  pc,u,y,x,b,a
+		
+FCAF	3404	L0C6F   pshs  b
+FCB1	1F10		tfr   x,d
+FCB3	84F8		anda  #$F8
+FCB5	2708		beq   L0C7F
+FCB7	1E01		exg   d,x
+FCB9	8407		anda  #$07
+FCBB	1E01		exg   d,x
+FCBD	44		lsra
+FCBE	44		lsra
+FCBF	3584	L0C7F   puls  pc,b
+FCC1	1CFE	LDABX   andcc #$FE
+FCC3	3455		pshs  u,x,b,cc
+FCC5	8DE8		bsr   L0C6F
+FCC7	CEFF80		ldu   #DAT.Regs
+FCCA	1A50		orcc  #$50
+FCCC	F7FFCA		stb   >$FFCA
+FCCF	EEC6		ldu   a,u
+FCD1	D6D0		ldb   D.SysTsk
+FCD3	F7FFCA		stb   >$FFCA
+FCD6	FFFF80		stu   >DAT.Regs
+FCD9	A684		lda   ,x
+FCDB	CE0200		ldu   #$0200
+FCDE	FFFF80		stu   >DAT.Regs
+FCE1	35D5		puls  pc,u,x,b,cc
+FCE3	1CFE	STABX   andcc #$FE
+FCE5	3457		pshs  u,x,b,a,cc
+FCE7	8DC6		bsr   L0C6F
+FCE9	CEFF80		ldu   #DAT.Regs
+FCEC	1A50		orcc  #$50
+FCEE	F7FFCA		stb   >$FFCA
+FCF1	ECC6		ldd   a,u
+FCF3	8A02		ora   #$02
+FCF5	1F03		tfr   d,u
+FCF7	D6D0		ldb   D.SysTsk
+FCF9	F7FFCA		stb   >$FFCA
+FCFC	A661		lda   $01,s
+FCFE	FFFF80		stu   >DAT.Regs
+FD01	A784		sta   ,x
+FD03	CE0200		ldu   #$0200
+FD06	FFFF80		stu   >DAT.Regs
+FD09	35D7		puls  pc,u,x,b,a,cc
+		
+FD0B	1CFE	L0CCB   andcc #$FE
+FD0D	3453		pshs  u,x,a,cc
+FD0F	8D9E		bsr   L0C6F
+FD11	CEFF80		ldu   #DAT.Regs
+FD14	1A50		orcc  #$50
+FD16	F7FFCA		stb   >$FFCA
+FD19	EEC6		ldu   a,u
+FD1B	D6D0		ldb   D.SysTsk
+FD1D	F7FFCA		stb   >$FFCA
+FD20	FFFF80		stu   >DAT.Regs
+FD23	E684		ldb   ,x
+FD25	CE0200		ldu   #$0200
+FD28	FFFF80		stu   >DAT.Regs
+FD2B	35D3		puls  pc,u,x,a,cc
+		
+FD2D	AE44	AllTsk  ldx   $04,u
+		*
+		*     fall through to AllPrTsk
+		*
+		***********************************************************
+		*
+		*     Subroutine AllPrTsk
+		*
+		*   Allocate process task number
+		*
+		* Input: X = Process ptr
+		*
+		* Output: carry clear if successful; set otherwise
+		*
+		* Data: none
+		*
+		* Calls: ResvTask, SetPrTsk
+		*
+FD2F	E606	AllPrTsk ldb   $06,x
+FD31	2608		bne   L0CFB
+FD33	8D4C		bsr   ResvTask
+FD35	2505		bcs   AllPrXit
+FD37	E706		stb   $06,x
+FD39	8D15		bsr   SetPrTsk
+FD3B	5F	L0CFB   clrb
+FD3C	39	AllPrXit rts
+		
+FD3D	AE44	DelTsk  ldx   $04,u
+FD3F	E606	DelPrTsk ldb   $06,x
+FD41	27F9		beq   AllPrXit
+FD43	6F06		clr   $06,x
+FD45	2057		bra   L0D5E
+		
+FD47	A60C	ChkPrTsk lda   $0C,x
+FD49	8510		bita  #$10
+FD4B	2603		bne   SetPrTsk
+FD4D	39		rts
+		
+FD4E	AE44	SetTsk  ldx   $04,u
+FD50	A60C	SetPrTsk lda   $0C,x
+FD52	84EF		anda  #$EF
+FD54	A70C		sta   $0C,x
+FD56	1CFE		andcc #$FE
+FD58	3477		pshs  u,y,x,b,a,cc
+FD5A	E606		ldb   $06,x
+FD5C	308840		leax  <$40,x
+FD5F	108E0020	ldy   #$0020
+FD63	CEFF80		ldu   #DAT.Regs
+FD66	1A50		orcc  #$50
+FD68	F7FFCA		stb   >$FFCA
+FD6B	EC81	L0D2B   ldd   ,x++
+FD6D	8A02		ora   #$02
+FD6F	EDC1		std   ,u++
+FD71	313F		leay  -$01,y
+FD73	26F6		bne   L0D2B
+FD75	D6D0		ldb   D.SysTsk
+FD77	F7FFCA		stb   >$FFCA
+FD7A	35F7		puls  pc,u,y,x,b,a,cc
+		
+FD7C	8D03	ResTsk  bsr   ResvTask
+FD7E	E742		stb   $02,u
+FD80	39		rts
+FD81	3410	ResvTask pshs  x
+FD83	C602		ldb   #$02
+FD85	9E20		ldx   D.Tasks
+FD87	A685	L0D47   lda   b,x
+FD89	270A		beq   L0D55
+FD8B	5C		incb
+FD8C	C108		cmpb  #$08
+FD8E	26F7		bne   L0D47
+FD90	53		comb
+FD91	C6EF		ldb   #$EF
+FD93	2005		bra   L0D5A
+FD95	6C85	L0D55   inc   b,x
+FD97	DAD0		orb   D.SysTsk
+FD99	4F		clra
+FD9A	3590	L0D5A   puls  pc,x
+		
+FD9C	E642	RelTsk  ldb   $02,u
+FD9E	3414	L0D5E   pshs  x,b
+FDA0	D6D0		ldb   D.SysTsk
+FDA2	53		comb
+FDA3	E4E4		andb  ,s
+FDA5	2704		beq   L0D6B
+FDA7	9E20		ldx   D.Tasks
+FDA9	6F85		clr   b,x
+FDAB	3594	L0D6B   puls  pc,x,b
+		
+FDAD	9E56	Tick    ldx   D.SProcQ
+FDAF	2727		beq   Slice
+FDB1	A60C		lda   $0C,x
+FDB3	8540		bita  #$40
+FDB5	2721		beq   Slice
+FDB7	EE04		ldu   $04,x
+FDB9	EC44		ldd   $04,u
+FDBB	830001		subd  #$0001
+FDBE	ED44		std   $04,u
+FDC0	2616		bne   Slice
+FDC2	EE0D	L0D82   ldu   $0D,x
+FDC4	8D26		bsr   ActvProc
+FDC6	30C4		leax  ,u
+FDC8	270C		beq   L0D96
+FDCA	A60C		lda   $0C,x
+FDCC	8540		bita  #$40
+FDCE	2706		beq   L0D96
+FDD0	EE04		ldu   $04,x
+FDD2	EC44		ldd   $04,u
+FDD4	27EC		beq   L0D82
+FDD6	9F56	L0D96   stx   D.SProcQ
+		
+FDD8	0A2F	Slice   dec   D.Slice
+FDDA	260C		bne   L0DA8
+FDDC	0C2F		inc   D.Slice
+FDDE	9E50		ldx   D.Proc
+FDE0	2706		beq   L0DA8
+FDE2	A60C		lda   $0C,x
+FDE4	8A20		ora   #$20
+FDE6	A70C		sta   $0C,x
+FDE8	5F	L0DA8   clrb
+FDE9	39		rts
+		
+FDEA	AE44	AProc   ldx   $04,u
+FDEC	5F	ActvProc clrb
+FDED	3471		pshs  u,y,x,cc
+FDEF	A60A		lda   $0A,x
+FDF1	A70B		sta   $0B,x
+FDF3	1A50		orcc  #$50
+FDF5	CE0045		ldu   #$0045
+FDF8	200A		bra   L0DC4
+FDFA	6C4B	L0DBA   inc   $0B,u
+FDFC	2602		bne   ActvPr20
+FDFE	6A4B		dec   $0B,u
+FE00	A14B	ActvPr20 cmpa  $0B,u
+FE02	2202		bhi   L0DC6
+FE04	31C4	L0DC4   leay  ,u
+FE06	EE4D	L0DC6   ldu   $0D,u
+FE08	26F0		bne   L0DBA
+FE0A	EC2D		ldd   $0D,y
+FE0C	AF2D		stx   $0D,y
+FE0E	ED0D		std   $0D,x
+FE10	35F1		puls  pc,u,y,x,cc
+		
+FE12	9E50	UserIRQ ldx   D.Proc
+FE14	10EF04		sts   $04,x
+FE17	10DECC		lds   D.SysStk
+FE1A	DCC0		ldd   D.SysSvc
+FE1C	DDE4		std   D.XSWI2
+FE1E	DCC4		ldd   D.SysIRQ
+FE20	DDE8		std   D.XIRQ
+FE22	AD9F00CE	jsr   [>$00CE]
+FE26	240E		bcc   UserRet
+FE28	9E50		ldx   D.Proc
+FE2A	E606		ldb   $06,x
+FE2C	AE04		ldx   $04,x
+FE2E	17FE90		lbsr  LDABX
+FE31	8A50		ora   #$50
+FE33	17FEAD		lbsr  STABX
+		*
+		*     fall through to UserRet
+		*
+		***********************************************************
+		*
+		*     Subroutine UserRet
+		*
+		*   Return to User process after interrupt
+		*
+		* Input: A = Process State flags
+		*        X = Process Descriptor ptr
+		*
+		* Output: none
+		*
+		* Data: none
+		*
+		* Calls: NextProc (@ CurrProc), ActvProc, NextProc
+		*
+FE36	1A50	UserRet orcc  #$50
+FE38	9E50		ldx   D.Proc
+FE3A	EE04		ldu   $04,x
+FE3C	A60C		lda   $0C,x
+FE3E	8520		bita  #$20
+FE40	273F		beq   CurrProc
+FE42	84DF	L0E02   anda  #$DF
+FE44	A70C		sta   $0C,x
+FE46	17FEF6		lbsr  DelPrTsk
+FE49	8DA1	GoActv  bsr   ActvProc
+		*
+		*    fall through to NextProc
+		*
+		***********************************************************
+		*
+		*     Subroutine NextProc
+		*
+		*   Start next process in Active Process Queue
+		*
+		* Input: none
+		*
+		* Output: does not return to caller
+		*
+		* Data: D.SysPrc, D.Proc, D.AProcQ
+		*
+		* Calls: SvcRet
+		*
+FE4B	9E4A	NextProc ldx   D.SysPrc
+FE4D	9F50		stx   D.Proc
+FE4F	10DECC		lds   D.SysStk
+FE52	1CAF		andcc #$AF
+FE54	2002		bra   L0E18
+FE56	3CAF	L0E16   cwai  #$AF
+FE58	1A50	L0E18   orcc  #$50
+FE5A	108E0045	ldy   #$0045
+FE5E	2002		bra   NextPr40
+		
+FE60	3184	L0E20   leay  ,x
+FE62	AE2D	NextPr40 ldx   $0D,y
+FE64	27F0		beq   L0E16
+FE66	A60C		lda   $0C,x
+FE68	8508		bita  #$08
+FE6A	26F4		bne   L0E20
+FE6C	EC0D		ldd   $0D,x
+FE6E	ED2D		std   $0D,y
+FE70	9F50		stx   D.Proc
+FE72	17FEBA		lbsr  AllPrTsk
+FE75	25D2		bcs   GoActv
+FE77	9630		lda   D.TSlice
+FE79	972F		sta   D.Slice
+FE7B	EE04		ldu   $04,x
+FE7D	A60C		lda   $0C,x
+FE7F	2B66		bmi   SysRet
+FE81	8502	CurrProc bita  #$02
+FE83	2640		bne   KillProc
+FE85	17FEBF		lbsr  ChkPrTsk
+FE88	E68819		ldb   <$19,x
+FE8B	272D		beq   L0E7A
+FE8D	5A		decb
+FE8E	2727		beq   CurrPr20
+FE90	3274		leas  -$0C,s
+FE92	33E4		leau  ,s
+FE94	17F4F8		lbsr  L034F
+FE97	A68819		lda   <$19,x
+FE9A	A742		sta   $02,u
+FE9C	EC881A		ldd   <$1A,x
+FE9F	2724		beq   KillProc
+FEA1	ED4A		std   $0A,u
+FEA3	EC881C		ldd   <$1C,x
+FEA6	ED48		std   $08,u
+FEA8	EC04		ldd   $04,x
+FEAA	83000C		subd  #$000C
+FEAD	ED04		std   $04,x
+FEAF	17F4EC		lbsr  L035E
+FEB2	326C		leas  $0C,s
+FEB4	EE04		ldu   $04,x
+FEB6	5F		clrb
+FEB7	E78819	CurrPr20 stb   <$19,x
+FEBA	DCC6	L0E7A   ldd   D.UsrSvc
+FEBC	DDE4		std   D.XSWI2
+FEBE	DCCA		ldd   D.UsrIRQ
+FEC0	DDE8		std   D.XIRQ
+FEC2	16006E		lbra  SvcRet
+FEC5	A60C	KillProc lda   $0C,x
+FEC7	8A80		ora   #$80
+FEC9	A70C		sta   $0C,x
+FECB	32890200	leas  >$0200,x
+FECF	1CAF		andcc #$AF
+FED1	E68819		ldb   <$19,x
+FED4	6F8819		clr   <$19,x
+FED7	103F06		os9   F$Exit
+		
+FEDA	AD9F00CE	SysIRQ    jsr   [>$00CE]
+FEDE	2406		bcc   L0EA6
+FEE0	E6E4		ldb   ,s
+FEE2	CA50		orb   #$50
+FEE4	E7E4		stb   ,s
+FEE6	3B	L0EA6   rti
+		
+		
+		
+		***********************************************************
+		*     Routine SysRet
+		*
+		*   Return to system after service request
+		*
+		* Input: U = reqisters ptr
+		*
+		* Output: does not return to caller
+		*
+		* Data: D.SysPrc
+		*
+		* Calls: SvcRet
+		*
+FEE7	9E4A	SysRet  ldx   D.SysPrc
+FEE9	17FE5B		lbsr  ChkPrTsk
+FEEC	32C4		leas  ,u
+FEEE	3B		rti
+		
+FEEF	6E9F0026	GoPoll    jmp   [>$0026]
+		
+FEF3	1A01	IOPoll  orcc  #$01
+FEF5	39		rts
+		
+		***********************************************************
+		*
+		*     Routine DATInit
+		*
+FEF6	4F	DATInit clra				
+FEF7	1F8B		tfr   a,dp              Zero DP
+FEF9	CEFFC8		ldu   #$FFC8            Point above MMU #7 key register
+FEFC	C607		ldb   #$07              Which is going to have key value 7!
+FEFE	E7C2	L0EBE   stb   ,-u      		Set the key, taking the MMU into key / task controlled mode
+FF00	5A		decb                    Get ready for the next one
+FF01	26FB		bne   L0EBE             Keep going until we have done 7->1
+FF03	31C2		leay  ,-u               Skip over MMU #0 key register address
+FF05	8E01FF		ldx   #$01FF            Load X with ROM1 top page
+FF08	C602		ldb   #$02		Going to map in two pages - top 4k ROM1
+FF0A	AFA3	L0ECA   stx   ,--y		Map ROM page
+FF0C	301F		leax  -$01,x		Next one will be next page down in ROM
+FF0E	5A		decb			Done 1
+FF0F	26F9		bne   L0ECA		If we haven't yet done two, repeat
+FF11	8E0340		ldx   #$0340		Load X with 6840 timer device page
+FF14	AFA3		stx   ,--y		Map it in
+FF16	8E0350		ldx   #$0350		Load X with TMS9914 GPIB device page
+FF19	AFA3		stx   ,--y		Map it in
+FF1B	C619		ldb   #$19		Now there will be 25 unmapped pages
+FF1D	8E015F		ldx   #DAT.Free		Load X with 15F the unmapped marker
+FF20	AFA3	L0EE0   stx   ,--y		Flag next page as unmapped
+FF22	5A		decb			Done 1
+FF23	26FB		bne   L0EE0		Once we have done all carry on
+FF25	CC0202		ldd   #$0202		Load D with RAM page 3
+FF28	EDA3	L0EE8   std   ,--y		Map it in
+FF2A	5A		decb			Decrement B, the LSB, adjusting RAM page and acting as counter
+FF2B	2AFB		bpl   L0EE8		While not done bottom page (02)00 yet carry on
+FF2D	4F		clra			Now set A to key value for MMU #0 key - 0!
+FF2E	A7C4		sta   ,u		Write MMU #0 key, bringing task 0 map online
+FF30	16F120		lbra  COLD		Go to main OS9 hardware start up
+		
+		
+		***********************************************************
+		*
+		*     Service Request Return
+		*
+		*   Switch to user's address space
+		*
+		* Input: X = Process Descriptor ptr
+		*        U = Process Stack ptr
+		*
+		* Output: does not return
+		*
+		* Data: none
+		*
+		* Calls: none
+		*
+FF33	E606	SvcRet  ldb P$Task,x get task number
+FF35	1A50		orcc #IntMasks set interrupt masks
+FF37	F7FFCB		stb   DAT.Task
+FF3A	32C4		leas  ,u
+FF3C	C602		ldb   #$02
+FF3E	F7FFC9		stb   >$FFC9
+FF41	3B		rti
+		
+FF42	E606	PassSWI ldb   $06,x
+FF44	F7FFCB		stb   DAT.Task
+FF47	C603		ldb   #$03
+FF49	F7FFC9		stb   >$FFC9
+FF4C	6E40		jmp 0,u go to user routine
+		
+FF4E	1A50	SWI3RQ	orcc #IntMasks set interrupt masks
+FF50	C6F2		ldb #D.SWI3 get direct page offset
+FF52	200E		bra Switch
+		
+FF54	1A50	SWI2RQ	orcc #IntMasks set interrupt masks
+FF56	C6F4		ldb #D.SWI2 get direct page offset
+FF58	2008		bra Switch
+		
+FF5A	C6F6	FIRQ	ldb #D.FIRQ get direct page offset
+FF5C	2004		bra Switch
+		
+FF5E	1A50	IRQ	orcc #IntMasks set fast interrupt masks
+FF60	C6F8		ldb #D.IRQ get direct page offset
+	0F22	Switch equ *
+FF62	8680		lda #SysTask get system task number
+FF64	B7FFCB		sta DAT.Task set system memory
+FF67	4F		clra
+FF68	1F8B		tfr a,dp clear direct page register
+FF6A	1F01		tfr d,x copy direct page ptr
+FF6C	6E94		jmp [,x] go through vector
+		
+FF6E	C6FA	SWIRQ 	ldb #D.SWI get direct page offset
+FF70	20F0		bra Switch
+		
+FF72	C6FC	NMIRQ 	ldb #D.NMI get direct page offset
+FF74	20EC		bra Switch
+		page
+FF76	799092		emod
+	0F39	OS9End equ *
+		
+FF79	39393939393939		fcb $39,$39,$39,$39,$39,$39,$39
+FF80	FFFFFFFFFFFFFFFF	fcb $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+	FFFFFFFFFFFFFFFF	
+FF90	FFFFFFFFFFFFFFFF	fcb $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+	FFFFFFFFFFFFFFFF	
+FFA0	FFFFFFFFFFFFFFFF	fcb $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+	FFFFFFFFFFFFFFFF	
+FFB0	FFFFFFFFFFFFFFFF	fcb $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+	FFFFFFFFFFFFFFFF	
+FFC0	FFFFFFFFFFFFFFFF	fcb $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+	FFFFFFFFFFFFFFFF	
+FFD0	FFFFFFFFFFFFFFFF	fcb $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+	FFFFFFFFFFFFFFFF	
+		
+	F040	offset set $FFE0-*
+		
+		
+		***********************************************************
+		*
+		*     System Interrupt Psuedo-Vectors
+		*
+FFE0	FDAD	HdlrVec fdb Tick+offset
+FFE2	F338		fdb UserSWI3+offset
+FFE4	F342		fdb UserSWI2+offset
+FFE6	F040		fdb offset
+FFE8	FE12		fdb UserIRQ+offset
+FFEA	F34B		fdb UserSWI+offset
+FFEC	F040		fdb offset
+FFEE	F040		fdb offset
+		
+		***********************************************************
+		*
+		*     System Interrupt Vectors
+		*
+FFF0	F040		fdb offset
+FFF2	FF4E		fdb SWI3RQ+offset
+FFF4	FF54		fdb SWI2RQ+offset
+FFF6	FF5A		fdb FIRQ+offset
+FFF8	FF5E		fdb IRQ+offset
+FFFA	FF6E		fdb SWIRQ+offset
+FFFC	FF72		fdb NMIRQ+offset
+FFFE	FEF6		fdb DATInit+offset
+		end

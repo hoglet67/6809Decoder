@@ -1,0 +1,1692 @@
+       0        0 0 fe  1 ? 00 E
+       1        1 1 fe  1 ? 01 E
+       2        2 2 f6  1 ? 01 F
+       3        3 3 f6  1 ? 00 F
+???? :                : RESET !!       :  4 : A=?? B=?? X=???? Y=???? U=???? S=???? DP=00 E=? F=1 H=? I=1 N=? Z=? V=? C=?
+       4        4 0 4f  1 ? 00 6
+       5        5 1 1f  1 ? 00 7
+Rd: FEF6 = 4F
+FEF6 : 4F             : CLRA           :  2 : A=00 B=?? X=???? Y=???? U=???? S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+       6        6 0 1f  1 ? 00 7
+       7        7 1 8b  1 ? 00 8
+       8        8 2 f6  1 ? 00 F
+       9        9 3 f6  1 ? 00 F
+      10        a 4 f6  1 ? 00 F
+      11        b 5 f6  1 ? 00 F
+Rd: FEF7 = 1F
+Rd: FEF8 = 8B
+FEF7 : 1F 8B          : TFR  A,DP      :  6 : A=00 B=?? X=???? Y=???? U=???? S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+      12        c 0 ce  1 ? 00 9
+      13        d 1 ff  1 ? 00 A
+      14        e 2 c8  1 ? 00 B
+Rd: FEF9 = CE
+Rd: FEFA = FF
+Rd: FEFB = C8
+FEF9 : CE FF C8       : LDU  #$FFC8    :  3 : A=00 B=?? X=???? Y=???? U=FFC8 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=0
+      15        f 0 c6  1 ? 00 C
+      16       10 1 07  1 ? 00 D
+Rd: FEFC = C6
+Rd: FEFD = 07
+FEFC : C6 07          : LDB  #$07      :  2 : A=00 B=07 X=???? Y=???? U=FFC8 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      17       11 0 e7  1 ? 00 E
+      18       12 1 c2  1 ? 00 F
+      19       13 2 5a  1 ? 00 0
+      20       14 3 f6  1 ? 00 F
+      21       15 4 f6  1 ? 00 F
+      22       16 5 07  0 ? 00 7
+Rd: FEFE = E7
+Rd: FEFF = C2
+Wr: FFC7 = 07
+FEFE : E7 C2          : STB  ,-U       :  6 : A=00 B=07 X=???? Y=???? U=FFC7 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      23       17 0 5a  1 ? 00 0
+      24       18 1 26  1 ? 00 1
+Rd: FF00 = 5A
+FF00 : 5A             : DECB           :  2 : A=00 B=06 X=???? Y=???? U=FFC7 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      25       19 0 26  1 ? 00 1
+      26       1a 1 fb  1 ? 00 2
+      27       1b 2 f6  1 ? 00 F
+Rd: FF01 = 26
+Rd: FF02 = FB
+FF01 : 26 FB          : BNE  $FEFE     :  3 : A=00 B=06 X=???? Y=???? U=FFC7 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      28       1c 0 e7  1 ? 00 E
+      29       1d 1 c2  1 ? 00 F
+      30       1e 2 5a  1 ? 00 0
+      31       1f 3 f6  1 ? 00 F
+      32       20 4 f6  1 ? 00 F
+      33       21 5 06  0 ? 00 6
+Rd: FEFE = E7
+Rd: FEFF = C2
+Wr: FFC6 = 06
+FEFE : E7 C2          : STB  ,-U       :  6 : A=00 B=06 X=???? Y=???? U=FFC6 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      34       22 0 5a  1 ? 00 0
+      35       23 1 26  1 ? 00 1
+Rd: FF00 = 5A
+FF00 : 5A             : DECB           :  2 : A=00 B=05 X=???? Y=???? U=FFC6 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      36       24 0 26  1 ? 00 1
+      37       25 1 fb  1 ? 00 2
+      38       26 2 f6  1 ? 00 F
+Rd: FF01 = 26
+Rd: FF02 = FB
+FF01 : 26 FB          : BNE  $FEFE     :  3 : A=00 B=05 X=???? Y=???? U=FFC6 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      39       27 0 e7  1 ? 00 E
+      40       28 1 c2  1 ? 00 F
+      41       29 2 5a  1 ? 00 0
+      42       2a 3 f6  1 ? 00 F
+      43       2b 4 f6  1 ? 00 F
+      44       2c 5 05  0 ? 00 5
+Rd: FEFE = E7
+Rd: FEFF = C2
+Wr: FFC5 = 05
+FEFE : E7 C2          : STB  ,-U       :  6 : A=00 B=05 X=???? Y=???? U=FFC5 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      45       2d 0 5a  1 ? 00 0
+      46       2e 1 26  1 ? 00 1
+Rd: FF00 = 5A
+FF00 : 5A             : DECB           :  2 : A=00 B=04 X=???? Y=???? U=FFC5 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      47       2f 0 26  1 ? 00 1
+      48       30 1 fb  1 ? 00 2
+      49       31 2 f6  1 ? 00 F
+Rd: FF01 = 26
+Rd: FF02 = FB
+FF01 : 26 FB          : BNE  $FEFE     :  3 : A=00 B=04 X=???? Y=???? U=FFC5 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      50       32 0 e7  1 ? 00 E
+      51       33 1 c2  1 ? 00 F
+      52       34 2 5a  1 ? 00 0
+      53       35 3 f6  1 ? 00 F
+      54       36 4 f6  1 ? 00 F
+      55       37 5 04  0 ? 00 4
+Rd: FEFE = E7
+Rd: FEFF = C2
+Wr: FFC4 = 04
+FEFE : E7 C2          : STB  ,-U       :  6 : A=00 B=04 X=???? Y=???? U=FFC4 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      56       38 0 5a  1 ? 00 0
+      57       39 1 26  1 ? 00 1
+Rd: FF00 = 5A
+FF00 : 5A             : DECB           :  2 : A=00 B=03 X=???? Y=???? U=FFC4 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      58       3a 0 26  1 ? 00 1
+      59       3b 1 fb  1 ? 00 2
+      60       3c 2 f6  1 ? 00 F
+Rd: FF01 = 26
+Rd: FF02 = FB
+FF01 : 26 FB          : BNE  $FEFE     :  3 : A=00 B=03 X=???? Y=???? U=FFC4 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      61       3d 0 e7  1 ? 00 E
+      62       3e 1 c2  1 ? 00 F
+      63       3f 2 5a  1 ? 00 0
+      64       40 3 f6  1 ? 00 F
+      65       41 4 f6  1 ? 00 F
+      66       42 5 03  0 ? 00 3
+Rd: FEFE = E7
+Rd: FEFF = C2
+Wr: FFC3 = 03
+FEFE : E7 C2          : STB  ,-U       :  6 : A=00 B=03 X=???? Y=???? U=FFC3 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      67       43 0 5a  1 ? 00 0
+      68       44 1 26  1 ? 00 1
+Rd: FF00 = 5A
+FF00 : 5A             : DECB           :  2 : A=00 B=02 X=???? Y=???? U=FFC3 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      69       45 0 26  1 ? 00 1
+      70       46 1 fb  1 ? 00 2
+      71       47 2 f6  1 ? 00 F
+Rd: FF01 = 26
+Rd: FF02 = FB
+FF01 : 26 FB          : BNE  $FEFE     :  3 : A=00 B=02 X=???? Y=???? U=FFC3 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      72       48 0 e7  1 ? 00 E
+      73       49 1 c2  1 ? 00 F
+      74       4a 2 5a  1 ? 00 0
+      75       4b 3 f6  1 ? 00 F
+      76       4c 4 f6  1 ? 00 F
+      77       4d 5 02  0 ? 00 2
+Rd: FEFE = E7
+Rd: FEFF = C2
+Wr: FFC2 = 02
+FEFE : E7 C2          : STB  ,-U       :  6 : A=00 B=02 X=???? Y=???? U=FFC2 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      78       4e 0 5a  1 ? 00 0
+      79       4f 1 26  1 ? 00 1
+Rd: FF00 = 5A
+FF00 : 5A             : DECB           :  2 : A=00 B=01 X=???? Y=???? U=FFC2 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      80       50 0 26  1 ? 00 1
+      81       51 1 fb  1 ? 00 2
+      82       52 2 f6  1 ? 00 F
+Rd: FF01 = 26
+Rd: FF02 = FB
+FF01 : 26 FB          : BNE  $FEFE     :  3 : A=00 B=01 X=???? Y=???? U=FFC2 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      83       53 0 e7  1 ? 00 E
+      84       54 1 c2  1 ? 00 F
+      85       55 2 5a  1 ? 00 0
+      86       56 3 f6  1 ? 00 F
+      87       57 4 f6  1 ? 00 F
+      88       58 5 01  0 ? 00 1
+Rd: FEFE = E7
+Rd: FEFF = C2
+Wr: FFC1 = 01
+FEFE : E7 C2          : STB  ,-U       :  6 : A=00 B=01 X=???? Y=???? U=FFC1 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+      89       59 0 5a  1 ? 00 0
+      90       5a 1 26  1 ? 00 1
+Rd: FF00 = 5A
+FF00 : 5A             : DECB           :  2 : A=00 B=00 X=???? Y=???? U=FFC1 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+      91       5b 0 26  1 ? 00 1
+      92       5c 1 fb  1 ? 00 2
+      93       5d 2 f6  1 ? 00 F
+Rd: FF01 = 26
+Rd: FF02 = FB
+FF01 : 26 FB          : BNE  $FEFE     :  3 : A=00 B=00 X=???? Y=???? U=FFC1 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+      94       5e 0 31  1 ? 00 3
+      95       5f 1 c2  1 ? 00 4
+      96       60 2 8e  1 ? 00 5
+      97       61 3 f6  1 ? 00 F
+      98       62 4 f6  1 ? 00 F
+      99       63 5 f6  1 ? 00 F
+Rd: FF03 = 31
+Rd: FF04 = C2
+FF03 : 31 C2          : LEAY ,-U       :  6 : A=00 B=00 X=???? Y=FFC0 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     100       64 0 8e  1 ? 00 5
+     101       65 1 01  1 ? 00 6
+     102       66 2 ff  1 ? 00 7
+Rd: FF05 = 8E
+Rd: FF06 = 01
+Rd: FF07 = FF
+FF05 : 8E 01 FF       : LDX  #$01FF    :  3 : A=00 B=00 X=01FF Y=FFC0 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     103       67 0 c6  1 ? 00 8
+     104       68 1 02  1 ? 00 9
+Rd: FF08 = C6
+Rd: FF09 = 02
+FF08 : C6 02          : LDB  #$02      :  2 : A=00 B=02 X=01FF Y=FFC0 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     105       69 0 af  1 ? 00 A
+     106       6a 1 a3  1 ? 00 B
+     107       6b 2 30  1 ? 00 C
+     108       6c 3 f6  1 ? 00 F
+     109       6d 4 f6  1 ? 00 F
+     110       6e 5 f6  1 ? 00 F
+     111       6f 6 01  0 ? 00 E
+     112       70 7 ff  0 ? 00 F
+Rd: FF0A = AF
+Rd: FF0B = A3
+Wr: FFBE = 01
+Wr: FFBF = FF
+FF0A : AF A3          : STX  ,--Y      :  8 : A=00 B=02 X=01FF Y=FFBE U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     113       71 0 30  1 ? 00 C
+     114       72 1 1f  1 ? 00 D
+     115       73 2 5a  1 ? 00 E
+     116       74 3 f6  1 ? 00 F
+     117       75 4 f6  1 ? 00 F
+Rd: FF0C = 30
+Rd: FF0D = 1F
+FF0C : 30 1F          : LEAX -$01,X    :  5 : A=00 B=02 X=01FE Y=FFBE U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     118       76 0 5a  1 ? 00 E
+     119       77 1 26  1 ? 00 F
+Rd: FF0E = 5A
+FF0E : 5A             : DECB           :  2 : A=00 B=01 X=01FE Y=FFBE U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     120       78 0 26  1 ? 00 F
+     121       79 1 f9  1 ? 00 0
+     122       7a 2 f6  1 ? 00 F
+Rd: FF0F = 26
+Rd: FF10 = F9
+FF0F : 26 F9          : BNE  $FF0A     :  3 : A=00 B=01 X=01FE Y=FFBE U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     123       7b 0 af  1 ? 00 A
+     124       7c 1 a3  1 ? 00 B
+     125       7d 2 30  1 ? 00 C
+     126       7e 3 f6  1 ? 00 F
+     127       7f 4 f6  1 ? 00 F
+     128       80 5 f6  1 ? 00 F
+     129       81 6 01  0 ? 00 C
+     130       82 7 fe  0 ? 00 D
+Rd: FF0A = AF
+Rd: FF0B = A3
+Wr: FFBC = 01
+Wr: FFBD = FE
+FF0A : AF A3          : STX  ,--Y      :  8 : A=00 B=01 X=01FE Y=FFBC U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     131       83 0 30  1 ? 00 C
+     132       84 1 1f  1 ? 00 D
+     133       85 2 5a  1 ? 00 E
+     134       86 3 f6  1 ? 00 F
+     135       87 4 f6  1 ? 00 F
+Rd: FF0C = 30
+Rd: FF0D = 1F
+FF0C : 30 1F          : LEAX -$01,X    :  5 : A=00 B=01 X=01FD Y=FFBC U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     136       88 0 5a  1 ? 00 E
+     137       89 1 26  1 ? 00 F
+Rd: FF0E = 5A
+FF0E : 5A             : DECB           :  2 : A=00 B=00 X=01FD Y=FFBC U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     138       8a 0 26  1 ? 00 F
+     139       8b 1 f9  1 ? 00 0
+     140       8c 2 f6  1 ? 00 F
+Rd: FF0F = 26
+Rd: FF10 = F9
+FF0F : 26 F9          : BNE  $FF0A     :  3 : A=00 B=00 X=01FD Y=FFBC U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     141       8d 0 8e  1 ? 00 1
+     142       8e 1 03  1 ? 00 2
+     143       8f 2 40  1 ? 00 3
+Rd: FF11 = 8E
+Rd: FF12 = 03
+Rd: FF13 = 40
+FF11 : 8E 03 40       : LDX  #$0340    :  3 : A=00 B=00 X=0340 Y=FFBC U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     144       90 0 af  1 ? 00 4
+     145       91 1 a3  1 ? 00 5
+     146       92 2 8e  1 ? 00 6
+     147       93 3 f6  1 ? 00 F
+     148       94 4 f6  1 ? 00 F
+     149       95 5 f6  1 ? 00 F
+     150       96 6 03  0 ? 00 A
+     151       97 7 40  0 ? 00 B
+Rd: FF14 = AF
+Rd: FF15 = A3
+Wr: FFBA = 03
+Wr: FFBB = 40
+FF14 : AF A3          : STX  ,--Y      :  8 : A=00 B=00 X=0340 Y=FFBA U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     152       98 0 8e  1 ? 00 6
+     153       99 1 03  1 ? 00 7
+     154       9a 2 50  1 ? 00 8
+Rd: FF16 = 8E
+Rd: FF17 = 03
+Rd: FF18 = 50
+FF16 : 8E 03 50       : LDX  #$0350    :  3 : A=00 B=00 X=0350 Y=FFBA U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     155       9b 0 af  1 ? 00 9
+     156       9c 1 a3  1 ? 00 A
+     157       9d 2 c6  1 ? 00 B
+     158       9e 3 f6  1 ? 00 F
+     159       9f 4 f6  1 ? 00 F
+     160       a0 5 f6  1 ? 00 F
+     161       a1 6 03  0 ? 00 8
+     162       a2 7 50  0 ? 00 9
+Rd: FF19 = AF
+Rd: FF1A = A3
+Wr: FFB8 = 03
+Wr: FFB9 = 50
+FF19 : AF A3          : STX  ,--Y      :  8 : A=00 B=00 X=0350 Y=FFB8 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     163       a3 0 c6  1 ? 00 B
+     164       a4 1 19  1 ? 00 C
+Rd: FF1B = C6
+Rd: FF1C = 19
+FF1B : C6 19          : LDB  #$19      :  2 : A=00 B=19 X=0350 Y=FFB8 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     165       a5 0 8e  1 ? 00 D
+     166       a6 1 01  1 ? 00 E
+     167       a7 2 5f  1 ? 00 F
+Rd: FF1D = 8E
+Rd: FF1E = 01
+Rd: FF1F = 5F
+FF1D : 8E 01 5F       : LDX  #$015F    :  3 : A=00 B=19 X=015F Y=FFB8 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     168       a8 0 af  1 ? 00 0
+     169       a9 1 a3  1 ? 00 1
+     170       aa 2 5a  1 ? 00 2
+     171       ab 3 f6  1 ? 00 F
+     172       ac 4 f6  1 ? 00 F
+     173       ad 5 f6  1 ? 00 F
+     174       ae 6 01  0 ? 00 6
+     175       af 7 5f  0 ? 00 7
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FFB6 = 01
+Wr: FFB7 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=19 X=015F Y=FFB6 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     176       b0 0 5a  1 ? 00 2
+     177       b1 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=18 X=015F Y=FFB6 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     178       b2 0 26  1 ? 00 3
+     179       b3 1 fb  1 ? 00 4
+     180       b4 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=18 X=015F Y=FFB6 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     181       b5 0 af  1 ? 00 0
+     182       b6 1 a3  1 ? 00 1
+     183       b7 2 5a  1 ? 00 2
+     184       b8 3 f6  1 ? 00 F
+     185       b9 4 f6  1 ? 00 F
+     186       ba 5 f6  1 ? 00 F
+     187       bb 6 01  0 ? 00 4
+     188       bc 7 5f  0 ? 00 5
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FFB4 = 01
+Wr: FFB5 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=18 X=015F Y=FFB4 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     189       bd 0 5a  1 ? 00 2
+     190       be 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=17 X=015F Y=FFB4 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     191       bf 0 26  1 ? 00 3
+     192       c0 1 fb  1 ? 00 4
+     193       c1 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=17 X=015F Y=FFB4 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     194       c2 0 af  1 ? 00 0
+     195       c3 1 a3  1 ? 00 1
+     196       c4 2 5a  1 ? 00 2
+     197       c5 3 f6  1 ? 00 F
+     198       c6 4 f6  1 ? 00 F
+     199       c7 5 f6  1 ? 00 F
+     200       c8 6 01  0 ? 00 2
+     201       c9 7 5f  0 ? 00 3
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FFB2 = 01
+Wr: FFB3 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=17 X=015F Y=FFB2 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     202       ca 0 5a  1 ? 00 2
+     203       cb 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=16 X=015F Y=FFB2 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     204       cc 0 26  1 ? 00 3
+     205       cd 1 fb  1 ? 00 4
+     206       ce 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=16 X=015F Y=FFB2 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     207       cf 0 af  1 ? 00 0
+     208       d0 1 a3  1 ? 00 1
+     209       d1 2 5a  1 ? 00 2
+     210       d2 3 f6  1 ? 00 F
+     211       d3 4 f6  1 ? 00 F
+     212       d4 5 f6  1 ? 00 F
+     213       d5 6 01  0 ? 00 0
+     214       d6 7 5f  0 ? 00 1
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FFB0 = 01
+Wr: FFB1 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=16 X=015F Y=FFB0 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     215       d7 0 5a  1 ? 00 2
+     216       d8 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=15 X=015F Y=FFB0 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     217       d9 0 26  1 ? 00 3
+     218       da 1 fb  1 ? 00 4
+     219       db 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=15 X=015F Y=FFB0 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     220       dc 0 af  1 ? 00 0
+     221       dd 1 a3  1 ? 00 1
+     222       de 2 5a  1 ? 00 2
+     223       df 3 f6  1 ? 00 F
+     224       e0 4 f6  1 ? 00 F
+     225       e1 5 f6  1 ? 00 F
+     226       e2 6 01  0 ? 00 E
+     227       e3 7 5f  0 ? 00 F
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FFAE = 01
+Wr: FFAF = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=15 X=015F Y=FFAE U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     228       e4 0 5a  1 ? 00 2
+     229       e5 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=14 X=015F Y=FFAE U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     230       e6 0 26  1 ? 00 3
+     231       e7 1 fb  1 ? 00 4
+     232       e8 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=14 X=015F Y=FFAE U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     233       e9 0 af  1 ? 00 0
+     234       ea 1 a3  1 ? 00 1
+     235       eb 2 5a  1 ? 00 2
+     236       ec 3 f6  1 ? 00 F
+     237       ed 4 f6  1 ? 00 F
+     238       ee 5 f6  1 ? 00 F
+     239       ef 6 01  0 ? 00 C
+     240       f0 7 5f  0 ? 00 D
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FFAC = 01
+Wr: FFAD = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=14 X=015F Y=FFAC U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     241       f1 0 5a  1 ? 00 2
+     242       f2 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=13 X=015F Y=FFAC U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     243       f3 0 26  1 ? 00 3
+     244       f4 1 fb  1 ? 00 4
+     245       f5 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=13 X=015F Y=FFAC U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     246       f6 0 af  1 ? 00 0
+     247       f7 1 a3  1 ? 00 1
+     248       f8 2 5a  1 ? 00 2
+     249       f9 3 f6  1 ? 00 F
+     250       fa 4 f6  1 ? 00 F
+     251       fb 5 f6  1 ? 00 F
+     252       fc 6 01  0 ? 00 A
+     253       fd 7 5f  0 ? 00 B
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FFAA = 01
+Wr: FFAB = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=13 X=015F Y=FFAA U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     254       fe 0 5a  1 ? 00 2
+     255       ff 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=12 X=015F Y=FFAA U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     256      100 0 26  1 ? 00 3
+     257      101 1 fb  1 ? 00 4
+     258      102 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=12 X=015F Y=FFAA U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     259      103 0 af  1 ? 00 0
+     260      104 1 a3  1 ? 00 1
+     261      105 2 5a  1 ? 00 2
+     262      106 3 f6  1 ? 00 F
+     263      107 4 f6  1 ? 00 F
+     264      108 5 f6  1 ? 00 F
+     265      109 6 01  0 ? 00 8
+     266      10a 7 5f  0 ? 00 9
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FFA8 = 01
+Wr: FFA9 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=12 X=015F Y=FFA8 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     267      10b 0 5a  1 ? 00 2
+     268      10c 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=11 X=015F Y=FFA8 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     269      10d 0 26  1 ? 00 3
+     270      10e 1 fb  1 ? 00 4
+     271      10f 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=11 X=015F Y=FFA8 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     272      110 0 af  1 ? 00 0
+     273      111 1 a3  1 ? 00 1
+     274      112 2 5a  1 ? 00 2
+     275      113 3 f6  1 ? 00 F
+     276      114 4 f6  1 ? 00 F
+     277      115 5 f6  1 ? 00 F
+     278      116 6 01  0 ? 00 6
+     279      117 7 5f  0 ? 00 7
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FFA6 = 01
+Wr: FFA7 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=11 X=015F Y=FFA6 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     280      118 0 5a  1 ? 00 2
+     281      119 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=10 X=015F Y=FFA6 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     282      11a 0 26  1 ? 00 3
+     283      11b 1 fb  1 ? 00 4
+     284      11c 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=10 X=015F Y=FFA6 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     285      11d 0 af  1 ? 00 0
+     286      11e 1 a3  1 ? 00 1
+     287      11f 2 5a  1 ? 00 2
+     288      120 3 f6  1 ? 00 F
+     289      121 4 f6  1 ? 00 F
+     290      122 5 f6  1 ? 00 F
+     291      123 6 01  0 ? 00 4
+     292      124 7 5f  0 ? 00 5
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FFA4 = 01
+Wr: FFA5 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=10 X=015F Y=FFA4 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     293      125 0 5a  1 ? 00 2
+     294      126 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=0F X=015F Y=FFA4 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     295      127 0 26  1 ? 00 3
+     296      128 1 fb  1 ? 00 4
+     297      129 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=0F X=015F Y=FFA4 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     298      12a 0 af  1 ? 00 0
+     299      12b 1 a3  1 ? 00 1
+     300      12c 2 5a  1 ? 00 2
+     301      12d 3 f6  1 ? 00 F
+     302      12e 4 f6  1 ? 00 F
+     303      12f 5 f6  1 ? 00 F
+     304      130 6 01  0 ? 00 2
+     305      131 7 5f  0 ? 00 3
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FFA2 = 01
+Wr: FFA3 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=0F X=015F Y=FFA2 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     306      132 0 5a  1 ? 00 2
+     307      133 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=0E X=015F Y=FFA2 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     308      134 0 26  1 ? 00 3
+     309      135 1 fb  1 ? 00 4
+     310      136 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=0E X=015F Y=FFA2 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     311      137 0 af  1 ? 00 0
+     312      138 1 a3  1 ? 00 1
+     313      139 2 5a  1 ? 00 2
+     314      13a 3 f6  1 ? 00 F
+     315      13b 4 f6  1 ? 00 F
+     316      13c 5 f6  1 ? 00 F
+     317      13d 6 01  0 ? 00 0
+     318      13e 7 5f  0 ? 00 1
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FFA0 = 01
+Wr: FFA1 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=0E X=015F Y=FFA0 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     319      13f 0 5a  1 ? 00 2
+     320      140 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=0D X=015F Y=FFA0 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     321      141 0 26  1 ? 00 3
+     322      142 1 fb  1 ? 00 4
+     323      143 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=0D X=015F Y=FFA0 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     324      144 0 af  1 ? 00 0
+     325      145 1 a3  1 ? 00 1
+     326      146 2 5a  1 ? 00 2
+     327      147 3 f6  1 ? 00 F
+     328      148 4 f6  1 ? 00 F
+     329      149 5 f6  1 ? 00 F
+     330      14a 6 01  0 ? 00 E
+     331      14b 7 5f  0 ? 00 F
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FF9E = 01
+Wr: FF9F = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=0D X=015F Y=FF9E U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     332      14c 0 5a  1 ? 00 2
+     333      14d 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=0C X=015F Y=FF9E U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     334      14e 0 26  1 ? 00 3
+     335      14f 1 fb  1 ? 00 4
+     336      150 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=0C X=015F Y=FF9E U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     337      151 0 af  1 ? 00 0
+     338      152 1 a3  1 ? 00 1
+     339      153 2 5a  1 ? 00 2
+     340      154 3 f6  1 ? 00 F
+     341      155 4 f6  1 ? 00 F
+     342      156 5 f6  1 ? 00 F
+     343      157 6 01  0 ? 00 C
+     344      158 7 5f  0 ? 00 D
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FF9C = 01
+Wr: FF9D = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=0C X=015F Y=FF9C U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     345      159 0 5a  1 ? 00 2
+     346      15a 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=0B X=015F Y=FF9C U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     347      15b 0 26  1 ? 00 3
+     348      15c 1 fb  1 ? 00 4
+     349      15d 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=0B X=015F Y=FF9C U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     350      15e 0 af  1 ? 00 0
+     351      15f 1 a3  1 ? 00 1
+     352      160 2 5a  1 ? 00 2
+     353      161 3 f6  1 ? 00 F
+     354      162 4 f6  1 ? 00 F
+     355      163 5 f6  1 ? 00 F
+     356      164 6 01  0 ? 00 A
+     357      165 7 5f  0 ? 00 B
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FF9A = 01
+Wr: FF9B = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=0B X=015F Y=FF9A U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     358      166 0 5a  1 ? 00 2
+     359      167 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=0A X=015F Y=FF9A U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     360      168 0 26  1 ? 00 3
+     361      169 1 fb  1 ? 00 4
+     362      16a 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=0A X=015F Y=FF9A U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     363      16b 0 af  1 ? 00 0
+     364      16c 1 a3  1 ? 00 1
+     365      16d 2 5a  1 ? 00 2
+     366      16e 3 f6  1 ? 00 F
+     367      16f 4 f6  1 ? 00 F
+     368      170 5 f6  1 ? 00 F
+     369      171 6 01  0 ? 00 8
+     370      172 7 5f  0 ? 00 9
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FF98 = 01
+Wr: FF99 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=0A X=015F Y=FF98 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     371      173 0 5a  1 ? 00 2
+     372      174 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=09 X=015F Y=FF98 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     373      175 0 26  1 ? 00 3
+     374      176 1 fb  1 ? 00 4
+     375      177 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=09 X=015F Y=FF98 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     376      178 0 af  1 ? 00 0
+     377      179 1 a3  1 ? 00 1
+     378      17a 2 5a  1 ? 00 2
+     379      17b 3 f6  1 ? 00 F
+     380      17c 4 f6  1 ? 00 F
+     381      17d 5 f6  1 ? 00 F
+     382      17e 6 01  0 ? 00 6
+     383      17f 7 5f  0 ? 00 7
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FF96 = 01
+Wr: FF97 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=09 X=015F Y=FF96 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     384      180 0 5a  1 ? 00 2
+     385      181 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=08 X=015F Y=FF96 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     386      182 0 26  1 ? 00 3
+     387      183 1 fb  1 ? 00 4
+     388      184 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=08 X=015F Y=FF96 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     389      185 0 af  1 ? 00 0
+     390      186 1 a3  1 ? 00 1
+     391      187 2 5a  1 ? 00 2
+     392      188 3 f6  1 ? 00 F
+     393      189 4 f6  1 ? 00 F
+     394      18a 5 f6  1 ? 00 F
+     395      18b 6 01  0 ? 00 4
+     396      18c 7 5f  0 ? 00 5
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FF94 = 01
+Wr: FF95 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=08 X=015F Y=FF94 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     397      18d 0 5a  1 ? 00 2
+     398      18e 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=07 X=015F Y=FF94 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     399      18f 0 26  1 ? 00 3
+     400      190 1 fb  1 ? 00 4
+     401      191 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=07 X=015F Y=FF94 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     402      192 0 af  1 ? 00 0
+     403      193 1 a3  1 ? 00 1
+     404      194 2 5a  1 ? 00 2
+     405      195 3 f6  1 ? 00 F
+     406      196 4 f6  1 ? 00 F
+     407      197 5 f6  1 ? 00 F
+     408      198 6 01  0 ? 00 2
+     409      199 7 5f  0 ? 00 3
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FF92 = 01
+Wr: FF93 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=07 X=015F Y=FF92 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     410      19a 0 5a  1 ? 00 2
+     411      19b 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=06 X=015F Y=FF92 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     412      19c 0 26  1 ? 00 3
+     413      19d 1 fb  1 ? 00 4
+     414      19e 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=06 X=015F Y=FF92 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     415      19f 0 af  1 ? 00 0
+     416      1a0 1 a3  1 ? 00 1
+     417      1a1 2 5a  1 ? 00 2
+     418      1a2 3 f6  1 ? 00 F
+     419      1a3 4 f6  1 ? 00 F
+     420      1a4 5 f6  1 ? 00 F
+     421      1a5 6 01  0 ? 00 0
+     422      1a6 7 5f  0 ? 00 1
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FF90 = 01
+Wr: FF91 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=06 X=015F Y=FF90 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     423      1a7 0 5a  1 ? 00 2
+     424      1a8 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=05 X=015F Y=FF90 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     425      1a9 0 26  1 ? 00 3
+     426      1aa 1 fb  1 ? 00 4
+     427      1ab 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=05 X=015F Y=FF90 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     428      1ac 0 af  1 ? 00 0
+     429      1ad 1 a3  1 ? 00 1
+     430      1ae 2 5a  1 ? 00 2
+     431      1af 3 f6  1 ? 00 F
+     432      1b0 4 f6  1 ? 00 F
+     433      1b1 5 f6  1 ? 00 F
+     434      1b2 6 01  0 ? 00 E
+     435      1b3 7 5f  0 ? 00 F
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FF8E = 01
+Wr: FF8F = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=05 X=015F Y=FF8E U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     436      1b4 0 5a  1 ? 00 2
+     437      1b5 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=04 X=015F Y=FF8E U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     438      1b6 0 26  1 ? 00 3
+     439      1b7 1 fb  1 ? 00 4
+     440      1b8 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=04 X=015F Y=FF8E U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     441      1b9 0 af  1 ? 00 0
+     442      1ba 1 a3  1 ? 00 1
+     443      1bb 2 5a  1 ? 00 2
+     444      1bc 3 f6  1 ? 00 F
+     445      1bd 4 f6  1 ? 00 F
+     446      1be 5 f6  1 ? 00 F
+     447      1bf 6 01  0 ? 00 C
+     448      1c0 7 5f  0 ? 00 D
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FF8C = 01
+Wr: FF8D = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=04 X=015F Y=FF8C U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     449      1c1 0 5a  1 ? 00 2
+     450      1c2 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=03 X=015F Y=FF8C U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     451      1c3 0 26  1 ? 00 3
+     452      1c4 1 fb  1 ? 00 4
+     453      1c5 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=03 X=015F Y=FF8C U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     454      1c6 0 af  1 ? 00 0
+     455      1c7 1 a3  1 ? 00 1
+     456      1c8 2 5a  1 ? 00 2
+     457      1c9 3 f6  1 ? 00 F
+     458      1ca 4 f6  1 ? 00 F
+     459      1cb 5 f6  1 ? 00 F
+     460      1cc 6 01  0 ? 00 A
+     461      1cd 7 5f  0 ? 00 B
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FF8A = 01
+Wr: FF8B = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=03 X=015F Y=FF8A U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     462      1ce 0 5a  1 ? 00 2
+     463      1cf 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=02 X=015F Y=FF8A U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     464      1d0 0 26  1 ? 00 3
+     465      1d1 1 fb  1 ? 00 4
+     466      1d2 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=02 X=015F Y=FF8A U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     467      1d3 0 af  1 ? 00 0
+     468      1d4 1 a3  1 ? 00 1
+     469      1d5 2 5a  1 ? 00 2
+     470      1d6 3 f6  1 ? 00 F
+     471      1d7 4 f6  1 ? 00 F
+     472      1d8 5 f6  1 ? 00 F
+     473      1d9 6 01  0 ? 00 8
+     474      1da 7 5f  0 ? 00 9
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FF88 = 01
+Wr: FF89 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=02 X=015F Y=FF88 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     475      1db 0 5a  1 ? 00 2
+     476      1dc 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=01 X=015F Y=FF88 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     477      1dd 0 26  1 ? 00 3
+     478      1de 1 fb  1 ? 00 4
+     479      1df 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=01 X=015F Y=FF88 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     480      1e0 0 af  1 ? 00 0
+     481      1e1 1 a3  1 ? 00 1
+     482      1e2 2 5a  1 ? 00 2
+     483      1e3 3 f6  1 ? 00 F
+     484      1e4 4 f6  1 ? 00 F
+     485      1e5 5 f6  1 ? 00 F
+     486      1e6 6 01  0 ? 00 6
+     487      1e7 7 5f  0 ? 00 7
+Rd: FF20 = AF
+Rd: FF21 = A3
+Wr: FF86 = 01
+Wr: FF87 = 5F
+FF20 : AF A3          : STX  ,--Y      :  8 : A=00 B=01 X=015F Y=FF86 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     488      1e8 0 5a  1 ? 00 2
+     489      1e9 1 26  1 ? 00 3
+Rd: FF22 = 5A
+FF22 : 5A             : DECB           :  2 : A=00 B=00 X=015F Y=FF86 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     490      1ea 0 26  1 ? 00 3
+     491      1eb 1 fb  1 ? 00 4
+     492      1ec 2 f6  1 ? 00 F
+Rd: FF23 = 26
+Rd: FF24 = FB
+FF23 : 26 FB          : BNE  $FF20     :  3 : A=00 B=00 X=015F Y=FF86 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     493      1ed 0 cc  1 ? 00 5
+     494      1ee 1 02  1 ? 00 6
+     495      1ef 2 02  1 ? 00 7
+Rd: FF25 = CC
+Rd: FF26 = 02
+Rd: FF27 = 02
+FF25 : CC 02 02       : LDD  #$0202    :  3 : A=02 B=02 X=015F Y=FF86 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     496      1f0 0 ed  1 ? 00 8
+     497      1f1 1 a3  1 ? 00 9
+     498      1f2 2 5a  1 ? 00 A
+     499      1f3 3 f6  1 ? 00 F
+     500      1f4 4 f6  1 ? 00 F
+     501      1f5 5 f6  1 ? 00 F
+     502      1f6 6 02  0 ? 00 4
+     503      1f7 7 02  0 ? 00 5
+Rd: FF28 = ED
+Rd: FF29 = A3
+Wr: FF84 = 02
+Wr: FF85 = 02
+FF28 : ED A3          : STD  ,--Y      :  8 : A=02 B=02 X=015F Y=FF84 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     504      1f8 0 5a  1 ? 00 A
+     505      1f9 1 2a  1 ? 00 B
+Rd: FF2A = 5A
+FF2A : 5A             : DECB           :  2 : A=02 B=01 X=015F Y=FF84 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     506      1fa 0 2a  1 ? 00 B
+     507      1fb 1 fb  1 ? 00 C
+     508      1fc 2 f6  1 ? 00 F
+Rd: FF2B = 2A
+Rd: FF2C = FB
+FF2B : 2A FB          : BPL  $FF28     :  3 : A=02 B=01 X=015F Y=FF84 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     509      1fd 0 ed  1 ? 00 8
+     510      1fe 1 a3  1 ? 00 9
+     511      1ff 2 5a  1 ? 00 A
+     512      200 3 f6  1 ? 00 F
+     513      201 4 f6  1 ? 00 F
+     514      202 5 f6  1 ? 00 F
+     515      203 6 02  0 ? 00 2
+     516      204 7 01  0 ? 00 3
+Rd: FF28 = ED
+Rd: FF29 = A3
+Wr: FF82 = 02
+Wr: FF83 = 01
+FF28 : ED A3          : STD  ,--Y      :  8 : A=02 B=01 X=015F Y=FF82 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     517      205 0 5a  1 ? 00 A
+     518      206 1 2a  1 ? 00 B
+Rd: FF2A = 5A
+FF2A : 5A             : DECB           :  2 : A=02 B=00 X=015F Y=FF82 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     519      207 0 2a  1 ? 00 B
+     520      208 1 fb  1 ? 00 C
+     521      209 2 f6  1 ? 00 F
+Rd: FF2B = 2A
+Rd: FF2C = FB
+FF2B : 2A FB          : BPL  $FF28     :  3 : A=02 B=00 X=015F Y=FF82 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     522      20a 0 ed  1 ? 00 8
+     523      20b 1 a3  1 ? 00 9
+     524      20c 2 5a  1 ? 00 A
+     525      20d 3 f6  1 ? 00 F
+     526      20e 4 f6  1 ? 00 F
+     527      20f 5 f6  1 ? 00 F
+     528      210 6 02  0 ? 00 0
+     529      211 7 00  0 ? 00 1
+Rd: FF28 = ED
+Rd: FF29 = A3
+Wr: FF80 = 02
+Wr: FF81 = 00
+FF28 : ED A3          : STD  ,--Y      :  8 : A=02 B=00 X=015F Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     530      212 0 5a  1 ? 00 A
+     531      213 1 2a  1 ? 00 B
+Rd: FF2A = 5A
+FF2A : 5A             : DECB           :  2 : A=02 B=FF X=015F Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=0
+     532      214 0 2a  1 ? 00 B
+     533      215 1 fb  1 ? 00 C
+     534      216 2 f6  1 ? 00 F
+Rd: FF2B = 2A
+Rd: FF2C = FB
+FF2B : 2A FB          : BPL  $FF28     :  3 : A=02 B=FF X=015F Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=0
+     535      217 0 4f  1 ? 00 D
+     536      218 1 a7  1 ? 00 E
+Rd: FF2D = 4F
+FF2D : 4F             : CLRA           :  2 : A=00 B=FF X=015F Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     537      219 0 a7  1 ? 00 E
+     538      21a 1 c4  1 ? 00 F
+     539      21b 2 16  1 ? 00 0
+     540      21c 3 00  0 ? 00 0
+Rd: FF2E = A7
+Rd: FF2F = C4
+Wr: FFC0 = 00
+FF2E : A7 C4          : STA  ,U        :  4 : A=00 B=FF X=015F Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     541      21d 0 16  1 ? 00 0
+     542      21e 1 f1  1 ? 00 1
+     543      21f 2 20  1 ? 00 2
+     544      220 3 f6  1 ? 00 F
+     545      221 4 f6  1 ? 00 F
+Rd: FF30 = 16
+Rd: FF31 = F1
+Rd: FF32 = 20
+FF30 : 16 F1 20       : LBRA $F053     :  5 : A=00 B=FF X=015F Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     546      222 0 8e  1 ? 00 3
+     547      223 1 03  1 ? 00 4
+     548      224 2 46  1 ? 00 5
+Rd: F053 = 8E
+Rd: F054 = 03
+Rd: F055 = 46
+F053 : 8E 03 46       : LDX  #$0346    :  3 : A=00 B=FF X=0346 Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     549      225 0 86  1 ? 00 6
+     550      226 1 03  1 ? 00 7
+Rd: F056 = 86
+Rd: F057 = 03
+F056 : 86 03          : LDA  #$03      :  2 : A=03 B=FF X=0346 Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     551      227 0 5f  1 ? 00 8
+     552      228 1 bf  1 ? 00 9
+Rd: F058 = 5F
+F058 : 5F             : CLRB           :  2 : A=03 B=00 X=0346 Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     553      229 0 bf  1 ? 00 9
+     554      22a 1 ff  1 ? 00 A
+     555      22b 2 80  1 ? 00 B
+     556      22c 3 f6  1 ? 00 F
+     557      22d 4 03  0 ? 00 0
+     558      22e 5 46  0 ? 00 1
+Rd: F059 = BF
+Rd: F05A = FF
+Rd: F05B = 80
+Wr: FF80 = 03
+Wr: FF81 = 46
+F059 : BF FF 80       : STX  $FF80     :  6 : A=03 B=00 X=0346 Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     559      22f 0 b7  1 ? 00 C
+     560      230 1 00  1 ? 00 D
+     561      231 2 00  1 ? 00 E
+     562      232 3 f6  1 ? 00 F
+     563      233 4 03  0 ? 00 0
+Rd: F05C = B7
+Rd: F05D = 00
+Rd: F05E = 00
+Wr: 0000 = 03
+F05C : B7 00 00       : STA  $0000     :  5 : A=03 B=00 X=0346 Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     564      234 0 30  1 ? 00 F
+     565      235 1 02  1 ? 00 0
+     566      236 2 5c  1 ? 00 1
+     567      237 3 f6  1 ? 00 F
+     568      238 4 f6  1 ? 00 F
+Rd: F05F = 30
+Rd: F060 = 02
+F05F : 30 02          : LEAX $02,X     :  5 : A=03 B=00 X=0348 Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     569      239 0 5c  1 ? 00 1
+     570      23a 1 c1  1 ? 00 2
+Rd: F061 = 5C
+F061 : 5C             : INCB           :  2 : A=03 B=01 X=0348 Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     571      23b 0 c1  1 ? 00 2
+     572      23c 1 05  1 ? 00 3
+Rd: F062 = C1
+Rd: F063 = 05
+F062 : C1 05          : CMPB #$05      :  2 : A=03 B=01 X=0348 Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     573      23d 0 26  1 ? 00 4
+     574      23e 1 f3  1 ? 00 5
+     575      23f 2 f6  1 ? 00 F
+Rd: F064 = 26
+Rd: F065 = F3
+F064 : 26 F3          : BNE  $F059     :  3 : A=03 B=01 X=0348 Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     576      240 0 bf  1 ? 00 9
+     577      241 1 ff  1 ? 00 A
+     578      242 2 80  1 ? 00 B
+     579      243 3 f6  1 ? 00 F
+     580      244 4 03  0 ? 00 0
+     581      245 5 48  0 ? 00 1
+Rd: F059 = BF
+Rd: F05A = FF
+Rd: F05B = 80
+Wr: FF80 = 03
+Wr: FF81 = 48
+F059 : BF FF 80       : STX  $FF80     :  6 : A=03 B=01 X=0348 Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     582      246 0 b7  1 ? 00 C
+     583      247 1 00  1 ? 00 D
+     584      248 2 00  1 ? 00 E
+     585      249 3 f6  1 ? 00 F
+     586      24a 4 03  0 ? 00 0
+Rd: F05C = B7
+Rd: F05D = 00
+Rd: F05E = 00
+Wr: 0000 = 03
+F05C : B7 00 00       : STA  $0000     :  5 : A=03 B=01 X=0348 Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     587      24b 0 30  1 ? 00 F
+     588      24c 1 02  1 ? 00 0
+     589      24d 2 5c  1 ? 00 1
+     590      24e 3 f6  1 ? 00 F
+     591      24f 4 f6  1 ? 00 F
+Rd: F05F = 30
+Rd: F060 = 02
+F05F : 30 02          : LEAX $02,X     :  5 : A=03 B=01 X=034A Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     592      250 0 5c  1 ? 00 1
+     593      251 1 c1  1 ? 00 2
+Rd: F061 = 5C
+F061 : 5C             : INCB           :  2 : A=03 B=02 X=034A Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     594      252 0 c1  1 ? 00 2
+     595      253 1 05  1 ? 00 3
+Rd: F062 = C1
+Rd: F063 = 05
+F062 : C1 05          : CMPB #$05      :  2 : A=03 B=02 X=034A Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     596      254 0 26  1 ? 00 4
+     597      255 1 f3  1 ? 00 5
+     598      256 2 f6  1 ? 00 F
+Rd: F064 = 26
+Rd: F065 = F3
+F064 : 26 F3          : BNE  $F059     :  3 : A=03 B=02 X=034A Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     599      257 0 bf  1 ? 00 9
+     600      258 1 ff  1 ? 00 A
+     601      259 2 80  1 ? 00 B
+     602      25a 3 f6  1 ? 00 F
+     603      25b 4 03  0 ? 00 0
+     604      25c 5 4a  0 ? 00 1
+Rd: F059 = BF
+Rd: F05A = FF
+Rd: F05B = 80
+Wr: FF80 = 03
+Wr: FF81 = 4A
+F059 : BF FF 80       : STX  $FF80     :  6 : A=03 B=02 X=034A Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     605      25d 0 b7  1 ? 00 C
+     606      25e 1 00  1 ? 00 D
+     607      25f 2 00  1 ? 00 E
+     608      260 3 f6  1 ? 00 F
+     609      261 4 03  0 ? 00 0
+Rd: F05C = B7
+Rd: F05D = 00
+Rd: F05E = 00
+Wr: 0000 = 03
+F05C : B7 00 00       : STA  $0000     :  5 : A=03 B=02 X=034A Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     610      262 0 30  1 ? 00 F
+     611      263 1 02  1 ? 00 0
+     612      264 2 5c  1 ? 00 1
+     613      265 3 f6  1 ? 00 F
+     614      266 4 f6  1 ? 00 F
+Rd: F05F = 30
+Rd: F060 = 02
+F05F : 30 02          : LEAX $02,X     :  5 : A=03 B=02 X=034C Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     615      267 0 5c  1 ? 00 1
+     616      268 1 c1  1 ? 00 2
+Rd: F061 = 5C
+F061 : 5C             : INCB           :  2 : A=03 B=03 X=034C Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     617      269 0 c1  1 ? 00 2
+     618      26a 1 05  1 ? 00 3
+Rd: F062 = C1
+Rd: F063 = 05
+F062 : C1 05          : CMPB #$05      :  2 : A=03 B=03 X=034C Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     619      26b 0 26  1 ? 00 4
+     620      26c 1 f3  1 ? 00 5
+     621      26d 2 f6  1 ? 00 F
+Rd: F064 = 26
+Rd: F065 = F3
+F064 : 26 F3          : BNE  $F059     :  3 : A=03 B=03 X=034C Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     622      26e 0 bf  1 ? 00 9
+     623      26f 1 ff  1 ? 00 A
+     624      270 2 80  1 ? 00 B
+     625      271 3 f6  1 ? 00 F
+     626      272 4 03  0 ? 00 0
+     627      273 5 4c  0 ? 00 1
+Rd: F059 = BF
+Rd: F05A = FF
+Rd: F05B = 80
+Wr: FF80 = 03
+Wr: FF81 = 4C
+F059 : BF FF 80       : STX  $FF80     :  6 : A=03 B=03 X=034C Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     628      274 0 b7  1 ? 00 C
+     629      275 1 00  1 ? 00 D
+     630      276 2 00  1 ? 00 E
+     631      277 3 f6  1 ? 00 F
+     632      278 4 03  0 ? 00 0
+Rd: F05C = B7
+Rd: F05D = 00
+Rd: F05E = 00
+Wr: 0000 = 03
+F05C : B7 00 00       : STA  $0000     :  5 : A=03 B=03 X=034C Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     633      279 0 30  1 ? 00 F
+     634      27a 1 02  1 ? 00 0
+     635      27b 2 5c  1 ? 00 1
+     636      27c 3 f6  1 ? 00 F
+     637      27d 4 f6  1 ? 00 F
+Rd: F05F = 30
+Rd: F060 = 02
+F05F : 30 02          : LEAX $02,X     :  5 : A=03 B=03 X=034E Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     638      27e 0 5c  1 ? 00 1
+     639      27f 1 c1  1 ? 00 2
+Rd: F061 = 5C
+F061 : 5C             : INCB           :  2 : A=03 B=04 X=034E Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     640      280 0 c1  1 ? 00 2
+     641      281 1 05  1 ? 00 3
+Rd: F062 = C1
+Rd: F063 = 05
+F062 : C1 05          : CMPB #$05      :  2 : A=03 B=04 X=034E Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     642      282 0 26  1 ? 00 4
+     643      283 1 f3  1 ? 00 5
+     644      284 2 f6  1 ? 00 F
+Rd: F064 = 26
+Rd: F065 = F3
+F064 : 26 F3          : BNE  $F059     :  3 : A=03 B=04 X=034E Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     645      285 0 bf  1 ? 00 9
+     646      286 1 ff  1 ? 00 A
+     647      287 2 80  1 ? 00 B
+     648      288 3 f6  1 ? 00 F
+     649      289 4 03  0 ? 00 0
+     650      28a 5 4e  0 ? 00 1
+Rd: F059 = BF
+Rd: F05A = FF
+Rd: F05B = 80
+Wr: FF80 = 03
+Wr: FF81 = 4E
+F059 : BF FF 80       : STX  $FF80     :  6 : A=03 B=04 X=034E Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     651      28b 0 b7  1 ? 00 C
+     652      28c 1 00  1 ? 00 D
+     653      28d 2 00  1 ? 00 E
+     654      28e 3 f6  1 ? 00 F
+     655      28f 4 03  0 ? 00 0
+Rd: F05C = B7
+Rd: F05D = 00
+Rd: F05E = 00
+Wr: 0000 = 03
+F05C : B7 00 00       : STA  $0000     :  5 : A=03 B=04 X=034E Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     656      290 0 30  1 ? 00 F
+     657      291 1 02  1 ? 00 0
+     658      292 2 5c  1 ? 00 1
+     659      293 3 f6  1 ? 00 F
+     660      294 4 f6  1 ? 00 F
+Rd: F05F = 30
+Rd: F060 = 02
+F05F : 30 02          : LEAX $02,X     :  5 : A=03 B=04 X=0350 Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     661      295 0 5c  1 ? 00 1
+     662      296 1 c1  1 ? 00 2
+Rd: F061 = 5C
+F061 : 5C             : INCB           :  2 : A=03 B=05 X=0350 Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     663      297 0 c1  1 ? 00 2
+     664      298 1 05  1 ? 00 3
+Rd: F062 = C1
+Rd: F063 = 05
+F062 : C1 05          : CMPB #$05      :  2 : A=03 B=05 X=0350 Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     665      299 0 26  1 ? 00 4
+     666      29a 1 f3  1 ? 00 5
+     667      29b 2 f6  1 ? 00 F
+Rd: F064 = 26
+Rd: F065 = F3
+F064 : 26 F3          : BNE  $F059     :  3 : A=03 B=05 X=0350 Y=FF80 U=FFC0 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     668      29c 0 ce  1 ? 00 6
+     669      29d 1 00  1 ? 00 7
+     670      29e 2 00  1 ? 00 8
+Rd: F066 = CE
+Rd: F067 = 00
+Rd: F068 = 00
+F066 : CE 00 00       : LDU  #$0000    :  3 : A=03 B=05 X=0350 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     671      29f 0 5f  1 ? 00 9
+     672      2a0 1 8e  1 ? 00 A
+Rd: F069 = 5F
+F069 : 5F             : CLRB           :  2 : A=03 B=00 X=0350 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     673      2a1 0 8e  1 ? 00 A
+     674      2a2 1 03  1 ? 00 B
+     675      2a3 2 44  1 ? 00 C
+Rd: F06A = 8E
+Rd: F06B = 03
+Rd: F06C = 44
+F06A : 8E 03 44       : LDX  #$0344    :  3 : A=03 B=00 X=0344 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     676      2a4 0 bf  1 ? 00 D
+     677      2a5 1 ff  1 ? 00 E
+     678      2a6 2 80  1 ? 00 F
+     679      2a7 3 f6  1 ? 00 F
+     680      2a8 4 03  0 ? 00 0
+     681      2a9 5 44  0 ? 00 1
+Rd: F06D = BF
+Rd: F06E = FF
+Rd: F06F = 80
+Wr: FF80 = 03
+Wr: FF81 = 44
+F06D : BF FF 80       : STX  $FF80     :  6 : A=03 B=00 X=0344 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     682      2aa 0 a6  1 ? 00 0
+     683      2ab 1 c5  1 ? 00 1
+     684      2ac 2 30  1 ? 00 2
+     685      2ad 3 f6  1 ? 00 F
+     686      2ae 4 f6  1 ? 00 0
+Rd: F070 = A6
+Rd: F071 = C5
+Rd: 0000 = F6
+memory modelling failed at 0000: expected 03 actual F6
+F070 : A6 C5          : LDA  B,U       :  5 : A=F6 B=00 X=0344 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=0 : Prediction failed for: Memory
+     687      2af 0 30  1 ? 00 2
+     688      2b0 1 04  1 ? 00 3
+     689      2b1 2 58  1 ? 00 4
+     690      2b2 3 f6  1 ? 00 F
+     691      2b3 4 f6  1 ? 00 F
+Rd: F072 = 30
+Rd: F073 = 04
+F072 : 30 04          : LEAX $04,X     :  5 : A=F6 B=00 X=0348 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=0
+     692      2b4 0 58  1 ? 00 4
+     693      2b5 1 30  1 ? 00 5
+Rd: F074 = 58
+F074 : 58             : ASLB           :  2 : A=F6 B=00 X=0348 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     694      2b6 0 30  1 ? 00 5
+     695      2b7 1 85  1 ? 00 6
+     696      2b8 2 54  1 ? 00 7
+     697      2b9 3 f6  1 ? 00 F
+     698      2ba 4 f6  1 ? 00 F
+Rd: F075 = 30
+Rd: F076 = 85
+F075 : 30 85          : LEAX B,X       :  5 : A=F6 B=00 X=0348 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     699      2bb 0 54  1 ? 00 7
+     700      2bc 1 bf  1 ? 00 8
+Rd: F077 = 54
+F077 : 54             : LSRB           :  2 : A=F6 B=00 X=0348 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     701      2bd 0 bf  1 ? 00 8
+     702      2be 1 ff  1 ? 00 9
+     703      2bf 2 80  1 ? 00 A
+     704      2c0 3 f6  1 ? 00 F
+     705      2c1 4 03  0 ? 00 0
+     706      2c2 5 48  0 ? 00 1
+Rd: F078 = BF
+Rd: F079 = FF
+Rd: F07A = 80
+Wr: FF80 = 03
+Wr: FF81 = 48
+F078 : BF FF 80       : STX  $FF80     :  6 : A=F6 B=00 X=0348 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     707      2c3 0 b7  1 ? 00 B
+     708      2c4 1 00  1 ? 00 C
+     709      2c5 2 02  1 ? 00 D
+     710      2c6 3 f6  1 ? 00 F
+     711      2c7 4 f6  0 ? 00 2
+Rd: F07B = B7
+Rd: F07C = 00
+Rd: F07D = 02
+Wr: 0002 = F6
+F07B : B7 00 02       : STA  $0002     :  5 : A=F6 B=00 X=0348 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=0
+     712      2c8 0 5c  1 ? 00 E
+     713      2c9 1 c1  1 ? 00 F
+Rd: F07E = 5C
+F07E : 5C             : INCB           :  2 : A=F6 B=01 X=0348 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     714      2ca 0 c1  1 ? 00 F
+     715      2cb 1 04  1 ? 00 0
+Rd: F07F = C1
+Rd: F080 = 04
+F07F : C1 04          : CMPB #$04      :  2 : A=F6 B=01 X=0348 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     716      2cc 0 26  1 ? 00 1
+     717      2cd 1 e7  1 ? 00 2
+     718      2ce 2 f6  1 ? 00 F
+Rd: F081 = 26
+Rd: F082 = E7
+F081 : 26 E7          : BNE  $F06A     :  3 : A=F6 B=01 X=0348 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     719      2cf 0 8e  1 ? 00 A
+     720      2d0 1 03  1 ? 00 B
+     721      2d1 2 44  1 ? 00 C
+Rd: F06A = 8E
+Rd: F06B = 03
+Rd: F06C = 44
+F06A : 8E 03 44       : LDX  #$0344    :  3 : A=F6 B=01 X=0344 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     722      2d2 0 bf  1 ? 00 D
+     723      2d3 1 ff  1 ? 00 E
+     724      2d4 2 80  1 ? 00 F
+     725      2d5 3 f6  1 ? 00 F
+     726      2d6 4 03  0 ? 00 0
+     727      2d7 5 44  0 ? 00 1
+Rd: F06D = BF
+Rd: F06E = FF
+Rd: F06F = 80
+Wr: FF80 = 03
+Wr: FF81 = 44
+F06D : BF FF 80       : STX  $FF80     :  6 : A=F6 B=01 X=0344 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     728      2d8 0 a6  1 ? 00 0
+     729      2d9 1 c5  1 ? 00 1
+     730      2da 2 30  1 ? 00 2
+     731      2db 3 f6  1 ? 00 F
+     732      2dc 4 f6  1 ? 00 1
+Rd: F070 = A6
+Rd: F071 = C5
+Rd: 0001 = F6
+F070 : A6 C5          : LDA  B,U       :  5 : A=F6 B=01 X=0344 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     733      2dd 0 30  1 ? 00 2
+     734      2de 1 04  1 ? 00 3
+     735      2df 2 58  1 ? 00 4
+     736      2e0 3 f6  1 ? 00 F
+     737      2e1 4 f6  1 ? 00 F
+Rd: F072 = 30
+Rd: F073 = 04
+F072 : 30 04          : LEAX $04,X     :  5 : A=F6 B=01 X=0348 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     738      2e2 0 58  1 ? 00 4
+     739      2e3 1 30  1 ? 00 5
+Rd: F074 = 58
+F074 : 58             : ASLB           :  2 : A=F6 B=02 X=0348 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     740      2e4 0 30  1 ? 00 5
+     741      2e5 1 85  1 ? 00 6
+     742      2e6 2 54  1 ? 00 7
+     743      2e7 3 f6  1 ? 00 F
+     744      2e8 4 f6  1 ? 00 F
+Rd: F075 = 30
+Rd: F076 = 85
+F075 : 30 85          : LEAX B,X       :  5 : A=F6 B=02 X=034A Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     745      2e9 0 54  1 ? 00 7
+     746      2ea 1 bf  1 ? 00 8
+Rd: F077 = 54
+F077 : 54             : LSRB           :  2 : A=F6 B=01 X=034A Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     747      2eb 0 bf  1 ? 00 8
+     748      2ec 1 ff  1 ? 00 9
+     749      2ed 2 80  1 ? 00 A
+     750      2ee 3 f6  1 ? 00 F
+     751      2ef 4 03  0 ? 00 0
+     752      2f0 5 4a  0 ? 00 1
+Rd: F078 = BF
+Rd: F079 = FF
+Rd: F07A = 80
+Wr: FF80 = 03
+Wr: FF81 = 4A
+F078 : BF FF 80       : STX  $FF80     :  6 : A=F6 B=01 X=034A Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     753      2f1 0 b7  1 ? 00 B
+     754      2f2 1 00  1 ? 00 C
+     755      2f3 2 02  1 ? 00 D
+     756      2f4 3 f6  1 ? 00 F
+     757      2f5 4 f6  0 ? 00 2
+Rd: F07B = B7
+Rd: F07C = 00
+Rd: F07D = 02
+Wr: 0002 = F6
+F07B : B7 00 02       : STA  $0002     :  5 : A=F6 B=01 X=034A Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=0
+     758      2f6 0 5c  1 ? 00 E
+     759      2f7 1 c1  1 ? 00 F
+Rd: F07E = 5C
+F07E : 5C             : INCB           :  2 : A=F6 B=02 X=034A Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     760      2f8 0 c1  1 ? 00 F
+     761      2f9 1 04  1 ? 00 0
+Rd: F07F = C1
+Rd: F080 = 04
+F07F : C1 04          : CMPB #$04      :  2 : A=F6 B=02 X=034A Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     762      2fa 0 26  1 ? 00 1
+     763      2fb 1 e7  1 ? 00 2
+     764      2fc 2 f6  1 ? 00 F
+Rd: F081 = 26
+Rd: F082 = E7
+F081 : 26 E7          : BNE  $F06A     :  3 : A=F6 B=02 X=034A Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     765      2fd 0 8e  1 ? 00 A
+     766      2fe 1 03  1 ? 00 B
+     767      2ff 2 44  1 ? 00 C
+Rd: F06A = 8E
+Rd: F06B = 03
+Rd: F06C = 44
+F06A : 8E 03 44       : LDX  #$0344    :  3 : A=F6 B=02 X=0344 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     768      300 0 bf  1 ? 00 D
+     769      301 1 ff  1 ? 00 E
+     770      302 2 80  1 ? 00 F
+     771      303 3 f6  1 ? 00 F
+     772      304 4 03  0 ? 00 0
+     773      305 5 44  0 ? 00 1
+Rd: F06D = BF
+Rd: F06E = FF
+Rd: F06F = 80
+Wr: FF80 = 03
+Wr: FF81 = 44
+F06D : BF FF 80       : STX  $FF80     :  6 : A=F6 B=02 X=0344 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     774      306 0 a6  1 ? 00 0
+     775      307 1 c5  1 ? 00 1
+     776      308 2 30  1 ? 00 2
+     777      309 3 f6  1 ? 00 F
+     778      30a 4 f6  1 ? 00 2
+Rd: F070 = A6
+Rd: F071 = C5
+Rd: 0002 = F6
+F070 : A6 C5          : LDA  B,U       :  5 : A=F6 B=02 X=0344 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     779      30b 0 30  1 ? 00 2
+     780      30c 1 04  1 ? 00 3
+     781      30d 2 58  1 ? 00 4
+     782      30e 3 f6  1 ? 00 F
+     783      30f 4 f6  1 ? 00 F
+Rd: F072 = 30
+Rd: F073 = 04
+F072 : 30 04          : LEAX $04,X     :  5 : A=F6 B=02 X=0348 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     784      310 0 58  1 ? 00 4
+     785      311 1 30  1 ? 00 5
+Rd: F074 = 58
+F074 : 58             : ASLB           :  2 : A=F6 B=04 X=0348 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     786      312 0 30  1 ? 00 5
+     787      313 1 85  1 ? 00 6
+     788      314 2 54  1 ? 00 7
+     789      315 3 f6  1 ? 00 F
+     790      316 4 f6  1 ? 00 F
+Rd: F075 = 30
+Rd: F076 = 85
+F075 : 30 85          : LEAX B,X       :  5 : A=F6 B=04 X=034C Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     791      317 0 54  1 ? 00 7
+     792      318 1 bf  1 ? 00 8
+Rd: F077 = 54
+F077 : 54             : LSRB           :  2 : A=F6 B=02 X=034C Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     793      319 0 bf  1 ? 00 8
+     794      31a 1 ff  1 ? 00 9
+     795      31b 2 80  1 ? 00 A
+     796      31c 3 f6  1 ? 00 F
+     797      31d 4 03  0 ? 00 0
+     798      31e 5 4c  0 ? 00 1
+Rd: F078 = BF
+Rd: F079 = FF
+Rd: F07A = 80
+Wr: FF80 = 03
+Wr: FF81 = 4C
+F078 : BF FF 80       : STX  $FF80     :  6 : A=F6 B=02 X=034C Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     799      31f 0 b7  1 ? 00 B
+     800      320 1 00  1 ? 00 C
+     801      321 2 02  1 ? 00 D
+     802      322 3 f6  1 ? 00 F
+     803      323 4 f6  0 ? 00 2
+Rd: F07B = B7
+Rd: F07C = 00
+Rd: F07D = 02
+Wr: 0002 = F6
+F07B : B7 00 02       : STA  $0002     :  5 : A=F6 B=02 X=034C Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=0
+     804      324 0 5c  1 ? 00 E
+     805      325 1 c1  1 ? 00 F
+Rd: F07E = 5C
+F07E : 5C             : INCB           :  2 : A=F6 B=03 X=034C Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     806      326 0 c1  1 ? 00 F
+     807      327 1 04  1 ? 00 0
+Rd: F07F = C1
+Rd: F080 = 04
+F07F : C1 04          : CMPB #$04      :  2 : A=F6 B=03 X=034C Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     808      328 0 26  1 ? 00 1
+     809      329 1 e7  1 ? 00 2
+     810      32a 2 f6  1 ? 00 F
+Rd: F081 = 26
+Rd: F082 = E7
+F081 : 26 E7          : BNE  $F06A     :  3 : A=F6 B=03 X=034C Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     811      32b 0 8e  1 ? 00 A
+     812      32c 1 03  1 ? 00 B
+     813      32d 2 44  1 ? 00 C
+Rd: F06A = 8E
+Rd: F06B = 03
+Rd: F06C = 44
+F06A : 8E 03 44       : LDX  #$0344    :  3 : A=F6 B=03 X=0344 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     814      32e 0 bf  1 ? 00 D
+     815      32f 1 ff  1 ? 00 E
+     816      330 2 80  1 ? 00 F
+     817      331 3 f6  1 ? 00 F
+     818      332 4 03  0 ? 00 0
+     819      333 5 44  0 ? 00 1
+Rd: F06D = BF
+Rd: F06E = FF
+Rd: F06F = 80
+Wr: FF80 = 03
+Wr: FF81 = 44
+F06D : BF FF 80       : STX  $FF80     :  6 : A=F6 B=03 X=0344 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=1
+     820      334 0 a6  1 ? 00 0
+     821      335 1 c5  1 ? 00 1
+     822      336 2 30  1 ? 00 2
+     823      337 3 f6  1 ? 00 F
+     824      338 4 f6  1 ? 00 3
+Rd: F070 = A6
+Rd: F071 = C5
+Rd: 0003 = F6
+F070 : A6 C5          : LDA  B,U       :  5 : A=F6 B=03 X=0344 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     825      339 0 30  1 ? 00 2
+     826      33a 1 04  1 ? 00 3
+     827      33b 2 58  1 ? 00 4
+     828      33c 3 f6  1 ? 00 F
+     829      33d 4 f6  1 ? 00 F
+Rd: F072 = 30
+Rd: F073 = 04
+F072 : 30 04          : LEAX $04,X     :  5 : A=F6 B=03 X=0348 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     830      33e 0 58  1 ? 00 4
+     831      33f 1 30  1 ? 00 5
+Rd: F074 = 58
+F074 : 58             : ASLB           :  2 : A=F6 B=06 X=0348 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     832      340 0 30  1 ? 00 5
+     833      341 1 85  1 ? 00 6
+     834      342 2 54  1 ? 00 7
+     835      343 3 f6  1 ? 00 F
+     836      344 4 f6  1 ? 00 F
+Rd: F075 = 30
+Rd: F076 = 85
+F075 : 30 85          : LEAX B,X       :  5 : A=F6 B=06 X=034E Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     837      345 0 54  1 ? 00 7
+     838      346 1 bf  1 ? 00 8
+Rd: F077 = 54
+F077 : 54             : LSRB           :  2 : A=F6 B=03 X=034E Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     839      347 0 bf  1 ? 00 8
+     840      348 1 ff  1 ? 00 9
+     841      349 2 80  1 ? 00 A
+     842      34a 3 f6  1 ? 00 F
+     843      34b 4 03  0 ? 00 0
+     844      34c 5 4e  0 ? 00 1
+Rd: F078 = BF
+Rd: F079 = FF
+Rd: F07A = 80
+Wr: FF80 = 03
+Wr: FF81 = 4E
+F078 : BF FF 80       : STX  $FF80     :  6 : A=F6 B=03 X=034E Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     845      34d 0 b7  1 ? 00 B
+     846      34e 1 00  1 ? 00 C
+     847      34f 2 02  1 ? 00 D
+     848      350 3 f6  1 ? 00 F
+     849      351 4 f6  0 ? 00 2
+Rd: F07B = B7
+Rd: F07C = 00
+Rd: F07D = 02
+Wr: 0002 = F6
+F07B : B7 00 02       : STA  $0002     :  5 : A=F6 B=03 X=034E Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=0
+     850      352 0 5c  1 ? 00 E
+     851      353 1 c1  1 ? 00 F
+Rd: F07E = 5C
+F07E : 5C             : INCB           :  2 : A=F6 B=04 X=034E Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     852      354 0 c1  1 ? 00 F
+     853      355 1 04  1 ? 00 0
+Rd: F07F = C1
+Rd: F080 = 04
+F07F : C1 04          : CMPB #$04      :  2 : A=F6 B=04 X=034E Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     854      356 0 26  1 ? 00 1
+     855      357 1 e7  1 ? 00 2
+     856      358 2 f6  1 ? 00 F
+Rd: F081 = 26
+Rd: F082 = E7
+F081 : 26 E7          : BNE  $F06A     :  3 : A=F6 B=04 X=034E Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     857      359 0 8e  1 ? 00 3
+     858      35a 1 01  1 ? 00 4
+     859      35b 2 44  1 ? 00 5
+Rd: F083 = 8E
+Rd: F084 = 01
+Rd: F085 = 44
+F083 : 8E 01 44       : LDX  #$0144    :  3 : A=F6 B=04 X=0144 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     860      35c 0 bf  1 ? 00 6
+     861      35d 1 ff  1 ? 00 7
+     862      35e 2 80  1 ? 00 8
+     863      35f 3 f6  1 ? 00 F
+     864      360 4 01  0 ? 00 0
+     865      361 5 44  0 ? 00 1
+Rd: F086 = BF
+Rd: F087 = FF
+Rd: F088 = 80
+Wr: FF80 = 01
+Wr: FF81 = 44
+F086 : BF FF 80       : STX  $FF80     :  6 : A=F6 B=04 X=0144 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     866      362 0 b6  1 ? 00 9
+     867      363 1 00  1 ? 00 A
+     868      364 2 00  1 ? 00 B
+     869      365 3 f6  1 ? 00 F
+     870      366 4 f6  1 ? 00 0
+Rd: F089 = B6
+Rd: F08A = 00
+Rd: F08B = 00
+Rd: 0000 = F6
+F089 : B6 00 00       : LDA  $0000     :  5 : A=F6 B=04 X=0144 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=0
+     871      367 0 84  1 ? 00 C
+     872      368 1 e0  1 ? 00 D
+Rd: F08C = 84
+Rd: F08D = E0
+F08C : 84 E0          : ANDA #$E0      :  2 : A=E0 B=04 X=0144 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=0
+     873      369 0 26  1 ? 00 E
+     874      36a 1 30  1 ? 00 F
+     875      36b 2 f6  1 ? 00 F
+Rd: F08E = 26
+Rd: F08F = 30
+F08E : 26 30          : BNE  $F0C0     :  3 : A=E0 B=04 X=0144 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=0
+     876      36c 0 8e  1 ? 00 0
+     877      36d 1 03  1 ? 00 1
+     878      36e 2 00  1 ? 00 2
+Rd: F0C0 = 8E
+Rd: F0C1 = 03
+Rd: F0C2 = 00
+F0C0 : 8E 03 00       : LDX  #$0300    :  3 : A=E0 B=04 X=0300 Y=FF80 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     879      36f 0 10  1 ? 00 3
+     880      370 1 8e  1 ? 00 4
+     881      371 2 00  1 ? 00 5
+     882      372 3 00  1 ? 00 6
+Rd: F0C3 = 10
+Rd: F0C4 = 8E
+Rd: F0C5 = 00
+Rd: F0C6 = 00
+F0C3 : 10 8E 00 00    : LDY  #$0000    :  4 : A=E0 B=04 X=0300 Y=0000 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     883      373 0 4f  1 ? 00 7
+     884      374 1 5f  1 ? 00 8
+Rd: F0C7 = 4F
+F0C7 : 4F             : CLRA           :  2 : A=00 B=04 X=0300 Y=0000 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     885      375 0 5f  1 ? 00 8
+     886      376 1 bf  1 ? 00 9
+Rd: F0C8 = 5F
+F0C8 : 5F             : CLRB           :  2 : A=00 B=00 X=0300 Y=0000 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     887      377 0 bf  1 ? 00 9
+     888      378 1 ff  1 ? 00 A
+     889      379 2 80  1 ? 00 B
+     890      37a 3 f6  1 ? 00 F
+     891      37b 4 03  0 ? 00 0
+     892      37c 5 00  0 ? 00 1
+Rd: F0C9 = BF
+Rd: F0CA = FF
+Rd: F0CB = 80
+Wr: FF80 = 03
+Wr: FF81 = 00
+F0C9 : BF FF 80       : STX  $FF80     :  6 : A=00 B=00 X=0300 Y=0000 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     893      37d 0 6f  1 ? 00 C
+     894      37e 1 ab  1 ? 00 D
+     895      37f 2 5c  1 ? 00 E
+     896      380 3 c1  1 ? 00 F
+     897      381 4 50  1 ? 00 0
+     898      382 5 f6  1 ? 00 F
+     899      383 6 f6  1 ? 00 F
+     900      384 7 f6  1 ? 00 0
+     901      385 8 f6  1 ? 00 F
+     902      386 9 00  0 ? 00 0
+Rd: F0CC = 6F
+Rd: F0CD = AB
+Rd: 0000 = F6
+Wr: 0000 = 00
+F0CC : 6F AB          : CLR  D,Y       : 10 : A=00 B=00 X=0300 Y=0000 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=1 V=0 C=0
+     903      387 0 5c  1 ? 00 E
+     904      388 1 c1  1 ? 00 F
+Rd: F0CE = 5C
+F0CE : 5C             : INCB           :  2 : A=00 B=01 X=0300 Y=0000 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=0 Z=0 V=0 C=0
+     905      389 0 c1  1 ? 00 F
+     906      38a 1 50  1 ? 00 0
+Rd: F0CF = C1
+Rd: F0D0 = 50
+F0CF : C1 50          : CMPB #$50      :  2 : A=00 B=01 X=0300 Y=0000 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1
+     907      38b 0 26  1 ? 00 1
+     908      38c 1 f9  1 ? 00 2
+     909      38d 2 f6  1 ? 00 F
+Rd: F0D1 = 26
+Rd: F0D2 = F9
+F0D1 : 26 F9          : BNE  $F0CC     :  3 : A=00 B=01 X=0300 Y=0000 U=0000 S=???? DP=00 E=? F=1 H=? I=1 N=1 Z=0 V=0 C=1

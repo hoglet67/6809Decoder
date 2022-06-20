@@ -2,7 +2,6 @@
 #*
 decode6809
 not_in_git/
-*.log
 *.bin
 *.tmp
 decode6809.exe
