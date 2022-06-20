@@ -1665,9 +1665,9 @@ static int add_helper(int val, int cin, operand_t operand) {
       int tmp = val + operand + cin;
       // The carry flag is bit 8 of the result
       C = (tmp >> 8) & 1;
-      // TODO: Check this
+      // The overflow flag is: IF ((a^b^res^(res>>1))&0x80) SEV else CLV
       V = (((val ^ operand ^ tmp) >> 7) & 1) ^ C;
-      // TODO: Check this
+      // The half carry flag is: IF ((a^b^res)&0x10) SEH else CLH
       H =  ((val ^ operand ^ tmp) >> 4) & 1;
       // Truncate the result to 8 bits
       tmp &= 0xff;
@@ -1708,7 +1708,7 @@ static int op_fn_ADDD(operand_t operand, ea_t ea, sample_t *sample_q) {
       int tmp = d + operand;
       // The carry flag is bit 16 of the result
       C = (tmp >> 16) & 1;
-      // TODO: Check this
+      // The overflow flag is: IF ((a^b^res^(res>>1))&0x80) SEV else CLV
       V = (((d ^ operand ^ tmp) >> 15) & 1) ^ C;
       // Truncate the result to 16 bits
       tmp &= 0xFFFF;
@@ -1779,11 +1779,13 @@ static int asl_helper(int val) {
       C = (val >> 7) & 1;
       val = (val << 1) & 0xff;
       V = (val >> 7) & C & 1;
-      H = -1;
       set_NZ(val);
    } else {
-      set_HNZVC_unknown();
+      set_NZVC_unknown();
    }
+   // The datasheet says the half-carry flag is undefined, but in practice
+   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
+   // H = -1;
    return val;
 }
 
@@ -1805,11 +1807,13 @@ static int asr_helper(int val) {
    if (val >= 0) {
       C = val & 1;
       val = (val & 0x80) | (val >> 1);
-      H = -1;
       set_NZ(val);
    } else {
-      set_HNZVC_unknown();
+      set_NZC_unknown();
    }
+   // The datasheet says the half-carry flag is undefined, but in practice
+   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
+   // H = -1;
    return val;
 }
 
@@ -2016,23 +2020,27 @@ static int op_fn_CLRB(operand_t operand, ea_t ea, sample_t *sample_q) {
 static void cmp_helper8(int val, operand_t operand) {
    if (val >= 0) {
       int tmp = val - operand;
+      // The carry flag is bit 8 of the result
       C = (tmp >> 8) & 1;
-      // TODO: Check this
-      V = ((val ^ tmp) & (val ^ operand)) >> 7;
+      // The overflow flag is: IF ((a^b^res^(res>>1))&0x80) SEV else CLV
+      V = (((val ^ operand ^ tmp) >> 7) & 1) ^ C;
       tmp &= 0xff;
       set_NZ(tmp);
-      H = -1;
    } else {
-      set_HNZVC_unknown();
+      set_NZVC_unknown();
    }
+   // The datasheet says the half-carry flag is undefined, but in practice
+   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
+   // H = -1;
 }
 
 static void cmp_helper16(int val, operand_t operand) {
    if (val >= 0) {
       int tmp = val - operand;
+      // The carry flag is bit 16 of the result
       C = (tmp >> 16) & 1;
-      // TODO: Check this
-      V = ((val ^ tmp) & (val ^ operand)) >> 15;
+      // The overflow flag is: IF ((a^b^res^(res>>1))&0x8000) SEV else CLV
+      V = (((val ^ operand ^ tmp) >> 15) & 1) ^ C;
       tmp &= 0xffff;
       set_NZ16(tmp);
    } else {
@@ -2117,7 +2125,8 @@ static int op_fn_DAA(operand_t operand, ea_t ea, sample_t *sample_q) {
          correction |= 0x60;
       }
       int tmp = A + correction;
-      C = (tmp >> 8) & 1;
+      // C is apparently only ever set by DAA, never cleared
+      C |= (tmp >> 8) & 1;
       tmp &= 0xff;
       set_NZ(tmp);
       A = tmp;
@@ -2125,6 +2134,8 @@ static int op_fn_DAA(operand_t operand, ea_t ea, sample_t *sample_q) {
       A = -1;
       set_NZC_unknown();
    }
+   // The datasheet says V is 0; this reference says V is undefined:
+   // https://colorcomputerarchive.com/repo/Documents/Books/Motorola%206809%20and%20Hitachi%206309%20Programming%20Reference%20(Darren%20Atkinson).pdf
    V = 0;
    return -1;
 }
@@ -2350,6 +2361,9 @@ static int neg_helper(int val) {
    C = (val == 0x00);
    val = (-val) & 0xff;
    set_NZ(val);
+   // The datasheet says the half-carry flag is undefined, but in practice
+   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
+   // H = -1;
    return val;
 }
 
@@ -2668,7 +2682,7 @@ static int ror_helper(int val) {
       set_NZ(val);
    } else {
       val = -1;
-      set_NZVC_unknown();
+      set_NZC_unknown();
    }
    return val;
 }
@@ -2750,10 +2764,8 @@ static int sub_helper(int val, int cin, operand_t operand) {
       int tmp = val - operand - cin;
       // The carry flag is bit 8 of the result
       C = (tmp >> 8) & 1;
-      // TODO: Check this
+      // The overflow flag is: IF ((a^b^res^(res>>1))&0x80) SEV else CLV
       V = (((val ^ operand ^ tmp) >> 7) & 1) ^ C;
-      // TODO: Check this
-      H =  ((val ^ operand ^ tmp) >> 4) & 1;
       // Truncate the result to 8 bits
       tmp &= 0xff;
       // Set the flags
@@ -2761,9 +2773,12 @@ static int sub_helper(int val, int cin, operand_t operand) {
       // Save the result back to the register
       return tmp;
    } else {
-      set_HNZVC_unknown();
+      set_NZVC_unknown();
       return -1;
    }
+   // The datasheet says the half-carry flag is undefined, but in practice
+   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
+   // H = -1;
 }
 
 static int op_fn_SBCA(operand_t operand, ea_t ea, sample_t *sample_q) {
@@ -2791,7 +2806,7 @@ static int op_fn_SEX(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-   static int st_helper8(int val, operand_t operand, int fail) {
+static int st_helper8(int val, operand_t operand, int fail) {
    if (val >= 0) {
       if (operand != val) {
          failflag |= fail;
@@ -2802,7 +2817,7 @@ static int op_fn_SEX(operand_t operand, ea_t ea, sample_t *sample_q) {
    return operand;
 }
 
-   static int st_helper16(int val, operand_t operand, int fail) {
+static int st_helper16(int val, operand_t operand, int fail) {
    if (val >= 0) {
       if (operand != val) {
          failflag |= fail;
@@ -2868,7 +2883,7 @@ static int op_fn_SUBD(operand_t operand, ea_t ea, sample_t *sample_q) {
       int tmp = d - operand;
       // The carry flag is bit 16 of the result
       C = (tmp >> 16) & 1;
-      // TODO: Check this
+      // The overflow flag is: IF ((a^b^res^(res>>1))&0x8000) SEV else CLV
       V = (((d ^ operand ^ tmp) >> 15) & 1) ^ C;
       // Truncate the result to 16 bits
       tmp &= 0xFFFF;
@@ -2915,16 +2930,19 @@ static int op_fn_TFR(operand_t operand, ea_t ea, sample_t *sample_q) {
 
 static int op_fn_TST(operand_t operand, ea_t ea, sample_t *sample_q) {
    set_NZ(operand);
+   V = 0;
    return -1;
 }
 
 static int op_fn_TSTA(operand_t operand, ea_t ea, sample_t *sample_q) {
    set_NZ(A);
+   V = 0;
    return -1;
 }
 
 static int op_fn_TSTB(operand_t operand, ea_t ea, sample_t *sample_q) {
    set_NZ(B);
+   V = 0;
    return -1;
 }
 
