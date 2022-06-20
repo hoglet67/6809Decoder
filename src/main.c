@@ -103,7 +103,8 @@ static char args_doc[] = "[FILENAME]";
 enum {
    GROUP_GENERAL = 1,
    GROUP_OUTPUT  = 2,
-   GROUP_SIGDEFS = 3
+   GROUP_REGISTER = 3,
+   GROUP_SIGDEFS = 4
 };
 
 
@@ -122,6 +123,9 @@ enum {
    KEY_SAMPLES = 'Y',
    KEY_VECRST = 1,
    KEY_MEM,
+   KEY_REG_S,
+   KEY_REG_U,
+   KEY_REG_PC,
    KEY_SKIP,
    KEY_DATA,
    KEY_RNW,
@@ -158,6 +162,11 @@ static struct argp_option options[] = {
    { "trigger",    KEY_TRIGGER, "ADDRESS",                   0, "Trigger on address",                                GROUP_GENERAL},
    { "mem",            KEY_MEM,     "HEX", OPTION_ARG_OPTIONAL, "Memory modelling (see above)",                      GROUP_GENERAL},
    { "skip",          KEY_SKIP,     "HEX", OPTION_ARG_OPTIONAL, "Skip the first n samples",                          GROUP_GENERAL},
+
+   { 0, 0, 0, 0, "Register options:", GROUP_REGISTER},
+   { "reg_s",        KEY_REG_S,     "HEX", OPTION_ARG_OPTIONAL, "Initial value of the S register",                   GROUP_REGISTER},
+   { "reg_u",        KEY_REG_U,     "HEX", OPTION_ARG_OPTIONAL, "Initial value of the U register",                   GROUP_REGISTER},
+   { "reg_pc",      KEY_REG_PC,     "HEX", OPTION_ARG_OPTIONAL, "Initial value of the PC register",                  GROUP_REGISTER},
 
    { 0, 0, 0, 0, "Output options:", GROUP_OUTPUT},
 
@@ -243,6 +252,27 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
          arguments->mem_model = strtol(arg, (char **)NULL, 16);
       } else {
          arguments->mem_model = 0;
+      }
+      break;
+   case KEY_REG_S:
+      if (arg && strlen(arg) > 0) {
+         arguments->reg_s = strtol(arg, (char **)NULL, 16);
+      } else {
+         arguments->reg_s = UNDEFINED;
+      }
+      break;
+   case KEY_REG_U:
+      if (arg && strlen(arg) > 0) {
+         arguments->reg_u = strtol(arg, (char **)NULL, 16);
+      } else {
+         arguments->reg_u = UNDEFINED;
+      }
+      break;
+   case KEY_REG_PC:
+      if (arg && strlen(arg) > 0) {
+         arguments->reg_pc = strtol(arg, (char **)NULL, 16);
+      } else {
+         arguments->reg_pc = UNDEFINED;
       }
       break;
    case KEY_CPU:
@@ -789,6 +819,11 @@ int main(int argc, char *argv[]) {
    arguments.trigger_stop     = UNSPECIFIED;
    arguments.trigger_skipint  = 0;
    arguments.filename         = NULL;
+
+   // Register options
+   arguments.reg_s            = UNSPECIFIED;
+   arguments.reg_u            = UNSPECIFIED;
+   arguments.reg_pc           = UNSPECIFIED;
 
    // Output options
    arguments.show_address     = 1;

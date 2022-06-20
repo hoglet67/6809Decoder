@@ -585,6 +585,15 @@ static void set_regp(int i, int val) {
 
 static void em_6809_init(arguments_t *args) {
    show_cycle_errors = args->show_cycles;
+   if (args->reg_s >= 0) {
+      S = args->reg_s;
+   }
+   if (args->reg_u >= 0) {
+      U = args->reg_u;
+   }
+   if (args->reg_pc >= 0) {
+      PC = args->reg_pc;
+   }
 }
 
 static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {

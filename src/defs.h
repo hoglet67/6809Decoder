@@ -78,6 +78,9 @@ typedef struct {
    int show_cycles;
    int show_samplenums;
    int show_something;
+   int reg_s;
+   int reg_u;
+   int reg_pc;
    int byte;
    int debug;
    int skip;
