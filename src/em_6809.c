@@ -537,8 +537,8 @@ static int get_regp(int i) {
    case  0: return (A >= 0 && B >= 0) ? ((A << 8) + B) : -1;
    case  1: return X;
    case  2: return Y;
-   case  3: return S;
-   case  4: return U;
+   case  3: return U;
+   case  4: return S;
    case  5: return PC;
    case  8: return A;
    case  9: return B;
@@ -562,8 +562,8 @@ static void set_regp(int i, int val) {
       break;
    case  1: X  = val; break;
    case  2: Y  = val; break;
-   case  3: S  = val; break;
-   case  4: U  = val; break;
+   case  3: U  = val; break;
+   case  4: S  = val; break;
    case  5: PC = val; break;
    case  8: A  = val; break;
    case  9: B  = val; break;
@@ -1191,7 +1191,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                break;
             case 13:                /* n15,PCR */
                if (PC >= 0) {
-                  ea = (PC + (int16_t)((sample_q[oi + 2].data << 8) + sample_q[oi + 2].data)) & 0xffff;
+                  ea = (PC + (int16_t)((sample_q[oi + 2].data << 8) + sample_q[oi + 3].data)) & 0xffff;
                }
                break;
             case 15:                /* [n] */
