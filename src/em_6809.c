@@ -440,6 +440,17 @@ static void set_NZVC_unknown() {
    C = -1;
 }
 
+static void set_EFHINZVC_unknown() {
+   E = -1;
+   F = -1;
+   H = -1;
+   I = -1;
+   N = -1;
+   Z = -1;
+   V = -1;
+   C = -1;
+}
+
 static void set_NZ(int value) {
    N = (value >> 7) & 1;
    Z = value == 0;
@@ -540,7 +551,15 @@ static int get_regp(int i) {
 static void set_regp(int i, int val) {
    i &= 15;
    switch(i) {
-   case  0: A  = (val >> 8) & 0xff; B = val & 0xff; break;
+   case  0:
+      if (val < 0) {
+         A = -1;
+         B = -1;
+      } else {
+         A  = (val >> 8) & 0xff;
+         B = val & 0xff;
+      }
+      break;
    case  1: X  = val; break;
    case  2: Y  = val; break;
    case  3: S  = val; break;
@@ -548,7 +567,13 @@ static void set_regp(int i, int val) {
    case  5: PC = val; break;
    case  8: A  = val; break;
    case  9: B  = val; break;
-   case 10: set_FLAGS(val); break;
+   case 10:
+      if (val < 0) {
+         set_EFHINZVC_unknown();
+      } else {
+         set_FLAGS(val);
+      }
+      break;
    case 11: DP = val; break;
    }
 }
@@ -2784,6 +2809,8 @@ static int op_fn_STB(operand_t operand, ea_t ea, sample_t *sample_q) {
 static int op_fn_STD(operand_t operand, ea_t ea, sample_t *sample_q) {
    int D = (A >= 0 && B >= 0) ? (A << 8) + B : -1;
    D = st_helper16(D, operand, FAIL_A | FAIL_B);
+   A = (D >> 8) & 0xff;
+   B = D & 0xff;
    return operand;
 }
 
