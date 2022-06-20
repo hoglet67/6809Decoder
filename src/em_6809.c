@@ -531,20 +531,29 @@ static int *get_regi(int i) {
    }
 }
 
+// Returns the register 1-extended to 16-bits, or -1 if undefined
 static int get_regp(int i) {
    i &= 15;
+   int ret;
    switch(i) {
-   case  0: return (A >= 0 && B >= 0) ? ((A << 8) + B) : -1;
-   case  1: return X;
-   case  2: return Y;
-   case  3: return U;
-   case  4: return S;
-   case  5: return PC;
-   case  8: return A;
-   case  9: return B;
-   case 10: return get_FLAGS();
-   case 11: return DP;
-   default: return -1;
+   case  0: ret = (A >= 0 && B >= 0) ? ((A << 8) + B) : -1; break;
+   case  1: ret = X;                                        break;
+   case  2: ret = Y;                                        break;
+   case  3: ret = U;                                        break;
+   case  4: ret = S;                                        break;
+   case  5: ret = PC;                                       break;
+   case  8: ret = A;                                        break;
+   case  9: ret = B;                                        break;
+   case 10: ret = get_FLAGS();                              break;
+   case 11: ret = DP;                                       break;
+   default: ret = 0xFFFF;                                   break;
+   }
+   if (ret >= 0 && i >= 8) {
+      // Extend 8-bit values to 16 bits by padding with FF
+      return ret | 0xFF00;
+   } else {
+      // Return 16-bit and undefined values as-is
+      return ret;
    }
 }
 
@@ -556,28 +565,27 @@ static void set_regp(int i, int val) {
          A = -1;
          B = -1;
       } else {
-         A  = (val >> 8) & 0xff;
+         A = (val >> 8) & 0xff;
          B = val & 0xff;
       }
       break;
-   case  1: X  = val; break;
-   case  2: Y  = val; break;
-   case  3: U  = val; break;
-   case  4: S  = val; break;
-   case  5: PC = val; break;
-   case  8: A  = val; break;
-   case  9: B  = val; break;
+   case  1: X  = val       ; break;
+   case  2: Y  = val       ; break;
+   case  3: U  = val       ; break;
+   case  4: S  = val       ; break;
+   case  5: PC = val       ; break;
+   case  8: A  = val & 0xff; break;
+   case  9: B  = val & 0xff; break;
    case 10:
       if (val < 0) {
          set_EFHINZVC_unknown();
       } else {
-         set_FLAGS(val);
+         set_FLAGS(val & 0xff);
       }
       break;
-   case 11: DP = val; break;
+   case 11: DP = val & 0xff; break;
    }
 }
-
 
 // ====================================================================
 // Public Methods
