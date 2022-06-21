@@ -947,6 +947,28 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
    }
    PC = (vechi << 8) + veclo;
 
+   // FFF0 : reserved :
+   // FFF2 : SWI3     : flags unchanged
+   // FFF4 : SWI2     : flags unchanged
+   // FFF6 : FIQ      : I = 1; F = 1
+   // FFF8 : IRQ      : I = 1
+   // FFFA : SWI      : I = 1; F = 1
+   // FFFC : NMI      : I = 1; F = 1
+   // FFFE : Reset    : I = 1; F = 1
+
+   switch (vector) {
+   case 0xfff8: // IRQ
+      I = 1;
+      break;
+   case 0xfff6: // FIQ
+   case 0xfffa: // SWI
+   case 0xfffc: // NMI
+   case 0xfffe: // Reset
+      I = 1;
+      F = 1;
+      break;
+   }
+
    // Return the old PC value that was pushed to the stack
    return pc;
 }
@@ -956,18 +978,15 @@ static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t 
    if (num_cycles == 10) {
       // FIQ
       instruction->pc = interrupt_helper(sample_q, 3, 0, 0xfff6);
-      F = 1; // Mask FIQ
    } else if (num_cycles == 19 && sample_q[16].addr == 0x8) {
       // IRQ
       instruction->pc = interrupt_helper(sample_q, 3, 1, 0xfff8);
    } else if (num_cycles == 19 && sample_q[16].addr == 0xC) {
       // NMI
       instruction->pc = interrupt_helper(sample_q, 3, 1, 0xfffC);
-      F = 1; // Mask FIQ
    } else {
       printf("*** could not determine interrupt type ***\n");
    }
-   I = 1; // Mask IRQ
 }
 
 static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
