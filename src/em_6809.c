@@ -2756,11 +2756,8 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_t *sample_q) {
    //  13 PCL
    //  14 ---
 
-   // Number of 8-bit items unstacked
-   int n = (E == 1) ? 12 : 3;
-   for (int i = 2; i < 2 + n; i++) {
-      pop8s(sample_q[i].data);
-   }
+   // Do the flags first, as the stacked E indicates how much to restore
+   set_FLAGS(sample_q[2].data);
 
    // Update the register state
    if (E == 1) {
@@ -2775,8 +2772,11 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_t *sample_q) {
       PC = (sample_q[3].data << 8) + sample_q[4].data;
    }
 
-   // Do the flags last, so as not to clobber the E test above
-   set_FLAGS(sample_q[2].data);
+   // Memory modelling
+   int n = (E == 1) ? 12 : 3;
+   for (int i = 2; i < 2 + n; i++) {
+      pop8s(sample_q[i].data);
+   }
 
    return -1;
 }
