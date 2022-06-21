@@ -2813,6 +2813,7 @@ static int op_fn_SEX(operand_t operand, ea_t ea, sample_t *sample_q) {
       A = -1;
       set_NZ_unknown();
    }
+   V = 0;
    return -1;
 }
 
