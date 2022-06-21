@@ -335,12 +335,17 @@ static operation_t op_TST  ;
 static operation_t op_TSTA ;
 static operation_t op_TSTB ;
 static operation_t op_UU   ;
-static operation_t op_XX   ;
 
 // Undocumented
 
-static operation_t op_XNC  ; // Neg/Com depending on the C flag
-static operation_t op_XRES ; // Reset
+static operation_t op_XX   ;
+static operation_t op_X18  ;
+static operation_t op_X8C7 ;
+static operation_t op_XHCF ;
+static operation_t op_XNC  ;
+static operation_t op_XSTX ;
+static operation_t op_XSTU ;
+static operation_t op_XRES ;
 
 // ====================================================================
 // Helper Methods
@@ -1223,6 +1228,11 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       }
    default:
       break;
+   }
+   // Special Case XSTX/XSTU
+   if (PC >= 0 && (instr->op == &op_XSTX || instr->op == &op_XSTU)) {
+      // The write happens to second byte of immediate data
+      ea = (PC - 1) & 0xffff;
    }
 
    // Model memory reads
@@ -2950,10 +2960,20 @@ static int op_fn_UU(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
+// ====================================================================
+// Undocumented Instructions
+// ====================================================================
+
+// Much of the information on the undocumented instructions comes from here:
+// https://colorcomputerarchive.com/repo/Documents/Books/Motorola%206809%20and%20Hitachi%206309%20Programming%20Reference%20(Darren%20Atkinson).pdf
+
 static int op_fn_XX(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
+// Undefined opcodes in row 2 execute as a NEG instruction when the
+// Carry bit in CC is 0, and as a COM instruction when the Carry bit
+// is 1
 
 static int op_fn_XNC(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (C == 0) {
@@ -2966,9 +2986,91 @@ static int op_fn_XNC(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
+// Opcodes $14, $15 and $CD all cause the CPU to stop functioning
+// normally. One or more of these may be the HCF (Halt and Catch Fire)
+// instruction. The HCF instruction was provided for manufacturing
+// test purposes. Its causes the CPU to halt execution and enter a
+// mode in which the Address lines are incrementally strobed.
+
+static int op_fn_XHCF(operand_t operand, ea_t ea, sample_t *sample_q) {
+   // TODO
+   return -1;
+}
+
+// Opcode $18 affects only the Condition Codes register (CC). The
+// value in the Overflow bit (V) is shifted into the Zero bit (Z)
+// while the value in the IRQ Mask bit (I) is shifted into the Half
+// Carry bit (H). All other bits in the CC register are
+// cleared. Execution of this opcode takes 3 MPU cycles.
+
+static int op_fn_X18(operand_t operand, ea_t ea, sample_t *sample_q) {
+   E = 0; // Bit 7
+   F = 0;
+   H = I;
+   I = 0;
+   N = 0;
+   Z = V;
+   V = 0;
+   C = 0; // Bit 0
+   return -1;
+}
+
+// Opcodes $87 and $C7 read and discard an 8-bit Immediate operand
+// which follows the opcode. The value of the immediate byte is
+// irrelevant. The Negative bit (N) in the CC register is always set,
+// while the Zero (Z) and Overflow (V) bits are always cleared. No
+// other bits in the Condition Codes register are affected. Each of
+// these opcodes execute in 2 MPU cycles.
+
+static int op_fn_X8C7(operand_t operand, ea_t ea, sample_t *sample_q) {
+   N = 1;
+   Z = 0;
+   V = 0;
+   return -1;
+}
+
+
+// Opcode $3E is similar to the SWI instruction. It stacks the Entire
+// register state, sets the I and F bits in the Condition Codes
+// register and then loads the PC register with an address obtained
+// from the RESET vector ($FFFE:F). This could potentially be used as
+// a fourth Software Interrupt instruction, so long as the code
+// invoked by the Reset vector is able to differentiate between a
+// software reset and a hardware reset. It does NOT set the Entire bit
+// (E) in the CC register prior to stacking the register state. This
+// could cause an RTI instruction for a Reset handler to fail to
+// operate as expected. This opcode uses the same number of MPU cycles
+// as SWI (15).
+
 static int op_fn_XRES(operand_t operand, ea_t ea, sample_t *sample_q) {
    interrupt_helper(sample_q, 3, 1, 0xfffe);
    return -1;
+}
+
+// Opcodes $8F and $CF are STX Immediate and STU Immediate
+// respectively. These instructions are partially functional. Two
+// bytes of immediate data follow the opcode. The first immediate byte
+// is read and discarded by the instruction. The lower half (LSB) of
+// the X or U register is then written into the second immediate
+// byte. The Negative bit (N) in the CC register is always set, while
+// the Zero (Z) and Overflow (V) bits are always cleared. No other
+// bits in the Condition Codes register are affected. Each of these
+// opcodes execute in 3 MPU cycles.
+
+static int op_fn_XSTX(operand_t operand, ea_t ea, sample_t *sample_q) {
+   N = 1;
+   Z = 0;
+   V = 0;
+   // TODO, need to force the EA to be PC + 2
+   return X & 0xff;
+}
+
+static int op_fn_XSTU(operand_t operand, ea_t ea, sample_t *sample_q) {
+   N = 1;
+   Z = 0;
+   V = 0;
+   // TODO, need to force the EA to be PC + 2
+   return U & 0xff;
 }
 
 // ====================================================================
@@ -3108,8 +3210,16 @@ static operation_t op_TST  = { "TST ", op_fn_TST ,    READOP , 0 };
 static operation_t op_TSTA = { "TSTA", op_fn_TSTA,     REGOP , 0 };
 static operation_t op_TSTB = { "TSTB", op_fn_TSTB,     REGOP , 0 };
 static operation_t op_UU   = { "??? ", op_fn_UU,       OTHER , 0 };
+
+// Undocumented
+
 static operation_t op_XX   = { "??? ", op_fn_XX,       OTHER , 0 };
+static operation_t op_X18  = { "X18 ", op_fn_X18,      REGOP , 0 };
+static operation_t op_X8C7 = { "X8C7", op_fn_X8C7,    READOP , 0 };
+static operation_t op_XHCF = { "XXHCF",op_fn_XHCF,    READOP , 0 };
 static operation_t op_XNC  = { "XNC ", op_fn_XNC,     READOP , 0 };
+static operation_t op_XSTX = { "XSTX", op_fn_XSTX,   STOREOP , 0 };
+static operation_t op_XSTU = { "XSTU", op_fn_XSTU,   STOREOP , 0 };
 static operation_t op_XRES = { "XRES", op_fn_XRES,     OTHER , 0 };
 
 
@@ -3134,14 +3244,14 @@ static instr_mode_t instr_table_6809_map0[] = {
    /* 11 */    { &op_UU  , INHERENT     , 1, 0 },
    /* 12 */    { &op_NOP , INHERENT     , 2, 0 },
    /* 13 */    { &op_SYNC, INHERENT     , 2, 0 },
-   /* 14 */    { &op_XX  , ILLEGAL      , 1, 1 },  // Seems to be interrupt relatde
-   /* 15 */    { &op_XX  , ILLEGAL      , 1, 1 },  // Seems to be interrupt related
+   /* 14 */    { &op_XHCF, INHERENT     , 1, 1 },
+   /* 15 */    { &op_XHCF, INHERENT     , 1, 1 },
    /* 16 */    { &op_LBRA, RELATIVE_16  , 5, 0 },
    /* 17 */    { &op_LBSR, RELATIVE_16  , 9, 0 },
-   /* 18 */    { &op_XX  , ILLEGAL      , 1, 1 },  // Seems to be interrupt related
+   /* 18 */    { &op_X18 , INHERENT     , 3, 1 },
    /* 19 */    { &op_DAA , INHERENT     , 2, 0 },
    /* 1A */    { &op_ORCC, REGISTER     , 3, 0 },
-   /* 1B */    { &op_XX  , ILLEGAL      , 1, 1 },  // Seems to be interrupt related
+   /* 1B */    { &op_NOP , INHERENT     , 2, 1 },
    /* 1C */    { &op_ANDC, REGISTER     , 3, 0 },
    /* 1D */    { &op_SEX , INHERENT     , 2, 0 },
    /* 1E */    { &op_EXG , REGISTER     , 8, 0 },
@@ -3170,7 +3280,7 @@ static instr_mode_t instr_table_6809_map0[] = {
    /* 35 */    { &op_PULS, REGISTER     , 5, 0 },
    /* 36 */    { &op_PSHU, REGISTER     , 5, 0 },
    /* 37 */    { &op_PULU, REGISTER     , 5, 0 },
-   /* 38 */    { &op_XX  , INHERENT     , 2, 1 },  // CWAIT or something similar
+   /* 38 */    { &op_ANDC, REGISTER     , 4, 1 }, // 4 cycle version of ANCDD
    /* 39 */    { &op_RTS , INHERENT     , 5, 0 },
    /* 3A */    { &op_ABX , INHERENT     , 3, 0 },
    /* 3B */    { &op_RTI , INHERENT     , 6, 0 },
@@ -3249,7 +3359,7 @@ static instr_mode_t instr_table_6809_map0[] = {
    /* 84 */    { &op_ANDA, IMMEDIATE_8  , 2, 0 },
    /* 85 */    { &op_BITA, IMMEDIATE_8  , 2, 0 },
    /* 86 */    { &op_LDA , IMMEDIATE_8  , 2, 0 },
-   /* 87 */    { &op_XX  , ILLEGAL      , 2, 1 },  // Function unknown
+   /* 87 */    { &op_X8C7, IMMEDIATE_8  , 2, 1 },
    /* 88 */    { &op_EORA, IMMEDIATE_8  , 2, 0 },
    /* 89 */    { &op_ADCA, IMMEDIATE_8  , 2, 0 },
    /* 8A */    { &op_ORA , IMMEDIATE_8  , 2, 0 },
@@ -3257,7 +3367,7 @@ static instr_mode_t instr_table_6809_map0[] = {
    /* 8C */    { &op_CMPX, IMMEDIATE_16 , 4, 0 },
    /* 8D */    { &op_BSR , RELATIVE_8   , 7, 0 },
    /* 8E */    { &op_LDX , IMMEDIATE_16 , 3, 0 },
-   /* 8F */    { &op_XX  , ILLEGAL      , 1, 1 },  // Function unknown
+   /* 8F */    { &op_XSTX, IMMEDIATE_8  , 3, 1 },
    /* 90 */    { &op_SUBA, DIRECT       , 4, 0 },
    /* 91 */    { &op_CMPA, DIRECT       , 4, 0 },
    /* 92 */    { &op_SBCA, DIRECT       , 4, 0 },
@@ -3313,15 +3423,15 @@ static instr_mode_t instr_table_6809_map0[] = {
    /* C4 */    { &op_ANDB, IMMEDIATE_8  , 2, 0 },
    /* C5 */    { &op_BITB, IMMEDIATE_8  , 2, 0 },
    /* C6 */    { &op_LDB , IMMEDIATE_8  , 2, 0 },
-   /* C7 */    { &op_XX  , ILLEGAL      , 2, 1 },  // Function unknown
+   /* C7 */    { &op_X8C7, IMMEDIATE_8  , 2, 1 },
    /* C8 */    { &op_EORB, IMMEDIATE_8  , 2, 0 },
    /* C9 */    { &op_ADCB, IMMEDIATE_8  , 2, 0 },
    /* CA */    { &op_ORB , IMMEDIATE_8  , 2, 0 },
    /* CB */    { &op_ADDB, IMMEDIATE_8  , 2, 0 },
    /* CC */    { &op_LDD , IMMEDIATE_16 , 3, 0 },
-   /* CD */    { &op_XX  , ILLEGAL      , 3, 1 },  // Function unknown
+   /* CD */    { &op_XHCF, INHERENT     , 1, 1 },
    /* CE */    { &op_LDU , IMMEDIATE_16 , 3, 0 },
-   /* CF */    { &op_XX  , ILLEGAL      , 3, 1 },  // Function unknown
+   /* 8F */    { &op_XSTU, IMMEDIATE_8  , 3, 1 },
    /* D0 */    { &op_SUBB, DIRECT       , 4, 0 },
    /* D1 */    { &op_CMPB, DIRECT       , 4, 0 },
    /* D2 */    { &op_SBCB, DIRECT       , 4, 0 },
@@ -3405,7 +3515,7 @@ static instr_mode_t instr_table_6809_map1[] = {
    /* 1D */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 1E */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 1F */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* 20 */    { &op_XX  , ILLEGAL      , 1, 1 },
+   /* 20 */    { &op_LBRA, RELATIVE_16  , 5, 1 },
    /* 21 */    { &op_LBRN, RELATIVE_16  , 5, 0 },
    /* 22 */    { &op_LBHI, RELATIVE_16  , 5, 0 },
    /* 23 */    { &op_LBLS, RELATIVE_16  , 5, 0 },
