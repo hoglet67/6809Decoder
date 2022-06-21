@@ -2165,6 +2165,16 @@ static int op_fn_DAA(operand_t operand, ea_t ea, sample_t *sample_q) {
    }
    // The datasheet says V is 0; this reference says V is undefined:
    // https://colorcomputerarchive.com/repo/Documents/Books/Motorola%206809%20and%20Hitachi%206309%20Programming%20Reference%20(Darren%20Atkinson).pdf
+
+   // John Kent, in CPU09, says: DAA (Decimal Adjust Accumulator)
+   // should set the Negative (N) and Zero Flags. It will also affect
+   // the Overflow (V) flag although the operation is undefined in the
+   // M6809 Programming Reference Manual. It's anyone's guess what DAA
+   // does to V although I found Exclusive ORing Bit 7 of the original
+   // ACCA value with B7 of the Decimal Adjusted value and Exclusive
+   // ORing that with the pre Decimal Adjust Carry input resulting in
+   // something approximating what you find on an EF68A09P.
+
    V = 0;
    return -1;
 }
