@@ -8,7 +8,6 @@ typedef enum {
    MEM_POINTER  = 1,
    MEM_DATA     = 2,
    MEM_STACK    = 3,
-   MEM_FETCH    = 4,
 } mem_access_t;
 
 void memory_init(int size, machine_t machine);
@@ -25,10 +24,6 @@ void memory_write(int data, int ea, mem_access_t type);
 
 int memory_read_raw(int ea);
 
-int memory_read_raw(int ea);
-
 void memory_destroy();
-
-int write_bankid(char *buffer, int ea);
 
 #endif

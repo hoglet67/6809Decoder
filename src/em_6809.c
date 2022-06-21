@@ -998,7 +998,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    instruction->prefix = 0;
    instruction->opcode = sample_q[index].data;
    if (PC >= 0) {
-      memory_read(instruction->opcode, PC + index, MEM_FETCH);
+      memory_read(instruction->opcode, PC + index, MEM_INSTR);
    }
    index++;
    instr = instr_table_6809_map0;
@@ -1014,7 +1014,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       // The second byte is the opcode
       instruction->opcode = sample_q[index].data;
       if (PC >= 0) {
-         memory_read(instruction->opcode, PC + index, MEM_FETCH);
+         memory_read(instruction->opcode, PC + index, MEM_INSTR);
       }
       index++;
       instr = instruction->prefix == 0x11 ? instr_table_6809_map2 : instr_table_6809_map1;

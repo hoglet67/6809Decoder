@@ -14,7 +14,7 @@ static int mem_wr_logging = 0;
 static char buffer[256];
 
 // Machine specific memory rd/wr handlers
-static void (*memory_read_fn)(int data, int ea);
+static int (*memory_read_fn)(int data, int ea);
 static int (*memory_write_fn)(int data, int ea);
 
 static inline int write_addr(char *bp, int ea) {
@@ -63,12 +63,14 @@ static int *init_ram(int size) {
 // Default Memory Handlers
 // ==================================================
 
-static void memory_read_default(int data, int ea) {
+static int memory_read_default(int data, int ea) {
+   int fail = 0;
    if (memory[ea] >= 0 && memory[ea] != data) {
-      log_memory_fail(ea,memory[ea], data);
+      fail = 1;
       failflag |= FAIL_MEMORY;
    }
    memory[ea] = data;
+   return fail;
 }
 
 static int memory_write_default(int data, int ea) {
@@ -85,12 +87,14 @@ static void init_default() {
 // Dragon Memory Handlers
 // ==================================================
 
-static void memory_read_dragon(int data, int ea) {
+static int memory_read_dragon(int data, int ea) {
+   int fail = 0;
    if (memory[ea] >= 0 && memory[ea] != data && (ea < 0xff00 || ea >= 0xfff0)) {
-      log_memory_fail(ea,memory[ea], data);
+      fail = 1;
       failflag |= FAIL_MEMORY;
    }
    memory[ea] = data;
+   return fail;
 }
 
 static void init_dragon() {
@@ -102,12 +106,14 @@ static void init_dragon() {
 // Beeb Memory Handlers
 // ==================================================
 
-static void memory_read_beeb(int data, int ea) {
+static int memory_read_beeb(int data, int ea) {
+   int fail = 0;
    if (memory[ea] >= 0 && memory[ea] != data && (ea < 0xfc00 || ea >= 0xff00)) {
-      log_memory_fail(ea,memory[ea], data);
+      fail = 1;
       failflag |= FAIL_MEMORY;
    }
    memory[ea] = data;
+   return fail;
 }
 
 static void init_beeb() {
@@ -154,18 +160,19 @@ void memory_set_wr_logging(int bitmask) {
 }
 
 void memory_read(int data, int ea, mem_access_t type) {
+   int fail = 0;
    assert(ea >= 0);
    assert(data >= 0);
-   if (type == MEM_FETCH) {
-      type = MEM_INSTR;
+   // Delegate memory read to machine specific handler
+   if (mem_model & (1 << type)) {
+      fail = (*memory_read_fn)(data, ea);
    }
    // Log memory read
    if (mem_rd_logging & (1 << type)) {
       log_memory_access("Rd: ", data, ea, 0);
-   }
-   // Delegate memory read to machine specific handler
-   if (mem_model & (1 << type)) {
-      (*memory_read_fn)(data, ea);
+      if (fail) {
+         log_memory_fail(ea, memory[ea], data);
+      }
    }
 }
 
