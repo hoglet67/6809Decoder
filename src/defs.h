@@ -19,6 +19,8 @@ typedef enum {
    CPU_UNKNOWN,
    CPU_6809,
    CPU_6809E,
+   CPU_6309,
+   CPU_6309E,
 } cpu_t;
 
 // SWI2/3 are the longest instructions, at 22 cycles

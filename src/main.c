@@ -145,6 +145,15 @@ static cpu_name_t cpu_names[] = {
    // 6809
    {"6809",       CPU_6809},
    {"6809E",      CPU_6809E},
+   {"HD6809",     CPU_6809},
+   {"HD6809E",    CPU_6809E},
+   {"MC6809",     CPU_6809},
+   {"MC6809E",    CPU_6809E},
+
+   {"6309",       CPU_6309},
+   {"6309E",      CPU_6309E},
+   {"HD6309",     CPU_6309},
+   {"HD6309E",    CPU_6309E},
 
    // Terminator
    {NULL, 0}
@@ -906,7 +915,7 @@ int main(int argc, char *argv[]) {
       }
    }
 
-   if (arguments.cpu_type == CPU_6809) {
+   if (arguments.cpu_type == CPU_6809 || arguments.cpu_type == CPU_6309) {
       if (arguments.idx_lic != UNSPECIFIED) {
          fprintf(stderr, "--lic= is incompatible with the 6809 CPU as it doesn't have this pin\n");
          return 1;
@@ -935,7 +944,7 @@ int main(int argc, char *argv[]) {
    if (arguments.idx_rnw == UNSPECIFIED) {
       arguments.idx_rnw = 8;
    }
-   if (arguments.idx_lic == UNSPECIFIED && arguments.cpu_type != CPU_6809) {
+   if (arguments.idx_lic == UNSPECIFIED && arguments.cpu_type != CPU_6809 && arguments.cpu_type != CPU_6309) {
       arguments.idx_lic = 9;
    }
    if (arguments.idx_bs == UNSPECIFIED) {

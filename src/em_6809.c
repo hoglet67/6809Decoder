@@ -10,26 +10,28 @@
 // ====================================================================
 
 enum {
-   FAIL_A      = 0x00000010,
-   FAIL_B      = 0x00000020,
-   FAIL_X      = 0x00000040,
-   FAIL_Y      = 0x00000080,
-   FAIL_U      = 0x00000100,
-   FAIL_S      = 0x00000200,
-   FAIL_DP     = 0x00000400,
-   FAIL_E      = 0x00000800,
-   FAIL_F      = 0x00001000,
-   FAIL_H      = 0x00002000,
-   FAIL_I      = 0x00004000,
-   FAIL_N      = 0x00008000,
-   FAIL_Z      = 0x00010000,
-   FAIL_V      = 0x00020000,
-   FAIL_C      = 0x00040000,
-   FAIL_RESULT = 0x00080000,
-   FAIL_VECTOR = 0x00100000,
-   FAIL_CYCLES = 0x00200000,
-   FAIL_UNDOC  = 0x00400000,
-   FAIL_BADM   = 0x00800000,
+   FAIL_ACCA   = 0x00000010,
+   FAIL_ACCB   = 0x00000020,
+   FAIL_ACCE   = 0x00000040,
+   FAIL_ACCF   = 0x00000080,
+   FAIL_X      = 0x00000100,
+   FAIL_Y      = 0x00000200,
+   FAIL_U      = 0x00000400,
+   FAIL_S      = 0x00000800,
+   FAIL_DP     = 0x00001000,
+   FAIL_E      = 0x00002000,
+   FAIL_F      = 0x00004000,
+   FAIL_H      = 0x00008000,
+   FAIL_I      = 0x00010000,
+   FAIL_N      = 0x00020000,
+   FAIL_Z      = 0x00040000,
+   FAIL_V      = 0x00080000,
+   FAIL_C      = 0x00100000,
+   FAIL_RESULT = 0x00200000,
+   FAIL_VECTOR = 0x00400000,
+   FAIL_CYCLES = 0x00800000,
+   FAIL_UNDOC  = 0x01000000,
+   FAIL_BADM   = 0x02000000,
 };
 
 static const char * fail_hints[32] = {
@@ -37,8 +39,10 @@ static const char * fail_hints[32] = {
    "Memory",
    "?",
    "?",
-   "A",
-   "B",
+   "ACCA",
+   "ACCB",
+   "ACCE",
+   "ACCF",
    "X",
    "Y",
    "U",
@@ -62,8 +66,6 @@ static const char * fail_hints[32] = {
    "?",
    "?",
    "?",
-   "?",
-   "?",
    "?"
 };
 
@@ -76,11 +78,13 @@ typedef enum {
    REGISTER,
    IMMEDIATE_8,
    IMMEDIATE_16,
+   IMMEDIATE_32, // TODO: Implement
    RELATIVE_8,
    RELATIVE_16,
    DIRECT,
    EXTENDED,
    INDEXED,
+   SINGLEBIT, // TODO Implement
    ILLEGAL
 } addr_mode_t ;
 
@@ -110,31 +114,15 @@ typedef struct {
 typedef struct {
    operation_t *op;
    addr_mode_t mode;
-   int cycles;
    int undocumented;
+   int cycles;
+   int cycles_native;
 } instr_mode_t;
 
 
 // ====================================================================
 // Static variables
 // ====================================================================
-
-#define OFFSET_A    2
-#define OFFSET_B    7
-#define OFFSET_X   12
-#define OFFSET_Y   19
-#define OFFSET_U   26
-#define OFFSET_S   33
-#define OFFSET_DP  41
-#define OFFSET_E   46
-#define OFFSET_F   50
-#define OFFSET_H   54
-#define OFFSET_I   58
-#define OFFSET_N   62
-#define OFFSET_Z   66
-#define OFFSET_V   70
-#define OFFSET_C   74
-#define OFFSET_END 75
 
 static const char regi[] = { 'X', 'Y', 'U', 'S' };
 
@@ -145,7 +133,9 @@ static const char *pshsregi[] = { "PC", "U", "Y", "X", "DP", "B", "A", "CC" };
 
 static const char *pshuregi[] = { "PC", "S", "Y", "X", "DP", "B", "A", "CC" };
 
-static const char default_state[] = "A=?? B=?? X=???? Y=???? U=???? S=???? DP=?? E=? F=? H=? I=? N=? Z=? V=? C=?";
+static const char *cpu_state;
+static const char cpu_6809_state[] = "A=?? B=?? X=???? Y=???? U=???? S=???? DP=?? E=? F=? H=? I=? N=? Z=? V=? C=?";
+static const char cpu_6309_state[] = "A=?? B=?? E=?? F=?? X=???? Y=???? U=???? S=???? DP=?? T=???? E=? F=? H=? I=? N=? Z=? V=? C=? D0=? IL=? FM=? NM=?";
 
 // Indexed indirect modes, an extra level of indirection occurs
 //
@@ -171,6 +161,9 @@ static const int indirect_offset[] = {
    5  // 15 : [n]
 };
 
+// Is the CPU the 6309?
+static int cpu6309 = 0;
+
 // 6809 registers: -1 means unknown
 static int ACCA = -1;
 static int ACCB = -1;
@@ -191,6 +184,17 @@ static int Z = -1;
 static int V = -1;
 static int C = -1;
 
+// Additional 6309 registers: -1 means unknown
+static int ACCE = -1;
+static int ACCF = -1;
+static int TV   = -1;
+
+// Additional 6309 flags: -1 means unknown
+static int NM   = -1; // Native Mode
+static int FM   = -1; // FIRQ Mode
+static int IL   = -1; // Illegal Instruction Trap
+static int D0   = -1; // Divide by zero trap
+
 // Misc
 static int show_cycle_errors = 0;
 
@@ -202,6 +206,13 @@ static instr_mode_t instr_table_6809_map0[];
 static instr_mode_t instr_table_6809_map1[];
 static instr_mode_t instr_table_6809_map2[];
 
+static instr_mode_t instr_table_6309_map0[];
+static instr_mode_t instr_table_6309_map1[];
+static instr_mode_t instr_table_6309_map2[];
+
+static instr_mode_t *instr_table_map0;
+static instr_mode_t *instr_table_map1;
+static instr_mode_t *instr_table_map2;
 
 static operation_t op_ABX  ;
 static operation_t op_ADCA ;
@@ -518,11 +529,11 @@ static void push16u(int value) {
 
 static instr_mode_t *get_instruction(uint8_t b0, uint8_t b1) {
    if (b0 == 0x11) {
-      return instr_table_6809_map2 + b1;
+      return instr_table_map2 + b1;
    } else if (b0 == 0x10) {
-      return instr_table_6809_map1 + b1;
+      return instr_table_map1 + b1;
    } else {
-      return instr_table_6809_map0 + b0;
+      return instr_table_map0 + b0;
    }
 }
 
@@ -606,6 +617,19 @@ static void em_6809_init(arguments_t *args) {
    }
    if (args->reg_pc >= 0) {
       PC = args->reg_pc;
+   }
+   cpu6309 = args->cpu_type == CPU_6309 || args->cpu_type == CPU_6309;
+
+   if (cpu6309) {
+      cpu_state = cpu_6309_state;
+      instr_table_map0 = instr_table_6309_map0;
+      instr_table_map1 = instr_table_6309_map1;
+      instr_table_map2 = instr_table_6309_map2;
+   } else {
+      cpu_state = cpu_6809_state;
+      instr_table_map0 = instr_table_6809_map0;
+      instr_table_map1 = instr_table_6809_map1;
+      instr_table_map2 = instr_table_6809_map2;
    }
 }
 
@@ -821,6 +845,15 @@ static void em_6809_reset(sample_t *sample_q, int num_cycles, instruction_t *ins
    N = -1;
    V = -1;
    C = -1;
+   if (cpu6309) {
+      ACCE = -1;
+      ACCF = -1;
+      TV = -1;
+      NM = 0;
+      FM = 0;
+      IL = 0;
+      D0 = 0;
+   }
    PC = (sample_q[num_cycles - 3].data << 8) + sample_q[num_cycles - 2].data;
 }
 
@@ -872,6 +905,8 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
    // The full state is pushed in IRQ/NMI/SWI/SWI2/SWI3
    if (full) {
 
+      // TODO: Handle the case where cpu6309 and NM<0
+
       int u  = (sample_q[i + 1].data << 8) + sample_q[i].data;
       i += 2;
       push16s(u);
@@ -903,17 +938,35 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
       }
       DP = dp;
 
+      if (cpu6309 && (NM == 1)) {
+
+         int f  = sample_q[i++].data;
+         push8s(f);
+         if (ACCF >= 0 && f != ACCF) {
+            failflag |= FAIL_ACCF;
+         }
+
+         ACCF = f;
+         int e  = sample_q[i++].data;
+         push8s(e);
+         if (ACCE >= 0 && e != ACCE) {
+            failflag |= FAIL_ACCE;
+         }
+         ACCE = e;
+
+      }
+
       int b  = sample_q[i++].data;
       push8s(b);
       if (ACCB >= 0 && b != ACCB) {
-         failflag |= FAIL_B;
+         failflag |= FAIL_ACCB;
       }
       ACCB = b;
 
       int a  = sample_q[i++].data;
       push8s(a);
       if (ACCA >= 0 && a != ACCA) {
-         failflag |= FAIL_A;
+         failflag |= FAIL_ACCA;
       }
       ACCA = a;
       // Set E to indicate the full state was saved
@@ -973,10 +1026,9 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
    return pc;
 }
 
+// TODO: Update for 6309
 static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
-   // Try to establish the type of interrupt
    if (num_cycles == 10) {
-      // FIQ
       instruction->pc = interrupt_helper(sample_q, 3, 0, 0xfff6);
    } else if (num_cycles == 19 && sample_q[16].addr == 0x8) {
       // IRQ
@@ -1001,7 +1053,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       memory_read(instruction->opcode, PC + index, MEM_INSTR);
    }
    index++;
-   instr = instr_table_6809_map0;
+   instr = instr_table_map0;
 
    if (instr->undocumented) {
       failflag |= FAIL_UNDOC;
@@ -1017,7 +1069,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
          memory_read(instruction->opcode, PC + index, MEM_INSTR);
       }
       index++;
-      instr = instruction->prefix == 0x11 ? instr_table_6809_map2 : instr_table_6809_map1;
+      instr = instruction->prefix == 0x11 ? instr_table_map2 : instr_table_map1;
       oi = 1;
    }
 
@@ -1324,9 +1376,13 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
 
    /// Output the mnemonic
    char *ptr = buffer;
+   int len = strlen(instr->op->mnemonic);
    strcpy(ptr, instr->op->mnemonic);
-   ptr += 4;
-   *ptr++ = ' ';
+   ptr += len;
+
+   for (int i = len; i < 6; i++) {
+      *ptr++ = ' ';
+   }
 
    // Output the operand
    switch (instr->mode) {
@@ -1584,53 +1640,106 @@ static int em_6809_read_memory(int address) {
 }
 
 static char *em_6809_get_state(char *buffer) {
-   strcpy(buffer, default_state);
+   // 6809: A=?? B=?? X=???? Y=???? U=???? S=???? DP=?? E=? F=? H=? I=? N=? Z=? V=? C=?";
+   // 6309: A=?? B=?? E=?? F=?? X=???? Y=???? U=???? S=???? DP=?? T=???? E=? F=? H=? I=? N=? Z=? V=? C=? D0=? IL=? FM=? NM=?"
+   char *bp = buffer;
+   strcpy(bp, cpu_state);
+   bp += 2;
    if (ACCA >= 0) {
-      write_hex2(buffer + OFFSET_A, ACCA);
+      write_hex2(bp, ACCA);
    }
+   bp += 5;
    if (ACCB >= 0) {
-      write_hex2(buffer + OFFSET_B, ACCB);
+      write_hex2(bp, ACCB);
+   }
+   bp += 5;
+   if (cpu6309) {
+      if (ACCE >= 0) {
+         write_hex2(bp, ACCE);
+      }
+      bp += 5;
+      if (ACCF >= 0) {
+         write_hex2(bp, ACCF);
+      }
+      bp += 5;
    }
    if (X >= 0) {
-      write_hex4(buffer + OFFSET_X, X);
+      write_hex4(bp, X);
    }
+   bp += 7;
    if (Y >= 0) {
-      write_hex4(buffer + OFFSET_Y, Y);
+      write_hex4(bp, Y);
    }
+   bp += 7;
    if (S >= 0) {
-      write_hex4(buffer + OFFSET_S, S);
+      write_hex4(bp, S);
    }
+   bp += 7;
    if (U >= 0) {
-      write_hex4(buffer + OFFSET_U, U);
+      write_hex4(bp, U);
    }
+   bp += 8; // One extra as DP is a two-character name
    if (DP >= 0) {
-      write_hex2(buffer + OFFSET_DP, DP);
+      write_hex2(bp, DP);
+   }
+   bp += 5;
+   if (cpu6309) {
+      if (TV >= 0) {
+         write_hex4(bp, TV);
+      }
+      bp += 7;
    }
    if (E >= 0) {
-      buffer[OFFSET_E] = '0' + E;
+      *bp = '0' + E;
    }
+   bp += 4;
    if (F >= 0) {
-      buffer[OFFSET_F] = '0' + F;
+      *bp = '0' + F;
    }
+   bp += 4;
    if (H >= 0) {
-      buffer[OFFSET_H] = '0' + H;
+      *bp = '0' + H;
    }
+   bp += 4;
    if (I >= 0) {
-      buffer[OFFSET_I] = '0' + I;
+      *bp = '0' + I;
    }
+   bp += 4;
    if (N >= 0) {
-      buffer[OFFSET_N] = '0' + N;
+      *bp = '0' + N;
    }
+   bp += 4;
    if (Z >= 0) {
-      buffer[OFFSET_Z] = '0' + Z;
+      *bp = '0' + Z;
    }
+   bp += 4;
    if (V >= 0) {
-      buffer[OFFSET_V] = '0' + V;
+      *bp = '0' + V;
    }
+   bp += 4;
    if (C >= 0) {
-      buffer[OFFSET_C] = '0' + C;
+      *bp = '0' + C;
    }
-   return buffer + OFFSET_END;
+   if (cpu6309) {
+      bp += 5;
+      if (D0 >= 0) {
+         *bp = '0' + D0;
+      }
+      bp += 5;
+      if (IL >= 0) {
+         *bp = '0' + IL;
+      }
+      bp += 5;
+      if (FM >= 0) {
+         *bp = '0' + FM;
+      }
+      bp += 5;
+      if (NM >= 0) {
+         *bp = '0' + NM;
+      }
+   }
+   bp += 1;
+   return bp;
 }
 
 static uint32_t em_6809_get_and_clear_fail() {
@@ -2229,6 +2338,7 @@ static int op_fn_EORB(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 // Operand is the postbyte
+// TODO 6309 is different
 static int op_fn_EXG(operand_t operand, ea_t ea, sample_t *sample_q) {
    int reg1 = (operand >> 4) & 15;
    int reg2 = operand  & 15;
@@ -2559,7 +2669,7 @@ static void push_helper(sample_t *sample_q, int system) {
       tmp = sample_q[i++].data;
       push8(tmp);
       if (ACCB >= 0 && ACCB != tmp) {
-         failflag |= FAIL_B;
+         failflag |= FAIL_ACCB;
       }
       ACCB = tmp;
    }
@@ -2567,7 +2677,7 @@ static void push_helper(sample_t *sample_q, int system) {
       tmp = sample_q[i++].data;
       push8(tmp);
       if (ACCA >= 0 && ACCA != tmp) {
-         failflag |= FAIL_A;
+         failflag |= FAIL_ACCA;
       }
       ACCA = tmp;
    }
@@ -2870,18 +2980,18 @@ static int st_helper16(int val, operand_t operand, int fail) {
 }
 
 static int op_fn_STA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   ACCA = st_helper8(ACCA, operand, FAIL_A);
+   ACCA = st_helper8(ACCA, operand, FAIL_ACCA);
    return operand;
 }
 
 static int op_fn_STB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   ACCB = st_helper8(ACCB, operand, FAIL_B);
+   ACCB = st_helper8(ACCB, operand, FAIL_ACCB);
    return operand;
 }
 
 static int op_fn_STD(operand_t operand, ea_t ea, sample_t *sample_q) {
    int D = (ACCA >= 0 && ACCB >= 0) ? (ACCA << 8) + ACCB : -1;
-   D = st_helper16(D, operand, FAIL_A | FAIL_B);
+   D = st_helper16(D, operand, FAIL_ACCA | FAIL_ACCB);
    ACCA = (D >> 8) & 0xff;
    ACCB = D & 0xff;
    return operand;
@@ -2962,6 +3072,7 @@ static int op_fn_SYNC(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 // Operand is the postbyte
+// TODO 6309 is different
 static int op_fn_TFR(operand_t operand, ea_t ea, sample_t *sample_q) {
    int reg1 = (operand >> 4) & 15;
    int reg2 = operand  & 15;
@@ -3105,412 +3216,838 @@ static int op_fn_XSTU(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 // ====================================================================
+// Undocumented Instructions
+// ====================================================================
+
+static int op_fn_ADCD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_ADCR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_ADDE  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_ADDF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_ADDR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_ADDW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_AIM   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_ANDD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_ANDR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_ASLD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_ASRD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_BAND  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_BEOR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_BIAND (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_BIEOR (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_BIOR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_BITD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_BITMD (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_BOR   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_CLRD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_CLRE  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_CLRF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_CLRW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_CMPE  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_CMPF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_CMPR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_CMPW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_COMD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_COME  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_COMF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_COMW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_DECD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_DECE  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_DECF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_DECW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_DIVD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_DIVQ  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_EIM   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_EORD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_EORR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_INCD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_INCE  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_INCF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_INCW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_LDBT  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_LDE   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_LDF   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_LDMD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_LDQ   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_LDW   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_LSRD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_LSRW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_MULD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_NEGD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_OIM   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_ORD   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_ORR   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_PSHSW (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_PSHUW (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_PULSW (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_PULUW (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_ROLD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_ROLW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_RORD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_RORW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_SBCD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_SBCR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_SEXW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_STBT  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_STE   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_STF   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_STQ   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_STW   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_SUBE  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_SUBF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_SUBR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_SUBW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_TFM   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_TIM   (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_TSTD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_TSTE  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_TSTF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+static int op_fn_TSTW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+   return -1;
+}
+
+
+// ====================================================================
 // Opcode Tables
 // ====================================================================
 
-static operation_t op_ABX  = { "ABX ", op_fn_ABX ,     REGOP , 0 };
-static operation_t op_ADCA = { "ADCA", op_fn_ADCA,    READOP , 0 };
-static operation_t op_ADCB = { "ADCB", op_fn_ADCB,    READOP , 0 };
-static operation_t op_ADDA = { "ADDA", op_fn_ADDA,    READOP , 0 };
-static operation_t op_ADDB = { "ADDB", op_fn_ADDB,    READOP , 0 };
-static operation_t op_ADDD = { "ADDD", op_fn_ADDD,    READOP , 1 };
-static operation_t op_ANDA = { "ANDA", op_fn_ANDA,    READOP , 0 };
-static operation_t op_ANDB = { "ANDB", op_fn_ANDB,    READOP , 0 };
-static operation_t op_ANDC = { "ANDC", op_fn_ANDC,     REGOP , 0 };
-static operation_t op_ASL  = { "ASL ", op_fn_ASL ,     RMWOP , 0 };
-static operation_t op_ASLA = { "ASLA", op_fn_ASLA,     REGOP , 0 };
-static operation_t op_ASLB = { "ASLB", op_fn_ASLB,     REGOP , 0 };
-static operation_t op_ASR  = { "ASR ", op_fn_ASR ,     RMWOP , 0 };
-static operation_t op_ASRA = { "ASRA", op_fn_ASRA,     REGOP , 0 };
-static operation_t op_ASRB = { "ASRB", op_fn_ASRB,     REGOP , 0 };
-static operation_t op_BCC  = { "BCC ", op_fn_BCC ,  BRANCHOP , 0 };
-static operation_t op_BEQ  = { "BEQ ", op_fn_BEQ ,  BRANCHOP , 0 };
-static operation_t op_BGE  = { "BGE ", op_fn_BGE ,  BRANCHOP , 0 };
-static operation_t op_BGT  = { "BGT ", op_fn_BGT ,  BRANCHOP , 0 };
-static operation_t op_BHI  = { "BHI ", op_fn_BHI ,  BRANCHOP , 0 };
-static operation_t op_BITA = { "BITA", op_fn_BITA,    READOP , 0 };
-static operation_t op_BITB = { "BITB", op_fn_BITB,    READOP , 0 };
-static operation_t op_BLE  = { "BLE ", op_fn_BLE ,  BRANCHOP , 0 };
-static operation_t op_BLO  = { "BLO ", op_fn_BLO ,  BRANCHOP , 0 };
-static operation_t op_BLS  = { "BLS ", op_fn_BLS ,  BRANCHOP , 0 };
-static operation_t op_BLT  = { "BLT ", op_fn_BLT ,  BRANCHOP , 0 };
-static operation_t op_BMI  = { "BMI ", op_fn_BMI ,  BRANCHOP , 0 };
-static operation_t op_BNE  = { "BNE ", op_fn_BNE ,  BRANCHOP , 0 };
-static operation_t op_BPL  = { "BPL ", op_fn_BPL ,  BRANCHOP , 0 };
-static operation_t op_BRA  = { "BRA ", op_fn_BRA ,  BRANCHOP , 0 };
-static operation_t op_BRN  = { "BRN ", op_fn_BRN ,  BRANCHOP , 0 };
-static operation_t op_BSR  = { "BSR ", op_fn_BSR ,     JSROP , 1 };
-static operation_t op_BVC  = { "BVC ", op_fn_BVC ,  BRANCHOP , 0 };
-static operation_t op_BVS  = { "BVS ", op_fn_BVS ,  BRANCHOP , 0 };
-static operation_t op_CLR  = { "CLR ", op_fn_CLR ,     RMWOP , 0 };
-static operation_t op_CLRA = { "CLRA", op_fn_CLRA,     REGOP , 0 };
-static operation_t op_CLRB = { "CLRB", op_fn_CLRB,     REGOP , 0 };
-static operation_t op_CMPA = { "CMPA", op_fn_CMPA,    READOP , 0 };
-static operation_t op_CMPB = { "CMPB", op_fn_CMPB,    READOP , 0 };
-static operation_t op_CMPD = { "CMPD", op_fn_CMPD,    READOP , 1 };
-static operation_t op_CMPS = { "CMPS", op_fn_CMPS,    READOP , 1 };
-static operation_t op_CMPU = { "CMPU", op_fn_CMPU,    READOP , 1 };
-static operation_t op_CMPX = { "CMPX", op_fn_CMPX,    READOP , 1 };
-static operation_t op_CMPY = { "CMPY", op_fn_CMPY,    READOP , 1 };
-static operation_t op_COM  = { "COM ", op_fn_COM ,     RMWOP , 0 };
-static operation_t op_COMA = { "COMA", op_fn_COMA,     REGOP , 0 };
-static operation_t op_COMB = { "COMB", op_fn_COMB,     REGOP , 0 };
-static operation_t op_CWAI = { "CWAI", op_fn_CWAI,     OTHER , 0 };
-static operation_t op_DAA  = { "DAA ", op_fn_DAA ,     REGOP , 0 };
-static operation_t op_DEC  = { "DEC ", op_fn_DEC ,     RMWOP , 0 };
-static operation_t op_DECA = { "DECA", op_fn_DECA,     REGOP , 0 };
-static operation_t op_DECB = { "DECB", op_fn_DECB,     REGOP , 0 };
-static operation_t op_EORA = { "EORA", op_fn_EORA,    READOP , 0 };
-static operation_t op_EORB = { "EORB", op_fn_EORB,    READOP , 0 };
-static operation_t op_EXG  = { "EXG ", op_fn_EXG ,     REGOP , 0 };
-static operation_t op_INC  = { "INC ", op_fn_INC ,     RMWOP , 0 };
-static operation_t op_INCA = { "INCA", op_fn_INCA,     REGOP , 0 };
-static operation_t op_INCB = { "INCB", op_fn_INCB,     REGOP , 0 };
-static operation_t op_JMP  = { "JMP ", op_fn_JMP ,     LEAOP , 0 };
-static operation_t op_JSR  = { "JSR ", op_fn_JSR ,     JSROP , 1 };
-static operation_t op_LBCC = { "LBCC", op_fn_BCC ,  BRANCHOP , 0 };
-static operation_t op_LBEQ = { "LBEQ", op_fn_BEQ ,  BRANCHOP , 0 };
-static operation_t op_LBGE = { "LBGE", op_fn_BGE ,  BRANCHOP , 0 };
-static operation_t op_LBGT = { "LBGT", op_fn_BGT ,  BRANCHOP , 0 };
-static operation_t op_LBHI = { "LBHI", op_fn_BHI ,  BRANCHOP , 0 };
-static operation_t op_LBLE = { "LBLE", op_fn_BLE ,  BRANCHOP , 0 };
-static operation_t op_LBLO = { "LBLO", op_fn_BLO ,  BRANCHOP , 0 };
-static operation_t op_LBLS = { "LBLS", op_fn_BLS ,  BRANCHOP , 0 };
-static operation_t op_LBLT = { "LBLT", op_fn_BLT ,  BRANCHOP , 0 };
-static operation_t op_LBMI = { "LBMI", op_fn_BMI ,  BRANCHOP , 0 };
-static operation_t op_LBNE = { "LBNE", op_fn_BNE ,  BRANCHOP , 0 };
-static operation_t op_LBPL = { "LBPL", op_fn_BPL ,  BRANCHOP , 0 };
-static operation_t op_LBRA = { "LBRA", op_fn_BRA ,  BRANCHOP , 0 };
-static operation_t op_LBRN = { "LBRN", op_fn_BRN ,  BRANCHOP , 0 };
-static operation_t op_LBSR = { "LBSR", op_fn_BSR ,     JSROP , 1 };
-static operation_t op_LBVC = { "LBVC", op_fn_BVC ,  BRANCHOP , 0 };
-static operation_t op_LBVS = { "LBVS", op_fn_BVS ,  BRANCHOP , 0 };
-static operation_t op_LDA  = { "LDA ", op_fn_LDA ,    LOADOP , 0 };
-static operation_t op_LDB  = { "LDB ", op_fn_LDB ,    LOADOP , 0 };
-static operation_t op_LDD  = { "LDD ", op_fn_LDD ,    LOADOP , 1 };
-static operation_t op_LDS  = { "LDS ", op_fn_LDS ,    LOADOP , 1 };
-static operation_t op_LDU  = { "LDU ", op_fn_LDU ,    LOADOP , 1 };
-static operation_t op_LDX  = { "LDX ", op_fn_LDX ,    LOADOP , 1 };
-static operation_t op_LDY  = { "LDY ", op_fn_LDY ,    LOADOP , 1 };
-static operation_t op_LEAS = { "LEAS", op_fn_LEAS,     LEAOP , 0 };
-static operation_t op_LEAU = { "LEAU", op_fn_LEAU,     LEAOP , 0 };
-static operation_t op_LEAX = { "LEAX", op_fn_LEAX,     LEAOP , 0 };
-static operation_t op_LEAY = { "LEAY", op_fn_LEAY,     LEAOP , 0 };
-static operation_t op_LSR  = { "LSR ", op_fn_LSR ,     RMWOP , 0 };
-static operation_t op_LSRA = { "LSRA", op_fn_LSRA,     REGOP , 0 };
-static operation_t op_LSRB = { "LSRB", op_fn_LSRB,     REGOP , 0 };
-static operation_t op_MUL  = { "MUL ", op_fn_MUL ,     REGOP , 0 };
-static operation_t op_NEG  = { "NEG ", op_fn_NEG ,     RMWOP , 0 };
-static operation_t op_NEGA = { "NEGA", op_fn_NEGA,     REGOP , 0 };
-static operation_t op_NEGB = { "NEGB", op_fn_NEGB,     REGOP , 0 };
-static operation_t op_NOP  = { "NOP ", op_fn_NOP ,     REGOP , 0 };
-static operation_t op_ORA  = { "ORA ", op_fn_ORA ,    READOP , 0 };
-static operation_t op_ORB  = { "ORB ", op_fn_ORB ,    READOP , 0 };
-static operation_t op_ORCC = { "ORCC", op_fn_ORCC,     REGOP , 0 };
-static operation_t op_PSHS = { "PSHS", op_fn_PSHS,     OTHER , 0 };
-static operation_t op_PSHU = { "PSHU", op_fn_PSHU,     OTHER , 0 };
-static operation_t op_PULS = { "PULS", op_fn_PULS,     OTHER , 0 };
-static operation_t op_PULU = { "PULU", op_fn_PULU,     OTHER , 0 };
-static operation_t op_ROL  = { "ROL ", op_fn_ROL ,     RMWOP , 0 };
-static operation_t op_ROLA = { "ROLA", op_fn_ROLA,     REGOP , 0 };
-static operation_t op_ROLB = { "ROLB", op_fn_ROLB,     REGOP , 0 };
-static operation_t op_ROR  = { "ROR ", op_fn_ROR ,     RMWOP , 0 };
-static operation_t op_RORA = { "RORA", op_fn_RORA,     REGOP , 0 };
-static operation_t op_RORB = { "RORB", op_fn_RORB,     REGOP , 0 };
-static operation_t op_RTI  = { "RTI ", op_fn_RTI ,     OTHER , 0 };
-static operation_t op_RTS  = { "RTS ", op_fn_RTS ,     OTHER , 0 };
-static operation_t op_SBCA = { "SBCA", op_fn_SBCA,    READOP , 0 };
-static operation_t op_SBCB = { "SBCB", op_fn_SBCB,    READOP , 0 };
-static operation_t op_SEX  = { "SEX ", op_fn_SEX ,     REGOP , 0 };
-static operation_t op_STA  = { "STA ", op_fn_STA ,   STOREOP , 0 };
-static operation_t op_STB  = { "STB ", op_fn_STB ,   STOREOP , 0 };
-static operation_t op_STD  = { "STD ", op_fn_STD ,   STOREOP , 1 };
-static operation_t op_STS  = { "STS ", op_fn_STS ,   STOREOP , 1 };
-static operation_t op_STU  = { "STU ", op_fn_STU ,   STOREOP , 1 };
-static operation_t op_STX  = { "STX ", op_fn_STX ,   STOREOP , 1 };
-static operation_t op_STY  = { "STY ", op_fn_STY ,   STOREOP , 1 };
-static operation_t op_SUBA = { "SUBA", op_fn_SUBA,    READOP , 0 };
-static operation_t op_SUBB = { "SUBB", op_fn_SUBB,    READOP , 0 };
-static operation_t op_SUBD = { "SUBD", op_fn_SUBD,    READOP , 1 };
-static operation_t op_SWI  = { "SWI ", op_fn_SWI ,     OTHER , 0 };
-static operation_t op_SWI2 = { "SWI2", op_fn_SWI2,     OTHER , 0 };
-static operation_t op_SWI3 = { "SWI3", op_fn_SWI3,     OTHER , 0 };
-static operation_t op_SYNC = { "SYNC", op_fn_SYNC,     OTHER , 0 };
-static operation_t op_TFR  = { "TFR ", op_fn_TFR ,     REGOP , 0 };
-static operation_t op_TST  = { "TST ", op_fn_TST ,    READOP , 0 };
-static operation_t op_TSTA = { "TSTA", op_fn_TSTA,     REGOP , 0 };
-static operation_t op_TSTB = { "TSTB", op_fn_TSTB,     REGOP , 0 };
-static operation_t op_UU   = { "??? ", op_fn_UU,       OTHER , 0 };
+static operation_t op_ABX   = { "ABX",   op_fn_ABX ,     REGOP , 0 };
+static operation_t op_ADCA  = { "ADCA",  op_fn_ADCA,    READOP , 0 };
+static operation_t op_ADCB  = { "ADCB",  op_fn_ADCB,    READOP , 0 };
+static operation_t op_ADDA  = { "ADDA",  op_fn_ADDA,    READOP , 0 };
+static operation_t op_ADDB  = { "ADDB",  op_fn_ADDB,    READOP , 0 };
+static operation_t op_ADDD  = { "ADDD",  op_fn_ADDD,    READOP , 1 };
+static operation_t op_ANDA  = { "ANDA",  op_fn_ANDA,    READOP , 0 };
+static operation_t op_ANDB  = { "ANDB",  op_fn_ANDB,    READOP , 0 };
+static operation_t op_ANDC  = { "ANDC",  op_fn_ANDC,     REGOP , 0 };
+static operation_t op_ASL   = { "ASL",   op_fn_ASL ,     RMWOP , 0 };
+static operation_t op_ASLA  = { "ASLA",  op_fn_ASLA,     REGOP , 0 };
+static operation_t op_ASLB  = { "ASLB",  op_fn_ASLB,     REGOP , 0 };
+static operation_t op_ASR   = { "ASR",   op_fn_ASR ,     RMWOP , 0 };
+static operation_t op_ASRA  = { "ASRA",  op_fn_ASRA,     REGOP , 0 };
+static operation_t op_ASRB  = { "ASRB",  op_fn_ASRB,     REGOP , 0 };
+static operation_t op_BCC   = { "BCC",   op_fn_BCC ,  BRANCHOP , 0 };
+static operation_t op_BEQ   = { "BEQ",   op_fn_BEQ ,  BRANCHOP , 0 };
+static operation_t op_BGE   = { "BGE",   op_fn_BGE ,  BRANCHOP , 0 };
+static operation_t op_BGT   = { "BGT",   op_fn_BGT ,  BRANCHOP , 0 };
+static operation_t op_BHI   = { "BHI",   op_fn_BHI ,  BRANCHOP , 0 };
+static operation_t op_BITA  = { "BITA",  op_fn_BITA,    READOP , 0 };
+static operation_t op_BITB  = { "BITB",  op_fn_BITB,    READOP , 0 };
+static operation_t op_BLE   = { "BLE",   op_fn_BLE ,  BRANCHOP , 0 };
+static operation_t op_BLO   = { "BLO",   op_fn_BLO ,  BRANCHOP , 0 };
+static operation_t op_BLS   = { "BLS",   op_fn_BLS ,  BRANCHOP , 0 };
+static operation_t op_BLT   = { "BLT",   op_fn_BLT ,  BRANCHOP , 0 };
+static operation_t op_BMI   = { "BMI",   op_fn_BMI ,  BRANCHOP , 0 };
+static operation_t op_BNE   = { "BNE",   op_fn_BNE ,  BRANCHOP , 0 };
+static operation_t op_BPL   = { "BPL",   op_fn_BPL ,  BRANCHOP , 0 };
+static operation_t op_BRA   = { "BRA",   op_fn_BRA ,  BRANCHOP , 0 };
+static operation_t op_BRN   = { "BRN",   op_fn_BRN ,  BRANCHOP , 0 };
+static operation_t op_BSR   = { "BSR",   op_fn_BSR ,     JSROP , 1 };
+static operation_t op_BVC   = { "BVC",   op_fn_BVC ,  BRANCHOP , 0 };
+static operation_t op_BVS   = { "BVS",   op_fn_BVS ,  BRANCHOP , 0 };
+static operation_t op_CLR   = { "CLR",   op_fn_CLR ,     RMWOP , 0 };
+static operation_t op_CLRA  = { "CLRA",  op_fn_CLRA,     REGOP , 0 };
+static operation_t op_CLRB  = { "CLRB",  op_fn_CLRB,     REGOP , 0 };
+static operation_t op_CMPA  = { "CMPA",  op_fn_CMPA,    READOP , 0 };
+static operation_t op_CMPB  = { "CMPB",  op_fn_CMPB,    READOP , 0 };
+static operation_t op_CMPD  = { "CMPD",  op_fn_CMPD,    READOP , 1 };
+static operation_t op_CMPS  = { "CMPS",  op_fn_CMPS,    READOP , 1 };
+static operation_t op_CMPU  = { "CMPU",  op_fn_CMPU,    READOP , 1 };
+static operation_t op_CMPX  = { "CMPX",  op_fn_CMPX,    READOP , 1 };
+static operation_t op_CMPY  = { "CMPY",  op_fn_CMPY,    READOP , 1 };
+static operation_t op_COM   = { "COM",   op_fn_COM ,     RMWOP , 0 };
+static operation_t op_COMA  = { "COMA",  op_fn_COMA,     REGOP , 0 };
+static operation_t op_COMB  = { "COMB",  op_fn_COMB,     REGOP , 0 };
+static operation_t op_CWAI  = { "CWAI",  op_fn_CWAI,     OTHER , 0 };
+static operation_t op_DAA   = { "DAA",   op_fn_DAA ,     REGOP , 0 };
+static operation_t op_DEC   = { "DEC",   op_fn_DEC ,     RMWOP , 0 };
+static operation_t op_DECA  = { "DECA",  op_fn_DECA,     REGOP , 0 };
+static operation_t op_DECB  = { "DECB",  op_fn_DECB,     REGOP , 0 };
+static operation_t op_EORA  = { "EORA",  op_fn_EORA,    READOP , 0 };
+static operation_t op_EORB  = { "EORB",  op_fn_EORB,    READOP , 0 };
+static operation_t op_EXG   = { "EXG",   op_fn_EXG ,     REGOP , 0 };
+static operation_t op_INC   = { "INC",   op_fn_INC ,     RMWOP , 0 };
+static operation_t op_INCA  = { "INCA",  op_fn_INCA,     REGOP , 0 };
+static operation_t op_INCB  = { "INCB",  op_fn_INCB,     REGOP , 0 };
+static operation_t op_JMP   = { "JMP",   op_fn_JMP ,     LEAOP , 0 };
+static operation_t op_JSR   = { "JSR",   op_fn_JSR ,     JSROP , 1 };
+static operation_t op_LBCC  = { "LBCC",  op_fn_BCC ,  BRANCHOP , 0 };
+static operation_t op_LBEQ  = { "LBEQ",  op_fn_BEQ ,  BRANCHOP , 0 };
+static operation_t op_LBGE  = { "LBGE",  op_fn_BGE ,  BRANCHOP , 0 };
+static operation_t op_LBGT  = { "LBGT",  op_fn_BGT ,  BRANCHOP , 0 };
+static operation_t op_LBHI  = { "LBHI",  op_fn_BHI ,  BRANCHOP , 0 };
+static operation_t op_LBLE  = { "LBLE",  op_fn_BLE ,  BRANCHOP , 0 };
+static operation_t op_LBLO  = { "LBLO",  op_fn_BLO ,  BRANCHOP , 0 };
+static operation_t op_LBLS  = { "LBLS",  op_fn_BLS ,  BRANCHOP , 0 };
+static operation_t op_LBLT  = { "LBLT",  op_fn_BLT ,  BRANCHOP , 0 };
+static operation_t op_LBMI  = { "LBMI",  op_fn_BMI ,  BRANCHOP , 0 };
+static operation_t op_LBNE  = { "LBNE",  op_fn_BNE ,  BRANCHOP , 0 };
+static operation_t op_LBPL  = { "LBPL",  op_fn_BPL ,  BRANCHOP , 0 };
+static operation_t op_LBRA  = { "LBRA",  op_fn_BRA ,  BRANCHOP , 0 };
+static operation_t op_LBRN  = { "LBRN",  op_fn_BRN ,  BRANCHOP , 0 };
+static operation_t op_LBSR  = { "LBSR",  op_fn_BSR ,     JSROP , 1 };
+static operation_t op_LBVC  = { "LBVC",  op_fn_BVC ,  BRANCHOP , 0 };
+static operation_t op_LBVS  = { "LBVS",  op_fn_BVS ,  BRANCHOP , 0 };
+static operation_t op_LDA   = { "LDA",   op_fn_LDA ,    LOADOP , 0 };
+static operation_t op_LDB   = { "LDB",   op_fn_LDB ,    LOADOP , 0 };
+static operation_t op_LDD   = { "LDD",   op_fn_LDD ,    LOADOP , 1 };
+static operation_t op_LDS   = { "LDS",   op_fn_LDS ,    LOADOP , 1 };
+static operation_t op_LDU   = { "LDU",   op_fn_LDU ,    LOADOP , 1 };
+static operation_t op_LDX   = { "LDX",   op_fn_LDX ,    LOADOP , 1 };
+static operation_t op_LDY   = { "LDY",   op_fn_LDY ,    LOADOP , 1 };
+static operation_t op_LEAS  = { "LEAS",  op_fn_LEAS,     LEAOP , 0 };
+static operation_t op_LEAU  = { "LEAU",  op_fn_LEAU,     LEAOP , 0 };
+static operation_t op_LEAX  = { "LEAX",  op_fn_LEAX,     LEAOP , 0 };
+static operation_t op_LEAY  = { "LEAY",  op_fn_LEAY,     LEAOP , 0 };
+static operation_t op_LSR   = { "LSR",   op_fn_LSR ,     RMWOP , 0 };
+static operation_t op_LSRA  = { "LSRA",  op_fn_LSRA,     REGOP , 0 };
+static operation_t op_LSRB  = { "LSRB",  op_fn_LSRB,     REGOP , 0 };
+static operation_t op_MUL   = { "MUL",   op_fn_MUL ,     REGOP , 0 };
+static operation_t op_NEG   = { "NEG",   op_fn_NEG ,     RMWOP , 0 };
+static operation_t op_NEGA  = { "NEGA",  op_fn_NEGA,     REGOP , 0 };
+static operation_t op_NEGB  = { "NEGB",  op_fn_NEGB,     REGOP , 0 };
+static operation_t op_NOP   = { "NOP",   op_fn_NOP ,     REGOP , 0 };
+static operation_t op_ORA   = { "ORA",   op_fn_ORA ,    READOP , 0 };
+static operation_t op_ORB   = { "ORB",   op_fn_ORB ,    READOP , 0 };
+static operation_t op_ORCC  = { "ORCC",  op_fn_ORCC,     REGOP , 0 };
+static operation_t op_PSHS  = { "PSHS",  op_fn_PSHS,     OTHER , 0 };
+static operation_t op_PSHU  = { "PSHU",  op_fn_PSHU,     OTHER , 0 };
+static operation_t op_PULS  = { "PULS",  op_fn_PULS,     OTHER , 0 };
+static operation_t op_PULU  = { "PULU",  op_fn_PULU,     OTHER , 0 };
+static operation_t op_ROL   = { "ROL",   op_fn_ROL ,     RMWOP , 0 };
+static operation_t op_ROLA  = { "ROLA",  op_fn_ROLA,     REGOP , 0 };
+static operation_t op_ROLB  = { "ROLB",  op_fn_ROLB,     REGOP , 0 };
+static operation_t op_ROR   = { "ROR",   op_fn_ROR ,     RMWOP , 0 };
+static operation_t op_RORA  = { "RORA",  op_fn_RORA,     REGOP , 0 };
+static operation_t op_RORB  = { "RORB",  op_fn_RORB,     REGOP , 0 };
+static operation_t op_RTI   = { "RTI",   op_fn_RTI ,     OTHER , 0 };
+static operation_t op_RTS   = { "RTS",   op_fn_RTS ,     OTHER , 0 };
+static operation_t op_SBCA  = { "SBCA",  op_fn_SBCA,    READOP , 0 };
+static operation_t op_SBCB  = { "SBCB",  op_fn_SBCB,    READOP , 0 };
+static operation_t op_SEX   = { "SEX",   op_fn_SEX ,     REGOP , 0 };
+static operation_t op_STA   = { "STA",   op_fn_STA ,   STOREOP , 0 };
+static operation_t op_STB   = { "STB",   op_fn_STB ,   STOREOP , 0 };
+static operation_t op_STD   = { "STD",   op_fn_STD ,   STOREOP , 1 };
+static operation_t op_STS   = { "STS",   op_fn_STS ,   STOREOP , 1 };
+static operation_t op_STU   = { "STU",   op_fn_STU ,   STOREOP , 1 };
+static operation_t op_STX   = { "STX",   op_fn_STX ,   STOREOP , 1 };
+static operation_t op_STY   = { "STY",   op_fn_STY ,   STOREOP , 1 };
+static operation_t op_SUBA  = { "SUBA",  op_fn_SUBA,    READOP , 0 };
+static operation_t op_SUBB  = { "SUBB",  op_fn_SUBB,    READOP , 0 };
+static operation_t op_SUBD  = { "SUBD",  op_fn_SUBD,    READOP , 1 };
+static operation_t op_SWI   = { "SWI",   op_fn_SWI ,     OTHER , 0 };
+static operation_t op_SWI2  = { "SWI2",  op_fn_SWI2,     OTHER , 0 };
+static operation_t op_SWI3  = { "SWI3",  op_fn_SWI3,     OTHER , 0 };
+static operation_t op_SYNC  = { "SYNC",  op_fn_SYNC,     OTHER , 0 };
+static operation_t op_TFR   = { "TFR",   op_fn_TFR ,     REGOP , 0 };
+static operation_t op_TST   = { "TST",   op_fn_TST ,    READOP , 0 };
+static operation_t op_TSTA  = { "TSTA",  op_fn_TSTA,     REGOP , 0 };
+static operation_t op_TSTB  = { "TSTB",  op_fn_TSTB,     REGOP , 0 };
+static operation_t op_UU    = { "???",   op_fn_UU,       OTHER , 0 };
 
-// Undocumented
+// 6809 Undocumented
 
-static operation_t op_XX   = { "??? ", op_fn_XX,       OTHER , 0 };
-static operation_t op_X18  = { "X18 ", op_fn_X18,      REGOP , 0 };
-static operation_t op_X8C7 = { "X8C7", op_fn_X8C7,    READOP , 0 };
-static operation_t op_XHCF = { "XXHCF",op_fn_XHCF,    READOP , 0 };
-static operation_t op_XNC  = { "XNC ", op_fn_XNC,     READOP , 0 };
-static operation_t op_XSTX = { "XSTX", op_fn_XSTX,   STOREOP , 0 };
-static operation_t op_XSTU = { "XSTU", op_fn_XSTU,   STOREOP , 0 };
-static operation_t op_XRES = { "XRES", op_fn_XRES,     OTHER , 0 };
+static operation_t op_XX    = { "???",   op_fn_XX,       OTHER , 0 };
+static operation_t op_X18   = { "X18",   op_fn_X18,      REGOP , 0 };
+static operation_t op_X8C7  = { "X8C7",  op_fn_X8C7,    READOP , 0 };
+static operation_t op_XHCF  = { "XHCF",  op_fn_XHCF,    READOP , 0 };
+static operation_t op_XNC   = { "XNC",   op_fn_XNC,     READOP , 0 };
+static operation_t op_XSTX  = { "XSTX",  op_fn_XSTX,   STOREOP , 0 };
+static operation_t op_XSTU  = { "XSTU",  op_fn_XSTU,   STOREOP , 0 };
+static operation_t op_XRES  = { "XRES",  op_fn_XRES,     OTHER , 0 };
 
+// 6309
+
+static operation_t op_ADCD  = { "ADCD",  op_fn_ADCD,    READOP , 1 };
+static operation_t op_ADCR  = { "ADCR",  op_fn_ADCR,    READOP , 0 }; // 8 or 16 bits
+static operation_t op_ADDE  = { "ADDE",  op_fn_ADDE,    READOP , 0 };
+static operation_t op_ADDF  = { "ADDF",  op_fn_ADDF,    READOP , 0 };
+static operation_t op_ADDR  = { "ADDR",  op_fn_ADDR,    READOP , 0 }; // 8 or 16 bits
+static operation_t op_ADDW  = { "ADDW",  op_fn_ADDW,    READOP , 1 };
+static operation_t op_AIM   = { "AIM",   op_fn_AIM,      RMWOP , 0 };
+static operation_t op_ANDD  = { "ANDD",  op_fn_ANDD,    READOP , 1 };
+static operation_t op_ANDR  = { "ANDR",  op_fn_ANDR,    READOP , 0 }; // 8 or 16 bits
+static operation_t op_ASLD  = { "ASLD",  op_fn_ASLD,     REGOP , 0 };
+static operation_t op_ASRD  = { "ASRD",  op_fn_ASRD,     REGOP , 0 };
+static operation_t op_BAND  = { "BAND",  op_fn_BAND,    READOP , 0 };
+static operation_t op_BEOR  = { "BEOR",  op_fn_BEOR,    READOP , 0 };
+static operation_t op_BIAND = { "BIAND", op_fn_BIAND,   READOP , 0 };
+static operation_t op_BIEOR = { "BIEOR", op_fn_BIEOR,   READOP , 0 };
+static operation_t op_BIOR  = { "BIOR",  op_fn_BIOR,    READOP , 0 };
+static operation_t op_BITD  = { "BITD",  op_fn_BITD,    READOP , 1 };
+static operation_t op_BITMD = { "BITMD", op_fn_BITMD,   READOP , 0 };
+static operation_t op_BOR   = { "BOR",   op_fn_BOR,     READOP , 0 };
+static operation_t op_CLRD  = { "CLRD",  op_fn_CLRD,     REGOP , 1 };
+static operation_t op_CLRE  = { "CLRE",  op_fn_CLRE,     REGOP , 0 };
+static operation_t op_CLRF  = { "CLRF",  op_fn_CLRF,     REGOP , 0 };
+static operation_t op_CLRW  = { "CLRW",  op_fn_CLRW,     REGOP , 0 };
+static operation_t op_CMPE  = { "CMPE",  op_fn_CMPE,    READOP , 0 };
+static operation_t op_CMPF  = { "CMPF",  op_fn_CMPF,    READOP , 0 };
+static operation_t op_CMPR  = { "CMPR",  op_fn_CMPR,    READOP , 0 }; // 8 or 16 bits
+static operation_t op_CMPW  = { "CMPW",  op_fn_CMPW,    READOP , 1 };
+static operation_t op_COMD  = { "COMD",  op_fn_COMD,     REGOP , 1 };
+static operation_t op_COME  = { "COME",  op_fn_COME,     REGOP , 0 };
+static operation_t op_COMF  = { "COMF",  op_fn_COMF,     REGOP , 0 };
+static operation_t op_COMW  = { "COMW",  op_fn_COMW,     REGOP , 1 };
+static operation_t op_DECD  = { "DECD",  op_fn_DECD,     REGOP , 0 };
+static operation_t op_DECE  = { "DECE",  op_fn_DECE,     REGOP , 0 };
+static operation_t op_DECF  = { "DECF",  op_fn_DECF,     REGOP , 0 };
+static operation_t op_DECW  = { "DECW",  op_fn_DECW,     REGOP , 0 };
+static operation_t op_DIVD  = { "DIVD",  op_fn_DIVD,    READOP , 0 }; // operand in memory is 8 bits
+static operation_t op_DIVQ  = { "DIVQ",  op_fn_DIVQ,    READOP , 1 }; // operand in memory is 16 bits
+static operation_t op_EIM   = { "EIM",   op_fn_EIM,      RMWOP , 0 };
+static operation_t op_EORD  = { "EORD",  op_fn_EORD,    READOP , 1 };
+static operation_t op_EORR  = { "EORR",  op_fn_EORR,    READOP , 0 }; // 8 or 16 bits
+static operation_t op_INCD  = { "INCD",  op_fn_INCD,     REGOP , 0 };
+static operation_t op_INCE  = { "INCE",  op_fn_INCE,     REGOP , 0 };
+static operation_t op_INCF  = { "INCF",  op_fn_INCF,     REGOP , 0 };
+static operation_t op_INCW  = { "INCW",  op_fn_INCW,     REGOP , 0 };
+static operation_t op_LDBT  = { "LDBT",  op_fn_LDBT,    LOADOP , 0 };
+static operation_t op_LDE   = { "LDE",   op_fn_LDE,     LOADOP , 0 };
+static operation_t op_LDF   = { "LDF",   op_fn_LDF,     LOADOP , 0 };
+static operation_t op_LDMD  = { "LDMD",  op_fn_LDMD,     REGOP , 0 };
+static operation_t op_LDQ   = { "LDQ",   op_fn_LDQ,     LOADOP , 2 }; // 32 bits
+static operation_t op_LDW   = { "LDW",   op_fn_LDW,     LOADOP , 0 };
+static operation_t op_LSRD  = { "LSRD",  op_fn_LSRD,     REGOP , 0 };
+static operation_t op_LSRW  = { "LSRW",  op_fn_LSRW,     REGOP , 0 };
+static operation_t op_MULD  = { "MULD",  op_fn_MULD,     REGOP , 0 };
+static operation_t op_NEGD  = { "NEGD",  op_fn_NEGD,     REGOP , 0 };
+static operation_t op_OIM   = { "OIM",   op_fn_OIM,      RMWOP , 0 };
+static operation_t op_ORD   = { "ORD",   op_fn_ORD,     READOP , 1 };
+static operation_t op_ORR   = { "ORR",   op_fn_ORR,     READOP , 0 }; // 8 or 16 bits
+static operation_t op_PSHSW = { "PSHSW", op_fn_PSHSW,    OTHER , 0 };
+static operation_t op_PSHUW = { "PSHUW", op_fn_PSHUW,    OTHER , 0 };
+static operation_t op_PULSW = { "PULSW", op_fn_PULSW,    OTHER , 0 };
+static operation_t op_PULUW = { "PULUW", op_fn_PULUW,    OTHER , 0 };
+static operation_t op_ROLD  = { "ROLD",  op_fn_ROLD,     REGOP , 0 };
+static operation_t op_ROLW  = { "ROLW",  op_fn_ROLW,     REGOP , 0 };
+static operation_t op_RORD  = { "RORD",  op_fn_RORD,     REGOP , 0 };
+static operation_t op_RORW  = { "RORW",  op_fn_RORW,     REGOP , 0 };
+static operation_t op_SBCD  = { "SBCD",  op_fn_SBCD,    READOP , 1 };
+static operation_t op_SBCR  = { "SBCR",  op_fn_SBCR,    READOP , 0 }; // 8 or 16 bits
+static operation_t op_SEXW  = { "SEXW",  op_fn_SEXW,     REGOP , 0 };
+static operation_t op_STBT  = { "STBT",  op_fn_STBT,   STOREOP , 0 };
+static operation_t op_STE   = { "STE",   op_fn_STE,    STOREOP , 0 };
+static operation_t op_STF   = { "STF",   op_fn_STF,    STOREOP , 0 };
+static operation_t op_STQ   = { "STQ",   op_fn_STQ,    STOREOP , 2 };
+static operation_t op_STW   = { "STW",   op_fn_STW,    STOREOP , 1 };
+static operation_t op_SUBE  = { "SUBE",  op_fn_SUBE,    READOP , 0 };
+static operation_t op_SUBF  = { "SUBF",  op_fn_SUBF,    READOP , 0 };
+static operation_t op_SUBR  = { "SUBR",  op_fn_SUBR,    READOP , 0 }; // 8 or 16 bits
+static operation_t op_SUBW  = { "SUBW",  op_fn_SUBW,    READOP , 1 };
+static operation_t op_TFM   = { "TFM",   op_fn_TFM,      OTHER , 0 };
+static operation_t op_TIM   = { "TIM",   op_fn_TIM,     READOP , 0 };
+static operation_t op_TSTD  = { "TSTD",  op_fn_TSTD,    READOP , 1 };
+static operation_t op_TSTE  = { "TSTE",  op_fn_TSTE,    READOP , 0 };
+static operation_t op_TSTF  = { "TSTF",  op_fn_TSTF,    READOP , 0 };
+static operation_t op_TSTW  = { "TSTW",  op_fn_TSTW,    READOP , 1 };
+
+// ====================================================================
+// 6809 Opcode Tables
+// ====================================================================
 
 static instr_mode_t instr_table_6809_map0[] = {
-   /* 00 */    { &op_NEG , DIRECT       , 6, 0 },
-   /* 01 */    { &op_NEG , DIRECT       , 6, 1 },
-   /* 02 */    { &op_XNC , DIRECT       , 6, 1 },
-   /* 03 */    { &op_COM , DIRECT       , 6, 0 },
-   /* 04 */    { &op_LSR , DIRECT       , 6, 0 },
-   /* 05 */    { &op_LSR , DIRECT       , 6, 1 },
-   /* 06 */    { &op_ROR , DIRECT       , 6, 0 },
-   /* 07 */    { &op_ASR , DIRECT       , 6, 0 },
-   /* 08 */    { &op_ASL , DIRECT       , 6, 0 },
-   /* 09 */    { &op_ROL , DIRECT       , 6, 0 },
-   /* 0A */    { &op_DEC , DIRECT       , 6, 0 },
-   /* 0B */    { &op_DEC , DIRECT       , 6, 1 },
-   /* 0C */    { &op_INC , DIRECT       , 6, 0 },
-   /* 0D */    { &op_TST , DIRECT       , 6, 0 },
-   /* 0E */    { &op_JMP , DIRECT       , 3, 0 },
-   /* 0F */    { &op_CLR , DIRECT       , 6, 0 },
-   /* 10 */    { &op_UU  , INHERENT     , 1, 0 },
-   /* 11 */    { &op_UU  , INHERENT     , 1, 0 },
-   /* 12 */    { &op_NOP , INHERENT     , 2, 0 },
-   /* 13 */    { &op_SYNC, INHERENT     , 2, 0 },
+   /* 00 */    { &op_NEG , DIRECT       , 0, 6 },
+   /* 01 */    { &op_NEG , DIRECT       , 1, 6 },
+   /* 02 */    { &op_XNC , DIRECT       , 1, 6 },
+   /* 03 */    { &op_COM , DIRECT       , 0, 6 },
+   /* 04 */    { &op_LSR , DIRECT       , 0, 6 },
+   /* 05 */    { &op_LSR , DIRECT       , 1, 6 },
+   /* 06 */    { &op_ROR , DIRECT       , 0, 6 },
+   /* 07 */    { &op_ASR , DIRECT       , 0, 6 },
+   /* 08 */    { &op_ASL , DIRECT       , 0, 6 },
+   /* 09 */    { &op_ROL , DIRECT       , 0, 6 },
+   /* 0A */    { &op_DEC , DIRECT       , 0, 6 },
+   /* 0B */    { &op_DEC , DIRECT       , 1, 6 },
+   /* 0C */    { &op_INC , DIRECT       , 0, 6 },
+   /* 0D */    { &op_TST , DIRECT       , 0, 6 },
+   /* 0E */    { &op_JMP , DIRECT       , 0, 3 },
+   /* 0F */    { &op_CLR , DIRECT       , 0, 6 },
+   /* 10 */    { &op_UU  , INHERENT     , 0, 1 },
+   /* 11 */    { &op_UU  , INHERENT     , 0, 1 },
+   /* 12 */    { &op_NOP , INHERENT     , 0, 2 },
+   /* 13 */    { &op_SYNC, INHERENT     , 0, 4 },
    /* 14 */    { &op_XHCF, INHERENT     , 1, 1 },
    /* 15 */    { &op_XHCF, INHERENT     , 1, 1 },
-   /* 16 */    { &op_LBRA, RELATIVE_16  , 5, 0 },
-   /* 17 */    { &op_LBSR, RELATIVE_16  , 9, 0 },
-   /* 18 */    { &op_X18 , INHERENT     , 3, 1 },
-   /* 19 */    { &op_DAA , INHERENT     , 2, 0 },
-   /* 1A */    { &op_ORCC, REGISTER     , 3, 0 },
-   /* 1B */    { &op_NOP , INHERENT     , 2, 1 },
-   /* 1C */    { &op_ANDC, REGISTER     , 3, 0 },
-   /* 1D */    { &op_SEX , INHERENT     , 2, 0 },
-   /* 1E */    { &op_EXG , REGISTER     , 8, 0 },
-   /* 1F */    { &op_TFR , REGISTER     , 6, 0 },
-   /* 20 */    { &op_BRA , RELATIVE_8   , 3, 0 },
-   /* 21 */    { &op_BRN , RELATIVE_8   , 3, 0 },
-   /* 22 */    { &op_BHI , RELATIVE_8   , 3, 0 },
-   /* 23 */    { &op_BLS , RELATIVE_8   , 3, 0 },
-   /* 24 */    { &op_BCC , RELATIVE_8   , 3, 0 },
-   /* 25 */    { &op_BLO , RELATIVE_8   , 3, 0 },
-   /* 26 */    { &op_BNE , RELATIVE_8   , 3, 0 },
-   /* 27 */    { &op_BEQ , RELATIVE_8   , 3, 0 },
-   /* 28 */    { &op_BVC , RELATIVE_8   , 3, 0 },
-   /* 29 */    { &op_BVS , RELATIVE_8   , 3, 0 },
-   /* 2A */    { &op_BPL , RELATIVE_8   , 3, 0 },
-   /* 2B */    { &op_BMI , RELATIVE_8   , 3, 0 },
-   /* 2C */    { &op_BGE , RELATIVE_8   , 3, 0 },
-   /* 2D */    { &op_BLT , RELATIVE_8   , 3, 0 },
-   /* 2E */    { &op_BGT , RELATIVE_8   , 3, 0 },
-   /* 2F */    { &op_BLE , RELATIVE_8   , 3, 0 },
-   /* 30 */    { &op_LEAX, INDEXED      , 4, 0 },
-   /* 31 */    { &op_LEAY, INDEXED      , 4, 0 },
-   /* 32 */    { &op_LEAS, INDEXED      , 4, 0 },
-   /* 33 */    { &op_LEAU, INDEXED      , 4, 0 },
-   /* 34 */    { &op_PSHS, REGISTER     , 5, 0 },
-   /* 35 */    { &op_PULS, REGISTER     , 5, 0 },
-   /* 36 */    { &op_PSHU, REGISTER     , 5, 0 },
-   /* 37 */    { &op_PULU, REGISTER     , 5, 0 },
-   /* 38 */    { &op_ANDC, REGISTER     , 4, 1 }, // 4 cycle version of ANCDD
-   /* 39 */    { &op_RTS , INHERENT     , 5, 0 },
-   /* 3A */    { &op_ABX , INHERENT     , 3, 0 },
-   /* 3B */    { &op_RTI , INHERENT     , 6, 0 },
-   /* 3C */    { &op_CWAI, IMMEDIATE_8  , 1, 0 },
-   /* 3D */    { &op_MUL , INHERENT     ,11, 0 },
-   /* 3E */    { &op_XRES, INHERENT     ,19, 1 },
-   /* 3F */    { &op_SWI , INHERENT     ,19, 0 },
-   /* 40 */    { &op_NEGA, INHERENT     , 2, 0 },
-   /* 41 */    { &op_NEGA, INHERENT     , 2, 1 },
-   /* 42 */    { &op_COMA, INHERENT     , 2, 1 },
-   /* 43 */    { &op_COMA, INHERENT     , 2, 0 },
-   /* 44 */    { &op_LSRA, INHERENT     , 2, 0 },
-   /* 45 */    { &op_LSRA, INHERENT     , 2, 1 },
-   /* 46 */    { &op_RORA, INHERENT     , 2, 0 },
-   /* 47 */    { &op_ASRA, INHERENT     , 2, 0 },
-   /* 48 */    { &op_ASLA, INHERENT     , 2, 0 },
-   /* 49 */    { &op_ROLA, INHERENT     , 2, 0 },
-   /* 4A */    { &op_DECA, INHERENT     , 2, 0 },
-   /* 4B */    { &op_DECA, INHERENT     , 2, 1 },
-   /* 4C */    { &op_INCA, INHERENT     , 2, 0 },
-   /* 4D */    { &op_TSTA, INHERENT     , 2, 0 },
-   /* 4E */    { &op_CLRA, INHERENT     , 2, 1 },
-   /* 4F */    { &op_CLRA, INHERENT     , 2, 0 },
-   /* 50 */    { &op_NEGB, INHERENT     , 2, 0 },
-   /* 51 */    { &op_NEGB, INHERENT     , 2, 1 },
-   /* 52 */    { &op_COMB, INHERENT     , 2, 1 },
-   /* 53 */    { &op_COMB, INHERENT     , 2, 0 },
-   /* 54 */    { &op_LSRB, INHERENT     , 2, 0 },
-   /* 55 */    { &op_LSRB, INHERENT     , 2, 1 },
-   /* 56 */    { &op_RORB, INHERENT     , 2, 0 },
-   /* 57 */    { &op_ASRB, INHERENT     , 2, 0 },
-   /* 58 */    { &op_ASLB, INHERENT     , 2, 0 },
-   /* 59 */    { &op_ROLB, INHERENT     , 2, 0 },
-   /* 5A */    { &op_DECB, INHERENT     , 2, 0 },
-   /* 5B */    { &op_DECB, INHERENT     , 2, 1 },
-   /* 5C */    { &op_INCB, INHERENT     , 2, 0 },
-   /* 5D */    { &op_TSTB, INHERENT     , 2, 0 },
-   /* 5E */    { &op_CLRB, INHERENT     , 2, 1 },
-   /* 5F */    { &op_CLRB, INHERENT     , 2, 0 },
-   /* 60 */    { &op_NEG , INDEXED      , 6, 0 },
-   /* 61 */    { &op_NEG , INDEXED      , 6, 1 },
-   /* 62 */    { &op_COM , INDEXED      , 6, 1 },
-   /* 63 */    { &op_COM , INDEXED      , 6, 0 },
-   /* 64 */    { &op_LSR , INDEXED      , 6, 0 },
-   /* 65 */    { &op_LSR , INDEXED      , 6, 1 },
-   /* 66 */    { &op_ROR , INDEXED      , 6, 0 },
-   /* 67 */    { &op_ASR , INDEXED      , 6, 0 },
-   /* 68 */    { &op_ASL , INDEXED      , 6, 0 },
-   /* 69 */    { &op_ROL , INDEXED      , 6, 0 },
-   /* 6A */    { &op_DEC , INDEXED      , 6, 0 },
-   /* 6B */    { &op_DEC , INDEXED      , 6, 1 },
-   /* 6C */    { &op_INC , INDEXED      , 6, 0 },
-   /* 6D */    { &op_TST , INDEXED      , 6, 0 },
-   /* 6E */    { &op_JMP , INDEXED      , 3, 0 },
-   /* 6F */    { &op_CLR , INDEXED      , 6, 0 },
-   /* 70 */    { &op_NEG , EXTENDED     , 7, 0 },
-   /* 71 */    { &op_NEG , EXTENDED     , 7, 1 },
-   /* 72 */    { &op_COM , EXTENDED     , 7, 1 },
-   /* 73 */    { &op_COM , EXTENDED     , 7, 0 },
-   /* 74 */    { &op_LSR , EXTENDED     , 7, 0 },
-   /* 75 */    { &op_LSR , EXTENDED     , 7, 1 },
-   /* 76 */    { &op_ROR , EXTENDED     , 7, 0 },
-   /* 77 */    { &op_ASR , EXTENDED     , 7, 0 },
-   /* 78 */    { &op_ASL , EXTENDED     , 7, 0 },
-   /* 79 */    { &op_ROL , EXTENDED     , 7, 0 },
-   /* 7A */    { &op_DEC , EXTENDED     , 7, 0 },
-   /* 7B */    { &op_DEC , EXTENDED     , 7, 1 },
-   /* 7C */    { &op_INC , EXTENDED     , 7, 0 },
-   /* 7D */    { &op_TST , EXTENDED     , 7, 0 },
-   /* 7E */    { &op_JMP , EXTENDED     , 4, 0 },
-   /* 7F */    { &op_CLR , EXTENDED     , 7, 0 },
-   /* 80 */    { &op_SUBA, IMMEDIATE_8  , 2, 0 },
-   /* 81 */    { &op_CMPA, IMMEDIATE_8  , 2, 0 },
-   /* 82 */    { &op_SBCA, IMMEDIATE_8  , 2, 0 },
-   /* 83 */    { &op_SUBD, IMMEDIATE_16 , 4, 0 },
-   /* 84 */    { &op_ANDA, IMMEDIATE_8  , 2, 0 },
-   /* 85 */    { &op_BITA, IMMEDIATE_8  , 2, 0 },
-   /* 86 */    { &op_LDA , IMMEDIATE_8  , 2, 0 },
-   /* 87 */    { &op_X8C7, IMMEDIATE_8  , 2, 1 },
-   /* 88 */    { &op_EORA, IMMEDIATE_8  , 2, 0 },
-   /* 89 */    { &op_ADCA, IMMEDIATE_8  , 2, 0 },
-   /* 8A */    { &op_ORA , IMMEDIATE_8  , 2, 0 },
-   /* 8B */    { &op_ADDA, IMMEDIATE_8  , 2, 0 },
-   /* 8C */    { &op_CMPX, IMMEDIATE_16 , 4, 0 },
-   /* 8D */    { &op_BSR , RELATIVE_8   , 7, 0 },
-   /* 8E */    { &op_LDX , IMMEDIATE_16 , 3, 0 },
-   /* 8F */    { &op_XSTX, IMMEDIATE_8  , 3, 1 },
-   /* 90 */    { &op_SUBA, DIRECT       , 4, 0 },
-   /* 91 */    { &op_CMPA, DIRECT       , 4, 0 },
-   /* 92 */    { &op_SBCA, DIRECT       , 4, 0 },
-   /* 93 */    { &op_SUBD, DIRECT       , 6, 0 },
-   /* 94 */    { &op_ANDA, DIRECT       , 4, 0 },
-   /* 95 */    { &op_BITA, DIRECT       , 4, 0 },
-   /* 96 */    { &op_LDA , DIRECT       , 4, 0 },
-   /* 97 */    { &op_STA , DIRECT       , 4, 0 },
-   /* 98 */    { &op_EORA, DIRECT       , 4, 0 },
-   /* 99 */    { &op_ADCA, DIRECT       , 4, 0 },
-   /* 9A */    { &op_ORA , DIRECT       , 4, 0 },
-   /* 9B */    { &op_ADDA, DIRECT       , 4, 0 },
-   /* 9C */    { &op_CMPX, DIRECT       , 6, 0 },
-   /* 9D */    { &op_JSR , DIRECT       , 7, 0 },
-   /* 9E */    { &op_LDX , DIRECT       , 5, 0 },
-   /* 9F */    { &op_STX , DIRECT       , 5, 0 },
-   /* A0 */    { &op_SUBA, INDEXED      , 4, 0 },
-   /* A1 */    { &op_CMPA, INDEXED      , 4, 0 },
-   /* A2 */    { &op_SBCA, INDEXED      , 4, 0 },
-   /* A3 */    { &op_SUBD, INDEXED      , 6, 0 },
-   /* A4 */    { &op_ANDA, INDEXED      , 4, 0 },
-   /* A5 */    { &op_BITA, INDEXED      , 4, 0 },
-   /* A6 */    { &op_LDA , INDEXED      , 4, 0 },
-   /* A7 */    { &op_STA , INDEXED      , 4, 0 },
-   /* A8 */    { &op_EORA, INDEXED      , 4, 0 },
-   /* A9 */    { &op_ADCA, INDEXED      , 4, 0 },
-   /* AA */    { &op_ORA , INDEXED      , 4, 0 },
-   /* AB */    { &op_ADDA, INDEXED      , 4, 0 },
-   /* AC */    { &op_CMPX, INDEXED      , 6, 0 },
-   /* AD */    { &op_JSR , INDEXED      , 7, 0 },
-   /* AE */    { &op_LDX , INDEXED      , 5, 0 },
-   /* AF */    { &op_STX , INDEXED      , 5, 0 },
-   /* B0 */    { &op_SUBA, EXTENDED     , 5, 0 },
-   /* B1 */    { &op_CMPA, EXTENDED     , 5, 0 },
-   /* B2 */    { &op_SBCA, EXTENDED     , 5, 0 },
-   /* B3 */    { &op_SUBD, EXTENDED     , 7, 0 },
-   /* B4 */    { &op_ANDA, EXTENDED     , 5, 0 },
-   /* B5 */    { &op_BITA, EXTENDED     , 5, 0 },
-   /* B6 */    { &op_LDA , EXTENDED     , 5, 0 },
-   /* B7 */    { &op_STA , EXTENDED     , 5, 0 },
-   /* B8 */    { &op_EORA, EXTENDED     , 5, 0 },
-   /* B9 */    { &op_ADCA, EXTENDED     , 5, 0 },
-   /* BA */    { &op_ORA , EXTENDED     , 5, 0 },
-   /* BB */    { &op_ADDA, EXTENDED     , 5, 0 },
-   /* BC */    { &op_CMPX, EXTENDED     , 7, 0 },
-   /* BD */    { &op_JSR , EXTENDED     , 8, 0 },
-   /* BE */    { &op_LDX , EXTENDED     , 6, 0 },
-   /* BF */    { &op_STX , EXTENDED     , 6, 0 },
-   /* C0 */    { &op_SUBB, IMMEDIATE_8  , 2, 0 },
-   /* C1 */    { &op_CMPB, IMMEDIATE_8  , 2, 0 },
-   /* C2 */    { &op_SBCB, IMMEDIATE_8  , 2, 0 },
-   /* C3 */    { &op_ADDD, IMMEDIATE_16 , 4, 0 },
-   /* C4 */    { &op_ANDB, IMMEDIATE_8  , 2, 0 },
-   /* C5 */    { &op_BITB, IMMEDIATE_8  , 2, 0 },
-   /* C6 */    { &op_LDB , IMMEDIATE_8  , 2, 0 },
-   /* C7 */    { &op_X8C7, IMMEDIATE_8  , 2, 1 },
-   /* C8 */    { &op_EORB, IMMEDIATE_8  , 2, 0 },
-   /* C9 */    { &op_ADCB, IMMEDIATE_8  , 2, 0 },
-   /* CA */    { &op_ORB , IMMEDIATE_8  , 2, 0 },
-   /* CB */    { &op_ADDB, IMMEDIATE_8  , 2, 0 },
-   /* CC */    { &op_LDD , IMMEDIATE_16 , 3, 0 },
+   /* 16 */    { &op_LBRA, RELATIVE_16  , 0, 5 },
+   /* 17 */    { &op_LBSR, RELATIVE_16  , 0, 9 },
+   /* 18 */    { &op_X18 , INHERENT     , 1, 3 },
+   /* 19 */    { &op_DAA , INHERENT     , 0, 2 },
+   /* 1A */    { &op_ORCC, REGISTER     , 0, 3 },
+   /* 1B */    { &op_NOP , INHERENT     , 1, 2 },
+   /* 1C */    { &op_ANDC, REGISTER     , 0, 3 },
+   /* 1D */    { &op_SEX , INHERENT     , 0, 2 },
+   /* 1E */    { &op_EXG , REGISTER     , 0, 8 },
+   /* 1F */    { &op_TFR , REGISTER     , 0, 6 },
+   /* 20 */    { &op_BRA , RELATIVE_8   , 0, 3 },
+   /* 21 */    { &op_BRN , RELATIVE_8   , 0, 3 },
+   /* 22 */    { &op_BHI , RELATIVE_8   , 0, 3 },
+   /* 23 */    { &op_BLS , RELATIVE_8   , 0, 3 },
+   /* 24 */    { &op_BCC , RELATIVE_8   , 0, 3 },
+   /* 25 */    { &op_BLO , RELATIVE_8   , 0, 3 },
+   /* 26 */    { &op_BNE , RELATIVE_8   , 0, 3 },
+   /* 27 */    { &op_BEQ , RELATIVE_8   , 0, 3 },
+   /* 28 */    { &op_BVC , RELATIVE_8   , 0, 3 },
+   /* 29 */    { &op_BVS , RELATIVE_8   , 0, 3 },
+   /* 2A */    { &op_BPL , RELATIVE_8   , 0, 3 },
+   /* 2B */    { &op_BMI , RELATIVE_8   , 0, 3 },
+   /* 2C */    { &op_BGE , RELATIVE_8   , 0, 3 },
+   /* 2D */    { &op_BLT , RELATIVE_8   , 0, 3 },
+   /* 2E */    { &op_BGT , RELATIVE_8   , 0, 3 },
+   /* 2F */    { &op_BLE , RELATIVE_8   , 0, 3 },
+   /* 30 */    { &op_LEAX, INDEXED      , 0, 4 },
+   /* 31 */    { &op_LEAY, INDEXED      , 0, 4 },
+   /* 32 */    { &op_LEAS, INDEXED      , 0, 4 },
+   /* 33 */    { &op_LEAU, INDEXED      , 0, 4 },
+   /* 34 */    { &op_PSHS, REGISTER     , 0, 5 },
+   /* 35 */    { &op_PULS, REGISTER     , 0, 5 },
+   /* 36 */    { &op_PSHU, REGISTER     , 0, 5 },
+   /* 37 */    { &op_PULU, REGISTER     , 0, 5 },
+   /* 38 */    { &op_ANDC, REGISTER     , 1, 4 }, // 4 cycle version of ANCDD
+   /* 39 */    { &op_RTS , INHERENT     , 0, 5 },
+   /* 3A */    { &op_ABX , INHERENT     , 0, 3 },
+   /* 3B */    { &op_RTI , INHERENT     , 0, 6 },
+   /* 3C */    { &op_CWAI, IMMEDIATE_8  , 0,20 },
+   /* 3D */    { &op_MUL , INHERENT     , 0,11 },
+   /* 3E */    { &op_XRES, INHERENT     , 1,19 },
+   /* 3F */    { &op_SWI , INHERENT     , 0,19 },
+   /* 40 */    { &op_NEGA, INHERENT     , 0, 2 },
+   /* 41 */    { &op_NEGA, INHERENT     , 1, 2 },
+   /* 42 */    { &op_COMA, INHERENT     , 1, 2 },
+   /* 43 */    { &op_COMA, INHERENT     , 0, 2 },
+   /* 44 */    { &op_LSRA, INHERENT     , 0, 2 },
+   /* 45 */    { &op_LSRA, INHERENT     , 1, 2 },
+   /* 46 */    { &op_RORA, INHERENT     , 0, 2 },
+   /* 47 */    { &op_ASRA, INHERENT     , 0, 2 },
+   /* 48 */    { &op_ASLA, INHERENT     , 0, 2 },
+   /* 49 */    { &op_ROLA, INHERENT     , 0, 2 },
+   /* 4A */    { &op_DECA, INHERENT     , 0, 2 },
+   /* 4B */    { &op_DECA, INHERENT     , 1, 2 },
+   /* 4C */    { &op_INCA, INHERENT     , 0, 2 },
+   /* 4D */    { &op_TSTA, INHERENT     , 0, 2 },
+   /* 4E */    { &op_CLRA, INHERENT     , 1, 2 },
+   /* 4F */    { &op_CLRA, INHERENT     , 0, 2 },
+   /* 50 */    { &op_NEGB, INHERENT     , 0, 2 },
+   /* 51 */    { &op_NEGB, INHERENT     , 1, 2 },
+   /* 52 */    { &op_COMB, INHERENT     , 1, 2 },
+   /* 53 */    { &op_COMB, INHERENT     , 0, 2 },
+   /* 54 */    { &op_LSRB, INHERENT     , 0, 2 },
+   /* 55 */    { &op_LSRB, INHERENT     , 1, 2 },
+   /* 56 */    { &op_RORB, INHERENT     , 0, 2 },
+   /* 57 */    { &op_ASRB, INHERENT     , 0, 2 },
+   /* 58 */    { &op_ASLB, INHERENT     , 0, 2 },
+   /* 59 */    { &op_ROLB, INHERENT     , 0, 2 },
+   /* 5A */    { &op_DECB, INHERENT     , 0, 2 },
+   /* 5B */    { &op_DECB, INHERENT     , 1, 2 },
+   /* 5C */    { &op_INCB, INHERENT     , 0, 2 },
+   /* 5D */    { &op_TSTB, INHERENT     , 0, 2 },
+   /* 5E */    { &op_CLRB, INHERENT     , 1, 2 },
+   /* 5F */    { &op_CLRB, INHERENT     , 0, 2 },
+   /* 60 */    { &op_NEG , INDEXED      , 0, 6 },
+   /* 61 */    { &op_NEG , INDEXED      , 1, 6 },
+   /* 62 */    { &op_COM , INDEXED      , 1, 6 },
+   /* 63 */    { &op_COM , INDEXED      , 0, 6 },
+   /* 64 */    { &op_LSR , INDEXED      , 0, 6 },
+   /* 65 */    { &op_LSR , INDEXED      , 1, 6 },
+   /* 66 */    { &op_ROR , INDEXED      , 0, 6 },
+   /* 67 */    { &op_ASR , INDEXED      , 0, 6 },
+   /* 68 */    { &op_ASL , INDEXED      , 0, 6 },
+   /* 69 */    { &op_ROL , INDEXED      , 0, 6 },
+   /* 6A */    { &op_DEC , INDEXED      , 0, 6 },
+   /* 6B */    { &op_DEC , INDEXED      , 1, 6 },
+   /* 6C */    { &op_INC , INDEXED      , 0, 6 },
+   /* 6D */    { &op_TST , INDEXED      , 0, 6 },
+   /* 6E */    { &op_JMP , INDEXED      , 0, 3 },
+   /* 6F */    { &op_CLR , INDEXED      , 0, 6 },
+   /* 70 */    { &op_NEG , EXTENDED     , 0, 7 },
+   /* 71 */    { &op_NEG , EXTENDED     , 1, 7 },
+   /* 72 */    { &op_COM , EXTENDED     , 1, 7 },
+   /* 73 */    { &op_COM , EXTENDED     , 0, 7 },
+   /* 74 */    { &op_LSR , EXTENDED     , 0, 7 },
+   /* 75 */    { &op_LSR , EXTENDED     , 1, 7 },
+   /* 76 */    { &op_ROR , EXTENDED     , 0, 7 },
+   /* 77 */    { &op_ASR , EXTENDED     , 0, 7 },
+   /* 78 */    { &op_ASL , EXTENDED     , 0, 7 },
+   /* 79 */    { &op_ROL , EXTENDED     , 0, 7 },
+   /* 7A */    { &op_DEC , EXTENDED     , 0, 7 },
+   /* 7B */    { &op_DEC , EXTENDED     , 1, 7 },
+   /* 7C */    { &op_INC , EXTENDED     , 0, 7 },
+   /* 7D */    { &op_TST , EXTENDED     , 0, 7 },
+   /* 7E */    { &op_JMP , EXTENDED     , 0, 4 },
+   /* 7F */    { &op_CLR , EXTENDED     , 0, 7 },
+   /* 80 */    { &op_SUBA, IMMEDIATE_8  , 0, 2 },
+   /* 81 */    { &op_CMPA, IMMEDIATE_8  , 0, 2 },
+   /* 82 */    { &op_SBCA, IMMEDIATE_8  , 0, 2 },
+   /* 83 */    { &op_SUBD, IMMEDIATE_16 , 0, 4 },
+   /* 84 */    { &op_ANDA, IMMEDIATE_8  , 0, 2 },
+   /* 85 */    { &op_BITA, IMMEDIATE_8  , 0, 2 },
+   /* 86 */    { &op_LDA , IMMEDIATE_8  , 0, 2 },
+   /* 87 */    { &op_X8C7, IMMEDIATE_8  , 1, 2 },
+   /* 88 */    { &op_EORA, IMMEDIATE_8  , 0, 2 },
+   /* 89 */    { &op_ADCA, IMMEDIATE_8  , 0, 2 },
+   /* 8A */    { &op_ORA , IMMEDIATE_8  , 0, 2 },
+   /* 8B */    { &op_ADDA, IMMEDIATE_8  , 0, 2 },
+   /* 8C */    { &op_CMPX, IMMEDIATE_16 , 0, 4 },
+   /* 8D */    { &op_BSR , RELATIVE_8   , 0, 7 },
+   /* 8E */    { &op_LDX , IMMEDIATE_16 , 0, 3 },
+   /* 8F */    { &op_XSTX, IMMEDIATE_8  , 1, 3 },
+   /* 90 */    { &op_SUBA, DIRECT       , 0, 4 },
+   /* 91 */    { &op_CMPA, DIRECT       , 0, 4 },
+   /* 92 */    { &op_SBCA, DIRECT       , 0, 4 },
+   /* 93 */    { &op_SUBD, DIRECT       , 0, 6 },
+   /* 94 */    { &op_ANDA, DIRECT       , 0, 4 },
+   /* 95 */    { &op_BITA, DIRECT       , 0, 4 },
+   /* 96 */    { &op_LDA , DIRECT       , 0, 4 },
+   /* 97 */    { &op_STA , DIRECT       , 0, 4 },
+   /* 98 */    { &op_EORA, DIRECT       , 0, 4 },
+   /* 99 */    { &op_ADCA, DIRECT       , 0, 4 },
+   /* 9A */    { &op_ORA , DIRECT       , 0, 4 },
+   /* 9B */    { &op_ADDA, DIRECT       , 0, 4 },
+   /* 9C */    { &op_CMPX, DIRECT       , 0, 6 },
+   /* 9D */    { &op_JSR , DIRECT       , 0, 7 },
+   /* 9E */    { &op_LDX , DIRECT       , 0, 5 },
+   /* 9F */    { &op_STX , DIRECT       , 0, 5 },
+   /* A0 */    { &op_SUBA, INDEXED      , 0, 4 },
+   /* A1 */    { &op_CMPA, INDEXED      , 0, 4 },
+   /* A2 */    { &op_SBCA, INDEXED      , 0, 4 },
+   /* A3 */    { &op_SUBD, INDEXED      , 0, 6 },
+   /* A4 */    { &op_ANDA, INDEXED      , 0, 4 },
+   /* A5 */    { &op_BITA, INDEXED      , 0, 4 },
+   /* A6 */    { &op_LDA , INDEXED      , 0, 4 },
+   /* A7 */    { &op_STA , INDEXED      , 0, 4 },
+   /* A8 */    { &op_EORA, INDEXED      , 0, 4 },
+   /* A9 */    { &op_ADCA, INDEXED      , 0, 4 },
+   /* AA */    { &op_ORA , INDEXED      , 0, 4 },
+   /* AB */    { &op_ADDA, INDEXED      , 0, 4 },
+   /* AC */    { &op_CMPX, INDEXED      , 0, 6 },
+   /* AD */    { &op_JSR , INDEXED      , 0, 7 },
+   /* AE */    { &op_LDX , INDEXED      , 0, 5 },
+   /* AF */    { &op_STX , INDEXED      , 0, 5 },
+   /* B0 */    { &op_SUBA, EXTENDED     , 0, 5 },
+   /* B1 */    { &op_CMPA, EXTENDED     , 0, 5 },
+   /* B2 */    { &op_SBCA, EXTENDED     , 0, 5 },
+   /* B3 */    { &op_SUBD, EXTENDED     , 0, 7 },
+   /* B4 */    { &op_ANDA, EXTENDED     , 0, 5 },
+   /* B5 */    { &op_BITA, EXTENDED     , 0, 5 },
+   /* B6 */    { &op_LDA , EXTENDED     , 0, 5 },
+   /* B7 */    { &op_STA , EXTENDED     , 0, 5 },
+   /* B8 */    { &op_EORA, EXTENDED     , 0, 5 },
+   /* B9 */    { &op_ADCA, EXTENDED     , 0, 5 },
+   /* BA */    { &op_ORA , EXTENDED     , 0, 5 },
+   /* BB */    { &op_ADDA, EXTENDED     , 0, 5 },
+   /* BC */    { &op_CMPX, EXTENDED     , 0, 7 },
+   /* BD */    { &op_JSR , EXTENDED     , 0, 8 },
+   /* BE */    { &op_LDX , EXTENDED     , 0, 6 },
+   /* BF */    { &op_STX , EXTENDED     , 0, 6 },
+   /* C0 */    { &op_SUBB, IMMEDIATE_8  , 0, 2 },
+   /* C1 */    { &op_CMPB, IMMEDIATE_8  , 0, 2 },
+   /* C2 */    { &op_SBCB, IMMEDIATE_8  , 0, 2 },
+   /* C3 */    { &op_ADDD, IMMEDIATE_16 , 0, 4 },
+   /* C4 */    { &op_ANDB, IMMEDIATE_8  , 0, 2 },
+   /* C5 */    { &op_BITB, IMMEDIATE_8  , 0, 2 },
+   /* C6 */    { &op_LDB , IMMEDIATE_8  , 0, 2 },
+   /* C7 */    { &op_X8C7, IMMEDIATE_8  , 1, 2 },
+   /* C8 */    { &op_EORB, IMMEDIATE_8  , 0, 2 },
+   /* C9 */    { &op_ADCB, IMMEDIATE_8  , 0, 2 },
+   /* CA */    { &op_ORB , IMMEDIATE_8  , 0, 2 },
+   /* CB */    { &op_ADDB, IMMEDIATE_8  , 0, 2 },
+   /* CC */    { &op_LDD , IMMEDIATE_16 , 0, 3 },
    /* CD */    { &op_XHCF, INHERENT     , 1, 1 },
-   /* CE */    { &op_LDU , IMMEDIATE_16 , 3, 0 },
-   /* 8F */    { &op_XSTU, IMMEDIATE_8  , 3, 1 },
-   /* D0 */    { &op_SUBB, DIRECT       , 4, 0 },
-   /* D1 */    { &op_CMPB, DIRECT       , 4, 0 },
-   /* D2 */    { &op_SBCB, DIRECT       , 4, 0 },
-   /* D3 */    { &op_ADDD, DIRECT       , 6, 0 },
-   /* D4 */    { &op_ANDB, DIRECT       , 4, 0 },
-   /* D5 */    { &op_BITB, DIRECT       , 4, 0 },
-   /* D6 */    { &op_LDB , DIRECT       , 4, 0 },
-   /* D7 */    { &op_STB , DIRECT       , 4, 0 },
-   /* D8 */    { &op_EORB, DIRECT       , 4, 0 },
-   /* D9 */    { &op_ADCB, DIRECT       , 4, 0 },
-   /* DA */    { &op_ORB , DIRECT       , 4, 0 },
-   /* DB */    { &op_ADDB, DIRECT       , 4, 0 },
-   /* DC */    { &op_LDD , DIRECT       , 5, 0 },
-   /* DD */    { &op_STD , DIRECT       , 5, 0 },
-   /* DE */    { &op_LDU , DIRECT       , 5, 0 },
-   /* DF */    { &op_STU , DIRECT       , 5, 0 },
-   /* E0 */    { &op_SUBB, INDEXED      , 4, 0 },
-   /* E1 */    { &op_CMPB, INDEXED      , 4, 0 },
-   /* E2 */    { &op_SBCB, INDEXED      , 4, 0 },
-   /* E3 */    { &op_ADDD, INDEXED      , 6, 0 },
-   /* E4 */    { &op_ANDB, INDEXED      , 4, 0 },
-   /* E5 */    { &op_BITB, INDEXED      , 4, 0 },
-   /* E6 */    { &op_LDB , INDEXED      , 4, 0 },
-   /* E7 */    { &op_STB , INDEXED      , 4, 0 },
-   /* E8 */    { &op_EORB, INDEXED      , 4, 0 },
-   /* E9 */    { &op_ADCB, INDEXED      , 4, 0 },
-   /* EA */    { &op_ORB , INDEXED      , 4, 0 },
-   /* EB */    { &op_ADDB, INDEXED      , 4, 0 },
-   /* EC */    { &op_LDD , INDEXED      , 5, 0 },
-   /* ED */    { &op_STD , INDEXED      , 5, 0 },
-   /* EE */    { &op_LDU , INDEXED      , 5, 0 },
-   /* EF */    { &op_STU , INDEXED      , 5, 0 },
-   /* F0 */    { &op_SUBB, EXTENDED     , 5, 0 },
-   /* F1 */    { &op_CMPB, EXTENDED     , 5, 0 },
-   /* F2 */    { &op_SBCB, EXTENDED     , 5, 0 },
-   /* F3 */    { &op_ADDD, EXTENDED     , 7, 0 },
-   /* F4 */    { &op_ANDB, EXTENDED     , 5, 0 },
-   /* F5 */    { &op_BITB, EXTENDED     , 5, 0 },
-   /* F6 */    { &op_LDB , EXTENDED     , 5, 0 },
-   /* F7 */    { &op_STB , EXTENDED     , 5, 0 },
-   /* F8 */    { &op_EORB, EXTENDED     , 5, 0 },
-   /* F9 */    { &op_ADCB, EXTENDED     , 5, 0 },
-   /* FA */    { &op_ORB , EXTENDED     , 5, 0 },
-   /* FB */    { &op_ADDB, EXTENDED     , 5, 0 },
-   /* FC */    { &op_LDD , EXTENDED     , 6, 0 },
-   /* FD */    { &op_STD , EXTENDED     , 6, 0 },
-   /* FE */    { &op_LDU , EXTENDED     , 6, 0 },
-   /* FF */    { &op_STU , EXTENDED     , 6, 0 }
+   /* CE */    { &op_LDU , IMMEDIATE_16 , 0, 3 },
+   /* 8F */    { &op_XSTU, IMMEDIATE_8  , 1, 3 },
+   /* D0 */    { &op_SUBB, DIRECT       , 0, 4 },
+   /* D1 */    { &op_CMPB, DIRECT       , 0, 4 },
+   /* D2 */    { &op_SBCB, DIRECT       , 0, 4 },
+   /* D3 */    { &op_ADDD, DIRECT       , 0, 6 },
+   /* D4 */    { &op_ANDB, DIRECT       , 0, 4 },
+   /* D5 */    { &op_BITB, DIRECT       , 0, 4 },
+   /* D6 */    { &op_LDB , DIRECT       , 0, 4 },
+   /* D7 */    { &op_STB , DIRECT       , 0, 4 },
+   /* D8 */    { &op_EORB, DIRECT       , 0, 4 },
+   /* D9 */    { &op_ADCB, DIRECT       , 0, 4 },
+   /* DA */    { &op_ORB , DIRECT       , 0, 4 },
+   /* DB */    { &op_ADDB, DIRECT       , 0, 4 },
+   /* DC */    { &op_LDD , DIRECT       , 0, 5 },
+   /* DD */    { &op_STD , DIRECT       , 0, 5 },
+   /* DE */    { &op_LDU , DIRECT       , 0, 5 },
+   /* DF */    { &op_STU , DIRECT       , 0, 5 },
+   /* E0 */    { &op_SUBB, INDEXED      , 0, 4 },
+   /* E1 */    { &op_CMPB, INDEXED      , 0, 4 },
+   /* E2 */    { &op_SBCB, INDEXED      , 0, 4 },
+   /* E3 */    { &op_ADDD, INDEXED      , 0, 6 },
+   /* E4 */    { &op_ANDB, INDEXED      , 0, 4 },
+   /* E5 */    { &op_BITB, INDEXED      , 0, 4 },
+   /* E6 */    { &op_LDB , INDEXED      , 0, 4 },
+   /* E7 */    { &op_STB , INDEXED      , 0, 4 },
+   /* E8 */    { &op_EORB, INDEXED      , 0, 4 },
+   /* E9 */    { &op_ADCB, INDEXED      , 0, 4 },
+   /* EA */    { &op_ORB , INDEXED      , 0, 4 },
+   /* EB */    { &op_ADDB, INDEXED      , 0, 4 },
+   /* EC */    { &op_LDD , INDEXED      , 0, 5 },
+   /* ED */    { &op_STD , INDEXED      , 0, 5 },
+   /* EE */    { &op_LDU , INDEXED      , 0, 5 },
+   /* EF */    { &op_STU , INDEXED      , 0, 5 },
+   /* F0 */    { &op_SUBB, EXTENDED     , 0, 5 },
+   /* F1 */    { &op_CMPB, EXTENDED     , 0, 5 },
+   /* F2 */    { &op_SBCB, EXTENDED     , 0, 5 },
+   /* F3 */    { &op_ADDD, EXTENDED     , 0, 7 },
+   /* F4 */    { &op_ANDB, EXTENDED     , 0, 5 },
+   /* F5 */    { &op_BITB, EXTENDED     , 0, 5 },
+   /* F6 */    { &op_LDB , EXTENDED     , 0, 5 },
+   /* F7 */    { &op_STB , EXTENDED     , 0, 5 },
+   /* F8 */    { &op_EORB, EXTENDED     , 0, 5 },
+   /* F9 */    { &op_ADCB, EXTENDED     , 0, 5 },
+   /* FA */    { &op_ORB , EXTENDED     , 0, 5 },
+   /* FB */    { &op_ADDB, EXTENDED     , 0, 5 },
+   /* FC */    { &op_LDD , EXTENDED     , 0, 6 },
+   /* FD */    { &op_STD , EXTENDED     , 0, 6 },
+   /* FE */    { &op_LDU , EXTENDED     , 0, 6 },
+   /* FF */    { &op_STU , EXTENDED     , 0, 6 }
 };
 
 static instr_mode_t instr_table_6809_map1[] = {
@@ -3546,22 +4083,22 @@ static instr_mode_t instr_table_6809_map1[] = {
    /* 1D */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 1E */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 1F */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* 20 */    { &op_LBRA, RELATIVE_16  , 5, 1 },
-   /* 21 */    { &op_LBRN, RELATIVE_16  , 5, 0 },
-   /* 22 */    { &op_LBHI, RELATIVE_16  , 5, 0 },
-   /* 23 */    { &op_LBLS, RELATIVE_16  , 5, 0 },
-   /* 24 */    { &op_LBCC, RELATIVE_16  , 5, 0 },
-   /* 25 */    { &op_LBLO, RELATIVE_16  , 5, 0 },
-   /* 26 */    { &op_LBNE, RELATIVE_16  , 5, 0 },
-   /* 27 */    { &op_LBEQ, RELATIVE_16  , 5, 0 },
-   /* 28 */    { &op_LBVC, RELATIVE_16  , 5, 0 },
-   /* 29 */    { &op_LBVS, RELATIVE_16  , 5, 0 },
-   /* 2A */    { &op_LBPL, RELATIVE_16  , 5, 0 },
-   /* 2B */    { &op_LBMI, RELATIVE_16  , 5, 0 },
-   /* 2C */    { &op_LBGE, RELATIVE_16  , 5, 0 },
-   /* 2D */    { &op_LBLT, RELATIVE_16  , 5, 0 },
-   /* 2E */    { &op_LBGT, RELATIVE_16  , 5, 0 },
-   /* 2F */    { &op_LBLE, RELATIVE_16  , 5, 0 },
+   /* 20 */    { &op_LBRA, RELATIVE_16  , 1, 5 },
+   /* 21 */    { &op_LBRN, RELATIVE_16  , 0, 5 },
+   /* 22 */    { &op_LBHI, RELATIVE_16  , 0, 5 },
+   /* 23 */    { &op_LBLS, RELATIVE_16  , 0, 5 },
+   /* 24 */    { &op_LBCC, RELATIVE_16  , 0, 5 },
+   /* 25 */    { &op_LBLO, RELATIVE_16  , 0, 5 },
+   /* 26 */    { &op_LBNE, RELATIVE_16  , 0, 5 },
+   /* 27 */    { &op_LBEQ, RELATIVE_16  , 0, 5 },
+   /* 28 */    { &op_LBVC, RELATIVE_16  , 0, 5 },
+   /* 29 */    { &op_LBVS, RELATIVE_16  , 0, 5 },
+   /* 2A */    { &op_LBPL, RELATIVE_16  , 0, 5 },
+   /* 2B */    { &op_LBMI, RELATIVE_16  , 0, 5 },
+   /* 2C */    { &op_LBGE, RELATIVE_16  , 0, 5 },
+   /* 2D */    { &op_LBLT, RELATIVE_16  , 0, 5 },
+   /* 2E */    { &op_LBGT, RELATIVE_16  , 0, 5 },
+   /* 2F */    { &op_LBLE, RELATIVE_16  , 0, 5 },
    /* 30 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 31 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 32 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -3577,7 +4114,7 @@ static instr_mode_t instr_table_6809_map1[] = {
    /* 3C */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 3D */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 3E */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* 3F */    { &op_SWI2, INHERENT     ,20, 0 },
+   /* 3F */    { &op_SWI2, INHERENT     , 0,20 },
    /* 40 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 41 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 42 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -3645,7 +4182,7 @@ static instr_mode_t instr_table_6809_map1[] = {
    /* 80 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 81 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 82 */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* 83 */    { &op_CMPD, IMMEDIATE_16 , 5, 0 },
+   /* 83 */    { &op_CMPD, IMMEDIATE_16 , 0, 5 },
    /* 84 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 85 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 86 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -3654,14 +4191,14 @@ static instr_mode_t instr_table_6809_map1[] = {
    /* 89 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 8A */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 8B */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* 8C */    { &op_CMPY, IMMEDIATE_16 , 5, 0 },
+   /* 8C */    { &op_CMPY, IMMEDIATE_16 , 0, 5 },
    /* 8D */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* 8E */    { &op_LDY , IMMEDIATE_16 , 4, 0 },
+   /* 8E */    { &op_LDY , IMMEDIATE_16 , 0, 4 },
    /* 8F */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 90 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 91 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 92 */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* 93 */    { &op_CMPD, DIRECT       , 7, 0 },
+   /* 93 */    { &op_CMPD, DIRECT       , 0, 7 },
    /* 94 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 95 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 96 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -3670,14 +4207,14 @@ static instr_mode_t instr_table_6809_map1[] = {
    /* 99 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 9A */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 9B */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* 9C */    { &op_CMPY, DIRECT       , 7, 0 },
+   /* 9C */    { &op_CMPY, DIRECT       , 0, 7 },
    /* 9D */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* 9E */    { &op_LDY , DIRECT       , 6, 0 },
-   /* 9F */    { &op_STY , DIRECT       , 6, 0 },
+   /* 9E */    { &op_LDY , DIRECT       , 0, 6 },
+   /* 9F */    { &op_STY , DIRECT       , 0, 6 },
    /* A0 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* A1 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* A2 */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* A3 */    { &op_CMPD, INDEXED      , 7, 0 },
+   /* A3 */    { &op_CMPD, INDEXED      , 0, 7 },
    /* A4 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* A5 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* A6 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -3686,14 +4223,14 @@ static instr_mode_t instr_table_6809_map1[] = {
    /* A9 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* AA */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* AB */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* AC */    { &op_CMPY, INDEXED      , 7, 0 },
+   /* AC */    { &op_CMPY, INDEXED      , 0, 7 },
    /* AD */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* AE */    { &op_LDY , INDEXED      , 6, 0 },
-   /* AF */    { &op_STY , INDEXED      , 6, 0 },
+   /* AE */    { &op_LDY , INDEXED      , 0, 6 },
+   /* AF */    { &op_STY , INDEXED      , 0, 6 },
    /* B0 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* B1 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* B2 */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* B3 */    { &op_CMPD, EXTENDED     , 8, 0 },
+   /* B3 */    { &op_CMPD, EXTENDED     , 0, 8 },
    /* B4 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* B5 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* B6 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -3702,10 +4239,10 @@ static instr_mode_t instr_table_6809_map1[] = {
    /* B9 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* BA */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* BB */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* BC */    { &op_CMPY, EXTENDED     , 8, 0 },
+   /* BC */    { &op_CMPY, EXTENDED     , 0, 8 },
    /* BD */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* BE */    { &op_LDY , EXTENDED     , 7, 0 },
-   /* BF */    { &op_STY , EXTENDED     , 7, 0 },
+   /* BE */    { &op_LDY , EXTENDED     , 0, 7 },
+   /* BF */    { &op_STY , EXTENDED     , 0, 7 },
    /* C0 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* C1 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* C2 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -3720,7 +4257,7 @@ static instr_mode_t instr_table_6809_map1[] = {
    /* CB */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* CC */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* CD */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* CE */    { &op_LDS , IMMEDIATE_16 , 4, 0 },
+   /* CE */    { &op_LDS , IMMEDIATE_16 , 0, 4 },
    /* CF */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* D0 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* D1 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -3736,8 +4273,8 @@ static instr_mode_t instr_table_6809_map1[] = {
    /* DB */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* DC */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* DD */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* DE */    { &op_LDS , DIRECT       , 6, 0 },
-   /* DF */    { &op_STS , DIRECT       , 6, 0 },
+   /* DE */    { &op_LDS , DIRECT       , 0, 6 },
+   /* DF */    { &op_STS , DIRECT       , 0, 6 },
    /* E0 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* E1 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* E2 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -3752,8 +4289,8 @@ static instr_mode_t instr_table_6809_map1[] = {
    /* EB */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* EC */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* ED */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* EE */    { &op_LDS , INDEXED      , 6, 0 },
-   /* EF */    { &op_STS , INDEXED      , 6, 0 },
+   /* EE */    { &op_LDS , INDEXED      , 0, 6 },
+   /* EF */    { &op_STS , INDEXED      , 0, 6 },
    /* F0 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* F1 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* F2 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -3768,8 +4305,8 @@ static instr_mode_t instr_table_6809_map1[] = {
    /* FB */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* FC */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* FD */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* FE */    { &op_LDS , EXTENDED     , 7, 0 },
-   /* FF */    { &op_STS , EXTENDED     , 7, 0 }
+   /* FE */    { &op_LDS , EXTENDED     , 0, 7 },
+   /* FF */    { &op_STS , EXTENDED     , 0, 7 }
 };
 
 static instr_mode_t instr_table_6809_map2[] = {
@@ -3836,7 +4373,7 @@ static instr_mode_t instr_table_6809_map2[] = {
    /* 3C */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 3D */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 3E */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* 3F */    { &op_SWI3, INHERENT     ,20, 0 },
+   /* 3F */    { &op_SWI3, INHERENT     , 0,20 },
    /* 40 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 41 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 42 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -3904,7 +4441,7 @@ static instr_mode_t instr_table_6809_map2[] = {
    /* 80 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 81 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 82 */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* 83 */    { &op_CMPU, IMMEDIATE_16 , 5, 0 },
+   /* 83 */    { &op_CMPU, IMMEDIATE_16 , 0, 5 },
    /* 84 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 85 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 86 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -3913,14 +4450,14 @@ static instr_mode_t instr_table_6809_map2[] = {
    /* 89 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 8A */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 8B */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* 8C */    { &op_CMPS, IMMEDIATE_16 , 5, 0 },
+   /* 8C */    { &op_CMPS, IMMEDIATE_16 , 0, 5 },
    /* 8D */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 8E */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 8F */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 90 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 91 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 92 */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* 93 */    { &op_CMPU, DIRECT       , 7, 0 },
+   /* 93 */    { &op_CMPU, DIRECT       , 0, 7 },
    /* 94 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 95 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 96 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -3929,14 +4466,14 @@ static instr_mode_t instr_table_6809_map2[] = {
    /* 99 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 9A */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 9B */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* 9C */    { &op_CMPS, DIRECT       , 7, 0 },
+   /* 9C */    { &op_CMPS, DIRECT       , 0, 7 },
    /* 9D */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 9E */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 9F */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* A0 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* A1 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* A2 */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* A3 */    { &op_CMPU, INDEXED      , 7, 0 },
+   /* A3 */    { &op_CMPU, INDEXED      , 0, 7 },
    /* A4 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* A5 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* A6 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -3945,14 +4482,14 @@ static instr_mode_t instr_table_6809_map2[] = {
    /* A9 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* AA */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* AB */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* AC */    { &op_CMPS, INDEXED      , 7, 0 },
+   /* AC */    { &op_CMPS, INDEXED      , 0, 7 },
    /* AD */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* AE */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* AF */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* B0 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* B1 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* B2 */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* B3 */    { &op_CMPU, EXTENDED     , 8, 0 },
+   /* B3 */    { &op_CMPU, EXTENDED     , 0, 8 },
    /* B4 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* B5 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* B6 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -3961,7 +4498,7 @@ static instr_mode_t instr_table_6809_map2[] = {
    /* B9 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* BA */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* BB */    { &op_XX  , ILLEGAL      , 1, 1 },
-   /* BC */    { &op_CMPS, EXTENDED     , 8, 0 },
+   /* BC */    { &op_CMPS, EXTENDED     , 0, 8 },
    /* BD */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* BE */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* BF */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -4029,4 +4566,785 @@ static instr_mode_t instr_table_6809_map2[] = {
    /* FD */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* FE */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* FF */    { &op_XX  , ILLEGAL      , 1, 1 }
+};
+
+// ====================================================================
+// 6309 Opcode Tables
+// ====================================================================
+
+static instr_mode_t instr_table_6309_map0[] = {
+   /* 00 */    { &op_NEG , DIRECT       , 0, 6, 5 },
+   /* 01 */    { &op_OIM , IMMEDIATE_8  , 0, 6, 6 },
+   /* 02 */    { &op_AIM , IMMEDIATE_8  , 0, 6, 6 },
+   /* 03 */    { &op_COM , DIRECT       , 0, 6, 5 },
+   /* 04 */    { &op_LSR , DIRECT       , 0, 6, 5 },
+   /* 05 */    { &op_EIM , IMMEDIATE_8  , 0, 6, 6 },
+   /* 06 */    { &op_ROR , DIRECT       , 0, 6, 5 },
+   /* 07 */    { &op_ASR , DIRECT       , 0, 6, 5 },
+   /* 08 */    { &op_ASL , DIRECT       , 0, 6, 5 },
+   /* 09 */    { &op_ROL , DIRECT       , 0, 6, 5 },
+   /* 0A */    { &op_DEC , DIRECT       , 0, 6, 5 },
+   /* 0B */    { &op_TIM , IMMEDIATE_8  , 0, 6, 6 },
+   /* 0C */    { &op_INC , DIRECT       , 0, 6, 5 },
+   /* 0D */    { &op_TST , DIRECT       , 0, 6, 4 },
+   /* 0E */    { &op_JMP , DIRECT       , 0, 3, 2 },
+   /* 0F */    { &op_CLR , DIRECT       , 0, 6, 5 },
+   /* 10 */    { &op_UU  , INHERENT     , 0, 1, 1 },
+   /* 11 */    { &op_UU  , INHERENT     , 0, 1, 1 },
+   /* 12 */    { &op_NOP , INHERENT     , 0, 2, 1 },
+   /* 13 */    { &op_SYNC, INHERENT     , 0, 4, 4 },
+   /* 14 */    { &op_SEXW, INHERENT     , 0, 2, 1 },
+   /* 15 */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* 16 */    { &op_LBRA, RELATIVE_16  , 0, 5, 4 },
+   /* 17 */    { &op_LBSR, RELATIVE_16  , 0, 9, 7 },
+   /* 18 */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* 19 */    { &op_DAA , INHERENT     , 0, 2, 1 },
+   /* 1A */    { &op_ORCC, REGISTER     , 0, 3, 2 },
+   /* 1B */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* 1C */    { &op_ANDC, REGISTER     , 0, 3, 3 },
+   /* 1D */    { &op_SEX , INHERENT     , 0, 2, 1 },
+   /* 1E */    { &op_EXG , REGISTER     , 0, 8, 5 },
+   /* 1F */    { &op_TFR , REGISTER     , 0, 6, 4 },
+   /* 20 */    { &op_BRA , RELATIVE_8   , 0, 3, 3 },
+   /* 21 */    { &op_BRN , RELATIVE_8   , 0, 3, 3 },
+   /* 22 */    { &op_BHI , RELATIVE_8   , 0, 3, 3 },
+   /* 23 */    { &op_BLS , RELATIVE_8   , 0, 3, 3 },
+   /* 24 */    { &op_BCC , RELATIVE_8   , 0, 3, 3 },
+   /* 25 */    { &op_BLO , RELATIVE_8   , 0, 3, 3 },
+   /* 26 */    { &op_BNE , RELATIVE_8   , 0, 3, 3 },
+   /* 27 */    { &op_BEQ , RELATIVE_8   , 0, 3, 3 },
+   /* 28 */    { &op_BVC , RELATIVE_8   , 0, 3, 3 },
+   /* 29 */    { &op_BVS , RELATIVE_8   , 0, 3, 3 },
+   /* 2A */    { &op_BPL , RELATIVE_8   , 0, 3, 3 },
+   /* 2B */    { &op_BMI , RELATIVE_8   , 0, 3, 3 },
+   /* 2C */    { &op_BGE , RELATIVE_8   , 0, 3, 3 },
+   /* 2D */    { &op_BLT , RELATIVE_8   , 0, 3, 3 },
+   /* 2E */    { &op_BGT , RELATIVE_8   , 0, 3, 3 },
+   /* 2F */    { &op_BLE , RELATIVE_8   , 0, 3, 3 },
+   /* 30 */    { &op_LEAX, INDEXED      , 0, 4, 4 },
+   /* 31 */    { &op_LEAY, INDEXED      , 0, 4, 4 },
+   /* 32 */    { &op_LEAS, INDEXED      , 0, 4, 4 },
+   /* 33 */    { &op_LEAU, INDEXED      , 0, 4, 4 },
+   /* 34 */    { &op_PSHS, REGISTER     , 0, 5, 4 },
+   /* 35 */    { &op_PULS, REGISTER     , 0, 5, 4 },
+   /* 36 */    { &op_PSHU, REGISTER     , 0, 5, 4 },
+   /* 37 */    { &op_PULU, REGISTER     , 0, 5, 4 },
+   /* 38 */    { &op_XX,   ILLEGAL      , 1,19,21 },
+   /* 39 */    { &op_RTS , INHERENT     , 0, 5, 4 },
+   /* 3A */    { &op_ABX , INHERENT     , 0, 3, 1 },
+   /* 3B */    { &op_RTI , INHERENT     , 0, 6, 6 },
+   /* 3C */    { &op_CWAI, IMMEDIATE_8  , 0,20,22 },
+   /* 3D */    { &op_MUL , INHERENT     , 0,11,10 },
+   /* 3E */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* 3F */    { &op_SWI , INHERENT     , 0,19,21 },
+   /* 40 */    { &op_NEGA, INHERENT     , 0, 2, 1 },
+   /* 41 */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* 42 */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* 43 */    { &op_COMA, INHERENT     , 0, 2, 1 },
+   /* 44 */    { &op_LSRA, INHERENT     , 0, 2, 1 },
+   /* 45 */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* 46 */    { &op_RORA, INHERENT     , 0, 2, 1 },
+   /* 47 */    { &op_ASRA, INHERENT     , 0, 2, 1 },
+   /* 48 */    { &op_ASLA, INHERENT     , 0, 2, 1 },
+   /* 49 */    { &op_ROLA, INHERENT     , 0, 2, 1 },
+   /* 4A */    { &op_DECA, INHERENT     , 0, 2, 1 },
+   /* 4B */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* 4C */    { &op_INCA, INHERENT     , 0, 2, 1 },
+   /* 4D */    { &op_TSTA, INHERENT     , 0, 2, 1 },
+   /* 4E */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* 4F */    { &op_CLRA, INHERENT     , 0, 2, 1 },
+   /* 50 */    { &op_NEGB, INHERENT     , 0, 2, 1 },
+   /* 51 */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* 52 */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* 53 */    { &op_COMB, INHERENT     , 0, 2, 1 },
+   /* 54 */    { &op_LSRB, INHERENT     , 0, 2, 1 },
+   /* 55 */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* 56 */    { &op_RORB, INHERENT     , 0, 2, 1 },
+   /* 57 */    { &op_ASRB, INHERENT     , 0, 2, 1 },
+   /* 58 */    { &op_ASLB, INHERENT     , 0, 2, 1 },
+   /* 59 */    { &op_ROLB, INHERENT     , 0, 2, 1 },
+   /* 5A */    { &op_DECB, INHERENT     , 0, 2, 1 },
+   /* 5B */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* 5C */    { &op_INCB, INHERENT     , 0, 2, 1 },
+   /* 5D */    { &op_TSTB, INHERENT     , 0, 2, 1 },
+   /* 5E */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* 5F */    { &op_CLRB, INHERENT     , 0, 2, 1 },
+   /* 60 */    { &op_NEG , INDEXED      , 0, 6, 6 },
+   /* 61 */    { &op_OIM , INDEXED      , 0, 6, 6 },
+   /* 62 */    { &op_AIM , INDEXED      , 0, 6, 6 },
+   /* 63 */    { &op_COM , INDEXED      , 0, 6, 6 },
+   /* 64 */    { &op_LSR , INDEXED      , 0, 6, 6 },
+   /* 65 */    { &op_EIM , INDEXED      , 0, 6, 6 },
+   /* 66 */    { &op_ROR , INDEXED      , 0, 6, 6 },
+   /* 67 */    { &op_ASR , INDEXED      , 0, 6, 6 },
+   /* 68 */    { &op_ASL , INDEXED      , 0, 6, 6 },
+   /* 69 */    { &op_ROL , INDEXED      , 0, 6, 6 },
+   /* 6A */    { &op_DEC , INDEXED      , 0, 6, 6 },
+   /* 6B */    { &op_TIM , INDEXED      , 0, 6, 6 },
+   /* 6C */    { &op_INC , INDEXED      , 0, 6, 6 },
+   /* 6D */    { &op_TST , INDEXED      , 0, 6, 5 },
+   /* 6E */    { &op_JMP , INDEXED      , 0, 3, 3 },
+   /* 6F */    { &op_CLR , INDEXED      , 0, 6, 6 },
+   /* 70 */    { &op_NEG , EXTENDED     , 0, 7, 6 },
+   /* 71 */    { &op_OIM , EXTENDED     , 0, 7, 7 },
+   /* 72 */    { &op_AIM , EXTENDED     , 0, 7, 7 },
+   /* 73 */    { &op_COM , EXTENDED     , 0, 7, 6 },
+   /* 74 */    { &op_LSR , EXTENDED     , 0, 7, 6 },
+   /* 75 */    { &op_EIM , EXTENDED     , 0, 7, 7 },
+   /* 76 */    { &op_ROR , EXTENDED     , 0, 7, 6 },
+   /* 77 */    { &op_ASR , EXTENDED     , 0, 7, 6 },
+   /* 78 */    { &op_ASL , EXTENDED     , 0, 7, 6 },
+   /* 79 */    { &op_ROL , EXTENDED     , 0, 7, 6 },
+   /* 7A */    { &op_DEC , EXTENDED     , 0, 7, 6 },
+   /* 7B */    { &op_TIM , EXTENDED     , 0, 7, 7 },
+   /* 7C */    { &op_INC , EXTENDED     , 0, 7, 7 },
+   /* 7D */    { &op_TST , EXTENDED     , 0, 7, 5 },
+   /* 7E */    { &op_JMP , EXTENDED     , 0, 4, 3 },
+   /* 7F */    { &op_CLR , EXTENDED     , 0, 7, 6 },
+   /* 80 */    { &op_SUBA, IMMEDIATE_8  , 0, 2, 2 },
+   /* 81 */    { &op_CMPA, IMMEDIATE_8  , 0, 2, 2 },
+   /* 82 */    { &op_SBCA, IMMEDIATE_8  , 0, 2, 2 },
+   /* 83 */    { &op_SUBD, IMMEDIATE_16 , 0, 4, 3 },
+   /* 84 */    { &op_ANDA, IMMEDIATE_8  , 0, 2, 2 },
+   /* 85 */    { &op_BITA, IMMEDIATE_8  , 0, 2, 2 },
+   /* 86 */    { &op_LDA , IMMEDIATE_8  , 0, 2, 2 },
+   /* 87 */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* 88 */    { &op_EORA, IMMEDIATE_8  , 0, 2, 2 },
+   /* 89 */    { &op_ADCA, IMMEDIATE_8  , 0, 2, 2 },
+   /* 8A */    { &op_ORA , IMMEDIATE_8  , 0, 2, 2 },
+   /* 8B */    { &op_ADDA, IMMEDIATE_8  , 0, 2, 2 },
+   /* 8C */    { &op_CMPX, IMMEDIATE_16 , 0, 4, 3 },
+   /* 8D */    { &op_BSR , RELATIVE_8   , 0, 7, 6 },
+   /* 8E */    { &op_LDX , IMMEDIATE_16 , 0, 3, 3 },
+   /* 8F */    { &op_XX  , ILLEGAL      , 1,19,19 },
+   /* 90 */    { &op_SUBA, DIRECT       , 0, 4, 3 },
+   /* 91 */    { &op_CMPA, DIRECT       , 0, 4, 3 },
+   /* 92 */    { &op_SBCA, DIRECT       , 0, 4, 3 },
+   /* 93 */    { &op_SUBD, DIRECT       , 0, 6, 4 },
+   /* 94 */    { &op_ANDA, DIRECT       , 0, 4, 3 },
+   /* 95 */    { &op_BITA, DIRECT       , 0, 4, 3 },
+   /* 96 */    { &op_LDA , DIRECT       , 0, 4, 3 },
+   /* 97 */    { &op_STA , DIRECT       , 0, 4, 3 },
+   /* 98 */    { &op_EORA, DIRECT       , 0, 4, 3 },
+   /* 99 */    { &op_ADCA, DIRECT       , 0, 4, 3 },
+   /* 9A */    { &op_ORA , DIRECT       , 0, 4, 3 },
+   /* 9B */    { &op_ADDA, DIRECT       , 0, 4, 3 },
+   /* 9C */    { &op_CMPX, DIRECT       , 0, 6, 4 },
+   /* 9D */    { &op_JSR , DIRECT       , 0, 7, 6 },
+   /* 9E */    { &op_LDX , DIRECT       , 0, 5, 4 },
+   /* 9F */    { &op_STX , DIRECT       , 0, 5, 4 },
+   /* A0 */    { &op_SUBA, INDEXED      , 0, 4, 4 },
+   /* A1 */    { &op_CMPA, INDEXED      , 0, 4, 4 },
+   /* A2 */    { &op_SBCA, INDEXED      , 0, 4, 4 },
+   /* A3 */    { &op_SUBD, INDEXED      , 0, 6, 5 },
+   /* A4 */    { &op_ANDA, INDEXED      , 0, 4, 4 },
+   /* A5 */    { &op_BITA, INDEXED      , 0, 4, 4 },
+   /* A6 */    { &op_LDA , INDEXED      , 0, 4, 4 },
+   /* A7 */    { &op_STA , INDEXED      , 0, 4, 4 },
+   /* A8 */    { &op_EORA, INDEXED      , 0, 4, 4 },
+   /* A9 */    { &op_ADCA, INDEXED      , 0, 4, 4 },
+   /* AA */    { &op_ORA , INDEXED      , 0, 4, 4 },
+   /* AB */    { &op_ADDA, INDEXED      , 0, 4, 4 },
+   /* AC */    { &op_CMPX, INDEXED      , 0, 6, 5 },
+   /* AD */    { &op_JSR , INDEXED      , 0, 7, 6 },
+   /* AE */    { &op_LDX , INDEXED      , 0, 5, 5 },
+   /* AF */    { &op_STX , INDEXED      , 0, 5, 5 },
+   /* B0 */    { &op_SUBA, EXTENDED     , 0, 5, 4 },
+   /* B1 */    { &op_CMPA, EXTENDED     , 0, 5, 4 },
+   /* B2 */    { &op_SBCA, EXTENDED     , 0, 5, 4 },
+   /* B3 */    { &op_SUBD, EXTENDED     , 0, 7, 5 },
+   /* B4 */    { &op_ANDA, EXTENDED     , 0, 5, 4 },
+   /* B5 */    { &op_BITA, EXTENDED     , 0, 5, 4 },
+   /* B6 */    { &op_LDA , EXTENDED     , 0, 5, 4 },
+   /* B7 */    { &op_STA , EXTENDED     , 0, 5, 4 },
+   /* B8 */    { &op_EORA, EXTENDED     , 0, 5, 4 },
+   /* B9 */    { &op_ADCA, EXTENDED     , 0, 5, 4 },
+   /* BA */    { &op_ORA , EXTENDED     , 0, 5, 4 },
+   /* BB */    { &op_ADDA, EXTENDED     , 0, 5, 4 },
+   /* BC */    { &op_CMPX, EXTENDED     , 0, 7, 5 },
+   /* BD */    { &op_JSR , EXTENDED     , 0, 8, 7 },
+   /* BE */    { &op_LDX , EXTENDED     , 0, 6, 5 },
+   /* BF */    { &op_STX , EXTENDED     , 0, 6, 5 },
+   /* C0 */    { &op_SUBB, IMMEDIATE_8  , 0, 2, 2 },
+   /* C1 */    { &op_CMPB, IMMEDIATE_8  , 0, 2, 2 },
+   /* C2 */    { &op_SBCB, IMMEDIATE_8  , 0, 2, 2 },
+   /* C3 */    { &op_ADDD, IMMEDIATE_16 , 0, 4, 3 },
+   /* C4 */    { &op_ANDB, IMMEDIATE_8  , 0, 2, 2 },
+   /* C5 */    { &op_BITB, IMMEDIATE_8  , 0, 2, 2 },
+   /* C6 */    { &op_LDB , IMMEDIATE_8  , 0, 2, 2 },
+   /* C7 */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* C8 */    { &op_EORB, IMMEDIATE_8  , 0, 2, 2 },
+   /* C9 */    { &op_ADCB, IMMEDIATE_8  , 0, 2, 2 },
+   /* CA */    { &op_ORB , IMMEDIATE_8  , 0, 2, 2 },
+   /* CB */    { &op_ADDB, IMMEDIATE_8  , 0, 2, 2 },
+   /* CC */    { &op_LDD , IMMEDIATE_16 , 0, 3, 3 },
+   /* CD */    { &op_LDQ , IMMEDIATE_32 , 0, 5, 5 },
+   /* CE */    { &op_LDU , IMMEDIATE_16 , 0, 3, 3 },
+   /* CF */    { &op_XX  , ILLEGAL      , 1,19,21 },
+   /* D0 */    { &op_SUBB, DIRECT       , 0, 4, 3 },
+   /* D1 */    { &op_CMPB, DIRECT       , 0, 4, 3 },
+   /* D2 */    { &op_SBCB, DIRECT       , 0, 4, 3 },
+   /* D3 */    { &op_ADDD, DIRECT       , 0, 6, 4 },
+   /* D4 */    { &op_ANDB, DIRECT       , 0, 4, 3 },
+   /* D5 */    { &op_BITB, DIRECT       , 0, 4, 3 },
+   /* D6 */    { &op_LDB , DIRECT       , 0, 4, 3 },
+   /* D7 */    { &op_STB , DIRECT       , 0, 4, 3 },
+   /* D8 */    { &op_EORB, DIRECT       , 0, 4, 3 },
+   /* D9 */    { &op_ADCB, DIRECT       , 0, 4, 3 },
+   /* DA */    { &op_ORB , DIRECT       , 0, 4, 3 },
+   /* DB */    { &op_ADDB, DIRECT       , 0, 4, 3 },
+   /* DC */    { &op_LDD , DIRECT       , 0, 5, 4 },
+   /* DD */    { &op_STD , DIRECT       , 0, 5, 4 },
+   /* DE */    { &op_LDU , DIRECT       , 0, 5, 4 },
+   /* DF */    { &op_STU , DIRECT       , 0, 5, 4 },
+   /* E0 */    { &op_SUBB, INDEXED      , 0, 4, 4 },
+   /* E1 */    { &op_CMPB, INDEXED      , 0, 4, 4 },
+   /* E2 */    { &op_SBCB, INDEXED      , 0, 4, 4 },
+   /* E3 */    { &op_ADDD, INDEXED      , 0, 6, 5 },
+   /* E4 */    { &op_ANDB, INDEXED      , 0, 4, 4 },
+   /* E5 */    { &op_BITB, INDEXED      , 0, 4, 4 },
+   /* E6 */    { &op_LDB , INDEXED      , 0, 4, 4 },
+   /* E7 */    { &op_STB , INDEXED      , 0, 4, 4 },
+   /* E8 */    { &op_EORB, INDEXED      , 0, 4, 4 },
+   /* E9 */    { &op_ADCB, INDEXED      , 0, 4, 4 },
+   /* EA */    { &op_ORB , INDEXED      , 0, 4, 4 },
+   /* EB */    { &op_ADDB, INDEXED      , 0, 4, 4 },
+   /* EC */    { &op_LDD , INDEXED      , 0, 5, 5 },
+   /* ED */    { &op_STD , INDEXED      , 0, 5, 5 },
+   /* EE */    { &op_LDU , INDEXED      , 0, 5, 5 },
+   /* EF */    { &op_STU , INDEXED      , 0, 5, 5 },
+   /* F0 */    { &op_SUBB, EXTENDED     , 0, 5, 4 },
+   /* F1 */    { &op_CMPB, EXTENDED     , 0, 5, 4 },
+   /* F2 */    { &op_SBCB, EXTENDED     , 0, 5, 4 },
+   /* F3 */    { &op_ADDD, EXTENDED     , 0, 7, 5 },
+   /* F4 */    { &op_ANDB, EXTENDED     , 0, 5, 4 },
+   /* F5 */    { &op_BITB, EXTENDED     , 0, 5, 4 },
+   /* F6 */    { &op_LDB , EXTENDED     , 0, 5, 4 },
+   /* F7 */    { &op_STB , EXTENDED     , 0, 5, 4 },
+   /* F8 */    { &op_EORB, EXTENDED     , 0, 5, 4 },
+   /* F9 */    { &op_ADCB, EXTENDED     , 0, 5, 4 },
+   /* FA */    { &op_ORB , EXTENDED     , 0, 5, 4 },
+   /* FB */    { &op_ADDB, EXTENDED     , 0, 5, 4 },
+   /* FC */    { &op_LDD , EXTENDED     , 0, 6, 5 },
+   /* FD */    { &op_STD , EXTENDED     , 0, 6, 5 },
+   /* FE */    { &op_LDU , EXTENDED     , 0, 6, 5 },
+   /* FF */    { &op_STU , EXTENDED     , 0, 6, 5 }
+};
+
+static instr_mode_t instr_table_6309_map1[] = {
+   /* 00 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 01 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 02 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 03 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 04 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 05 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 06 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 07 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 08 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 09 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 0A */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 0B */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 0C */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 0D */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 0E */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 0F */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 10 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 11 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 12 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 13 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 14 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 15 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 16 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 17 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 18 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 19 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 1A */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 1B */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 1C */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 1D */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 1E */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 1F */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 20 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 21 */    { &op_LBRN , RELATIVE_16  , 0, 5, 5 },
+   /* 22 */    { &op_LBHI , RELATIVE_16  , 0, 5, 5 },
+   /* 23 */    { &op_LBLS , RELATIVE_16  , 0, 5, 5 },
+   /* 24 */    { &op_LBCC , RELATIVE_16  , 0, 5, 5 },
+   /* 25 */    { &op_LBLO , RELATIVE_16  , 0, 5, 5 },
+   /* 26 */    { &op_LBNE , RELATIVE_16  , 0, 5, 5 },
+   /* 27 */    { &op_LBEQ , RELATIVE_16  , 0, 5, 5 },
+   /* 28 */    { &op_LBVC , RELATIVE_16  , 0, 5, 5 },
+   /* 29 */    { &op_LBVS , RELATIVE_16  , 0, 5, 5 },
+   /* 2A */    { &op_LBPL , RELATIVE_16  , 0, 5, 5 },
+   /* 2B */    { &op_LBMI , RELATIVE_16  , 0, 5, 5 },
+   /* 2C */    { &op_LBGE , RELATIVE_16  , 0, 5, 5 },
+   /* 2D */    { &op_LBLT , RELATIVE_16  , 0, 5, 5 },
+   /* 2E */    { &op_LBGT , RELATIVE_16  , 0, 5, 5 },
+   /* 2F */    { &op_LBLE , RELATIVE_16  , 0, 5, 5 },
+   /* 30 */    { &op_ADDR , REGISTER     , 0, 4, 4 },
+   /* 31 */    { &op_ADCR , REGISTER     , 0, 4, 4 },
+   /* 32 */    { &op_SUBR , REGISTER     , 0, 4, 4 },
+   /* 33 */    { &op_SBCR , REGISTER     , 0, 4, 4 },
+   /* 34 */    { &op_ANDR , REGISTER     , 0, 4, 4 },
+   /* 35 */    { &op_ORR  , REGISTER     , 0, 4, 4 },
+   /* 36 */    { &op_EORR , REGISTER     , 0, 4, 4 },
+   /* 37 */    { &op_CMPR , REGISTER     , 0, 4, 4 },
+   /* 38 */    { &op_PSHSW, INHERENT     , 0, 6, 6 },
+   /* 39 */    { &op_PULSW, INHERENT     , 0, 6, 6 },
+   /* 3A */    { &op_PSHUW, INHERENT     , 0, 6, 6 },
+   /* 3B */    { &op_PULUW, INHERENT     , 0, 6, 6 },
+   /* 3C */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 3D */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 3E */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 3F */    { &op_SWI2 , INHERENT     , 0,20,22 },
+   /* 40 */    { &op_NEGD , INHERENT     , 0, 2, 1 },
+   /* 41 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 42 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 43 */    { &op_COMD , INHERENT     , 0, 2, 1 },
+   /* 44 */    { &op_LSRD , INHERENT     , 0, 2, 1 },
+   /* 45 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 46 */    { &op_RORD , INHERENT     , 0, 2, 1 },
+   /* 47 */    { &op_ASRD , INHERENT     , 0, 2, 1 },
+   /* 48 */    { &op_ASLD , INHERENT     , 0, 2, 1 },
+   /* 49 */    { &op_ROLD , INHERENT     , 0, 2, 1 },
+   /* 4A */    { &op_DECD , INHERENT     , 0, 2, 1 },
+   /* 4B */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 4C */    { &op_INCD , INHERENT     , 0, 2, 1 },
+   /* 4D */    { &op_TSTD , INHERENT     , 0, 2, 1 },
+   /* 4E */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 4F */    { &op_CLRD , INHERENT     , 0, 2, 1 },
+   /* 50 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 51 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 52 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 53 */    { &op_COMW , INHERENT     , 0, 3, 2 },
+   /* 54 */    { &op_LSRW , INHERENT     , 0, 3, 2 },
+   /* 55 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 56 */    { &op_RORW , INHERENT     , 0, 3, 2 },
+   /* 57 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 58 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 59 */    { &op_ROLW , INHERENT     , 0, 3, 2 },
+   /* 5A */    { &op_DECW , INHERENT     , 0, 3, 2 },
+   /* 5B */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 5C */    { &op_INCW , INHERENT     , 0, 3, 2 },
+   /* 5D */    { &op_TSTW , INHERENT     , 0, 3, 2 },
+   /* 5E */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 5F */    { &op_CLRW , INHERENT     , 0, 3, 2 },
+   /* 60 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 61 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 62 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 63 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 64 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 65 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 66 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 67 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 68 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 69 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 6A */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 6B */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 6C */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 6D */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 6E */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 6F */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 70 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 71 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 72 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 73 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 74 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 75 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 76 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 77 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 78 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 79 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 7A */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 7B */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 7C */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 7D */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 7E */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 7F */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 80 */    { &op_SUBW , IMMEDIATE_16 , 0, 5, 4 },
+   /* 81 */    { &op_CMPW , IMMEDIATE_16 , 0, 5, 4 },
+   /* 82 */    { &op_SBCD , IMMEDIATE_16 , 0, 5, 4 },
+   /* 83 */    { &op_CMPD , IMMEDIATE_16 , 0, 5, 4 },
+   /* 84 */    { &op_ANDD , IMMEDIATE_16 , 0, 5, 4 },
+   /* 85 */    { &op_BITD , IMMEDIATE_16 , 0, 5, 4 },
+   /* 86 */    { &op_LDW  , IMMEDIATE_16 , 0, 4, 4 },
+   /* 87 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 88 */    { &op_EORD , IMMEDIATE_16 , 0, 5, 4 },
+   /* 89 */    { &op_ADCD , IMMEDIATE_16 , 0, 5, 4 },
+   /* 8A */    { &op_ORD  , IMMEDIATE_16 , 0, 5, 4 },
+   /* 8B */    { &op_ADDW , IMMEDIATE_16 , 0, 5, 4 },
+   /* 8C */    { &op_CMPY , IMMEDIATE_16 , 0, 5, 4 },
+   /* 8D */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 8E */    { &op_LDY  , IMMEDIATE_16 , 0, 4, 4 },
+   /* 8F */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 90 */    { &op_SUBW , DIRECT       , 0, 7, 5 },
+   /* 91 */    { &op_CMPW , DIRECT       , 0, 7, 5 },
+   /* 92 */    { &op_SBCD , DIRECT       , 0, 7, 5 },
+   /* 93 */    { &op_CMPD , DIRECT       , 0, 7, 5 },
+   /* 94 */    { &op_ANDD , DIRECT       , 0, 7, 5 },
+   /* 95 */    { &op_BITD , DIRECT       , 0, 7, 5 },
+   /* 96 */    { &op_LDW  , DIRECT       , 0, 6, 5 },
+   /* 97 */    { &op_STW  , DIRECT       , 0, 6, 5 },
+   /* 98 */    { &op_EORD , DIRECT       , 0, 7, 5 },
+   /* 99 */    { &op_ADCD , DIRECT       , 0, 7, 5 },
+   /* 9A */    { &op_ORD  , DIRECT       , 0, 7, 5 },
+   /* 9B */    { &op_ADDW , DIRECT       , 0, 7, 5 },
+   /* 9C */    { &op_CMPY , DIRECT       , 0, 7, 5 },
+   /* 9D */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* 9E */    { &op_LDY  , DIRECT       , 0, 6, 5 },
+   /* 9F */    { &op_STY  , DIRECT       , 0, 6, 5 },
+   /* A0 */    { &op_SUBW , INDEXED      , 0, 7, 6 },
+   /* A1 */    { &op_CMPW , INDEXED      , 0, 7, 6 },
+   /* A2 */    { &op_SBCD , INDEXED      , 0, 7, 6 },
+   /* A3 */    { &op_CMPD , INDEXED      , 0, 7, 6 },
+   /* A4 */    { &op_ANDD , INDEXED      , 0, 7, 6 },
+   /* A5 */    { &op_BITD , INDEXED      , 0, 7, 6 },
+   /* A6 */    { &op_LDW  , INDEXED      , 0, 6, 6 },
+   /* A7 */    { &op_STW  , INDEXED      , 0, 6, 6 },
+   /* A8 */    { &op_EORD , INDEXED      , 0, 7, 6 },
+   /* A9 */    { &op_ADCD , INDEXED      , 0, 7, 6 },
+   /* AA */    { &op_ORD  , INDEXED      , 0, 7, 6 },
+   /* AB */    { &op_ADDW , INDEXED      , 0, 7, 6 },
+   /* AC */    { &op_CMPY , INDEXED      , 0, 7, 6 },
+   /* AD */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* AE */    { &op_LDY  , INDEXED      , 0, 6, 5 },
+   /* AF */    { &op_STY  , INDEXED      , 0, 6, 5 },
+   /* B0 */    { &op_SUBW , EXTENDED     , 0, 8, 6 },
+   /* B1 */    { &op_CMPW , EXTENDED     , 0, 8, 6 },
+   /* B2 */    { &op_SBCD , EXTENDED     , 0, 8, 6 },
+   /* B3 */    { &op_CMPD , EXTENDED     , 0, 8, 6 },
+   /* B4 */    { &op_ANDD , EXTENDED     , 0, 8, 6 },
+   /* B5 */    { &op_BITD , EXTENDED     , 0, 8, 6 },
+   /* B6 */    { &op_LDW  , EXTENDED     , 0, 7, 6 },
+   /* B7 */    { &op_STW  , EXTENDED     , 0, 7, 6 },
+   /* B8 */    { &op_EORD , EXTENDED     , 0, 8, 6 },
+   /* B9 */    { &op_ADCD , EXTENDED     , 0, 8, 6 },
+   /* BA */    { &op_ORD  , EXTENDED     , 0, 8, 6 },
+   /* BB */    { &op_ADDW , EXTENDED     , 0, 8, 6 },
+   /* BC */    { &op_CMPY , EXTENDED     , 0, 8, 6 },
+   /* BD */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* BE */    { &op_LDY  , EXTENDED     , 0, 7, 6 },
+   /* BF */    { &op_STY  , EXTENDED     , 0, 7, 6 },
+   /* C0 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* C1 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* C2 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* C3 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* C4 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* C5 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* C6 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* C7 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* C8 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* C9 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* CA */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* CB */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* CC */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* CD */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* CE */    { &op_LDS  , IMMEDIATE_16 , 0, 4, 4 },
+   /* CF */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* D0 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* D1 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* D2 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* D3 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* D4 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* D5 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* D6 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* D7 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* D8 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* D9 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* DA */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* DB */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* DC */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* DD */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* DE */    { &op_LDS  , DIRECT       , 0, 6, 5 },
+   /* DF */    { &op_STS  , DIRECT       , 0, 6, 5 },
+   /* E0 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* E1 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* E2 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* E3 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* E4 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* E5 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* E6 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* E7 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* E8 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* E9 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* EA */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* EB */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* EC */    { &op_LDQ  , INDEXED      , 0, 8, 6 },
+   /* ED */    { &op_STQ  , INDEXED      , 0, 8, 6 },
+   /* EE */    { &op_LDS  , INDEXED      , 0, 6, 6 },
+   /* EF */    { &op_STS  , INDEXED      , 0, 6, 6 },
+   /* F0 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* F1 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* F2 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* F3 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* F4 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* F5 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* F6 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* F7 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* F8 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* F9 */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* FA */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* FB */    { &op_XX   , ILLEGAL      , 1,20,22 },
+   /* FC */    { &op_LDQ  , EXTENDED     , 0, 9, 8 },
+   /* FD */    { &op_STQ  , EXTENDED     , 0, 9, 8 },
+   /* FE */    { &op_LDS  , EXTENDED     , 0, 7, 6 },
+   /* FF */    { &op_STS  , EXTENDED     , 0, 7, 6 }
+};
+
+static instr_mode_t instr_table_6309_map2[] = {
+   /* 00 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 01 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 02 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 03 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 04 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 05 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 06 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 07 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 08 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 09 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 0A */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 0B */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 0C */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 0D */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 0E */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 0F */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 10 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 11 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 12 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 13 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 14 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 15 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 16 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 17 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 18 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 19 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 1A */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 1B */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 1C */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 1D */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 1E */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 1F */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 20 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 21 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 22 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 23 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 24 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 25 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 26 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 27 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 28 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 29 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 2A */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 2B */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 2C */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 2D */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 2E */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 2F */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 30 */    { &op_BAND , SINGLEBIT    , 0, 7, 6 },
+   /* 31 */    { &op_BIAND, SINGLEBIT    , 0, 7, 6 },
+   /* 32 */    { &op_BOR  , SINGLEBIT    , 0, 7, 6 },
+   /* 33 */    { &op_BIOR , SINGLEBIT    , 0, 7, 6 },
+   /* 34 */    { &op_BEOR , SINGLEBIT    , 0, 7, 6 },
+   /* 35 */    { &op_BIEOR, SINGLEBIT    , 0, 7, 6 },
+   /* 36 */    { &op_LDBT , SINGLEBIT    , 0, 7, 6 },
+   /* 37 */    { &op_STBT , SINGLEBIT    , 0, 8, 7 },
+   /* 38 */    { &op_TFM  , REGISTER     , 0, 6, 6 },
+   /* 39 */    { &op_TFM  , REGISTER     , 0, 6, 6 },
+   /* 3A */    { &op_TFM  , REGISTER     , 0, 6, 6 },
+   /* 3B */    { &op_TFM  , REGISTER     , 0, 6, 6 },
+   /* 3C */    { &op_BITMD, IMMEDIATE_8  , 0, 4, 4 },
+   /* 3D */    { &op_LDMD , IMMEDIATE_8  , 0, 4, 5 },
+   /* 3E */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 3F */    { &op_SWI3 , INHERENT     , 0,20,22 },
+   /* 40 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 41 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 42 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 43 */    { &op_COME , INHERENT     , 0, 2, 2 },
+   /* 44 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 45 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 46 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 47 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 48 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 49 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 4A */    { &op_DECE , INHERENT     , 0, 2, 2 },
+   /* 4B */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 4C */    { &op_INCE , INHERENT     , 0, 2, 2 },
+   /* 4D */    { &op_TSTE , INHERENT     , 0, 2, 2 },
+   /* 4E */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 4F */    { &op_CLRE , INHERENT     , 0, 2, 2 },
+   /* 50 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 51 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 52 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 53 */    { &op_COMF , INHERENT     , 0, 2, 2 },
+   /* 54 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 55 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 56 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 57 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 58 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 59 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 5A */    { &op_DECF , INHERENT     , 0, 2, 2 },
+   /* 5B */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 5C */    { &op_INCF , INHERENT     , 0, 2, 2 },
+   /* 5D */    { &op_TSTF , ILLEGAL      , 0, 2, 2 },
+   /* 5E */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 5F */    { &op_CLRF , INHERENT     , 0, 2, 2 },
+   /* 60 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 61 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 62 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 63 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 64 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 65 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 66 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 67 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 68 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 69 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 6A */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 6B */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 6C */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 6D */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 6E */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 6F */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 70 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 71 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 72 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 73 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 74 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 75 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 76 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 77 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 78 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 79 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 7A */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 7B */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 7C */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 7D */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 7E */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 7F */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 80 */    { &op_SUBE , IMMEDIATE_8  , 0, 3, 3 },
+   /* 81 */    { &op_CMPE , IMMEDIATE_8  , 0, 3, 3 },
+   /* 82 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 83 */    { &op_CMPU , IMMEDIATE_16 , 0, 5, 4 },
+   /* 84 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 85 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 86 */    { &op_LDE  , IMMEDIATE_8  , 0, 3, 3 },
+   /* 87 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 88 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 89 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 8A */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 8B */    { &op_ADDE , IMMEDIATE_8  , 0, 3, 3 },
+   /* 8C */    { &op_CMPS , IMMEDIATE_16 , 0, 5, 4 },
+   /* 8D */    { &op_DIVD , IMMEDIATE_8  , 0,25,25 },
+   /* 8E */    { &op_DIVQ , IMMEDIATE_16 , 0,34,34 },
+   /* 8F */    { &op_MULD , IMMEDIATE_16 , 0,28,28 },
+   /* 90 */    { &op_SUBE , DIRECT       , 0, 5, 4 },
+   /* 91 */    { &op_CMPE , DIRECT       , 0, 5, 4 },
+   /* 92 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 93 */    { &op_CMPU , DIRECT       , 0, 7, 5 },
+   /* 94 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 95 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 96 */    { &op_LDE  , DIRECT       , 0, 5, 4 },
+   /* 97 */    { &op_STE  , DIRECT       , 0, 5, 4 },
+   /* 98 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 99 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 9A */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* 9B */    { &op_ADDE , DIRECT       , 0, 5, 4 },
+   /* 9C */    { &op_CMPS , DIRECT       , 0, 7, 5 },
+   /* 9D */    { &op_DIVD , DIRECT       , 0,27,26 },
+   /* 9E */    { &op_DIVQ , DIRECT       , 0,26,35 },
+   /* 9F */    { &op_MULD , DIRECT       , 0,30,29 },
+   /* A0 */    { &op_SUBE , INDEXED      , 0, 5, 5 },
+   /* A1 */    { &op_CMPE , INDEXED      , 0, 5, 5 },
+   /* A2 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* A3 */    { &op_CMPU , INDEXED      , 0, 7, 6 },
+   /* A4 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* A5 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* A6 */    { &op_LDE  , INDEXED      , 0, 5, 5 },
+   /* A7 */    { &op_STE  , INDEXED      , 0, 5, 5 },
+   /* A8 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* A9 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* AA */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* AB */    { &op_ADDE , INDEXED      , 0, 5, 5 },
+   /* AC */    { &op_CMPS , INDEXED      , 0, 7, 6 },
+   /* AD */    { &op_DIVD , INDEXED      , 0,27,27 },
+   /* AE */    { &op_DIVQ , INDEXED      , 0,36,36 },
+   /* AF */    { &op_MULD , INDEXED      , 0,30,30 },
+   /* B0 */    { &op_SUBE , EXTENDED     , 0, 6, 5 },
+   /* B1 */    { &op_CMPE , EXTENDED     , 0, 6, 5 },
+   /* B2 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* B3 */    { &op_CMPU , EXTENDED     , 0, 8, 6 },
+   /* B4 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* B5 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* B6 */    { &op_LDE  , EXTENDED     , 0, 6, 5 },
+   /* B7 */    { &op_STE  , EXTENDED     , 0, 6, 5 },
+   /* B8 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* B9 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* BA */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* BB */    { &op_ADDE , EXTENDED     , 0, 6, 5 },
+   /* BC */    { &op_CMPS , EXTENDED     , 0, 8, 6 },
+   /* BD */    { &op_DIVD , EXTENDED     , 0,28,27 },
+   /* BE */    { &op_DIVQ , EXTENDED     , 0,37,36 },
+   /* BF */    { &op_MULD , EXTENDED     , 0,31,30 },
+   /* C0 */    { &op_SUBF , IMMEDIATE_8  , 0, 3, 3 },
+   /* C1 */    { &op_CMPF , IMMEDIATE_8  , 0, 3, 3 },
+   /* C2 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* C3 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* C4 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* C5 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* C6 */    { &op_LDF  , IMMEDIATE_8  , 0, 3, 3 },
+   /* C7 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* C8 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* C9 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* CA */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* CB */    { &op_ADDF , IMMEDIATE_8  , 0, 3, 3 },
+   /* CC */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* CD */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* CE */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* CF */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* D0 */    { &op_SUBF , DIRECT       , 0, 5, 4 },
+   /* D1 */    { &op_CMPF , DIRECT       , 0, 5, 4 },
+   /* D2 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* D3 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* D4 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* D5 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* D6 */    { &op_LDF  , DIRECT       , 0, 5, 4 },
+   /* D7 */    { &op_STF  , DIRECT       , 0, 5, 4 },
+   /* D8 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* D9 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* DA */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* DB */    { &op_ADDF , DIRECT       , 0, 5, 4 },
+   /* DC */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* DD */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* DE */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* DF */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* E0 */    { &op_SUBF , INDEXED      , 0, 5, 5 },
+   /* E1 */    { &op_CMPF , INDEXED      , 0, 5, 5 },
+   /* E2 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* E3 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* E4 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* E5 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* E6 */    { &op_LDF  , INDEXED      , 0, 5, 5 },
+   /* E7 */    { &op_STF  , INDEXED      , 0, 5, 5 },
+   /* E8 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* E9 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* EA */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* EB */    { &op_ADDF , INDEXED      , 0, 5, 5 },
+   /* EC */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* ED */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* EE */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* EF */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* F0 */    { &op_SUBF , EXTENDED     , 0, 6, 5 },
+   /* F1 */    { &op_CMPF , EXTENDED     , 0, 6, 5 },
+   /* F2 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* F3 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* F4 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* F5 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* F6 */    { &op_LDF  , EXTENDED     , 0, 6, 5 },
+   /* F7 */    { &op_STF  , EXTENDED     , 0, 6, 5 },
+   /* F8 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* F9 */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* FA */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* FB */    { &op_ADDF , EXTENDED     , 0, 6, 5 },
+   /* FC */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* FD */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* FE */    { &op_XX   , ILLEGAL      , 0,20,22 },
+   /* FF */    { &op_XX   , ILLEGAL      , 0,20,22 }
 };
