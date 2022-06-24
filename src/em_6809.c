@@ -172,8 +172,8 @@ static const int indirect_offset[] = {
 };
 
 // 6809 registers: -1 means unknown
-static int A = -1;
-static int B = -1;
+static int ACCA = -1;
+static int ACCB = -1;
 static int X = -1;
 static int Y = -1;
 static int S = -1;
@@ -541,14 +541,14 @@ static int get_regp(int i) {
    i &= 15;
    int ret;
    switch(i) {
-   case  0: ret = (A >= 0 && B >= 0) ? ((A << 8) + B) : -1; break;
+   case  0: ret = (ACCA >= 0 && ACCB >= 0) ? ((ACCA << 8) + ACCB) : -1; break;
    case  1: ret = X;                                        break;
    case  2: ret = Y;                                        break;
    case  3: ret = U;                                        break;
    case  4: ret = S;                                        break;
    case  5: ret = PC;                                       break;
-   case  8: ret = A;                                        break;
-   case  9: ret = B;                                        break;
+   case  8: ret = ACCA;                                        break;
+   case  9: ret = ACCB;                                        break;
    case 10: ret = get_FLAGS();                              break;
    case 11: ret = DP;                                       break;
    default: ret = 0xFFFF;                                   break;
@@ -567,11 +567,11 @@ static void set_regp(int i, int val) {
    switch(i) {
    case  0:
       if (val < 0) {
-         A = -1;
-         B = -1;
+         ACCA = -1;
+         ACCB = -1;
       } else {
-         A = (val >> 8) & 0xff;
-         B = val & 0xff;
+         ACCA = (val >> 8) & 0xff;
+         ACCB = val & 0xff;
       }
       break;
    case  1: X  = val       ; break;
@@ -579,8 +579,8 @@ static void set_regp(int i, int val) {
    case  3: U  = val       ; break;
    case  4: S  = val       ; break;
    case  5: PC = val       ; break;
-   case  8: A  = val & 0xff; break;
-   case  9: B  = val & 0xff; break;
+   case  8: ACCA  = val & 0xff; break;
+   case  9: ACCB  = val & 0xff; break;
    case 10:
       if (val < 0) {
          set_EFHINZVC_unknown();
@@ -806,8 +806,8 @@ static int em_6809_count_cycles(sample_t *sample_q) {
 
 static void em_6809_reset(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
    instruction->pc = -1;
-   A = -1;
-   B = -1;
+   ACCA = -1;
+   ACCB = -1;
    X = -1;
    Y = -1;
    S = -1;
@@ -905,17 +905,17 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
 
       int b  = sample_q[i++].data;
       push8s(b);
-      if (B >= 0 && b != B) {
+      if (ACCB >= 0 && b != ACCB) {
          failflag |= FAIL_B;
       }
-      B = b;
+      ACCB = b;
 
       int a  = sample_q[i++].data;
       push8s(a);
-      if (A >= 0 && a != A) {
+      if (ACCA >= 0 && a != ACCA) {
          failflag |= FAIL_A;
       }
-      A = a;
+      ACCA = a;
       // Set E to indicate the full state was saved
       E = 1;
    } else {
@@ -1192,13 +1192,13 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                }
                break;
             case 5:                 /* B,R */
-               if (*reg >= 0 && B >= 0) {
-                  ea = (*reg + B) & 0xffff;
+               if (*reg >= 0 && ACCB >= 0) {
+                  ea = (*reg + ACCB) & 0xffff;
                }
                break;
             case 6:                 /* A,R */
-               if (*reg >= 0 && A >= 0) {
-                  ea = (*reg + A) & 0xffff;
+               if (*reg >= 0 && ACCA >= 0) {
+                  ea = (*reg + ACCA) & 0xffff;
                }
                break;
             case 8:                 /* n7,R */
@@ -1212,8 +1212,8 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                }
                break;
             case 11:                /* D,R */
-               if (*reg >= 0 && A >= 0 && B >= 0) {
-                  ea = (*reg + (A << 8) + B) & 0xffff;
+               if (*reg >= 0 && ACCA >= 0 && ACCB >= 0) {
+                  ea = (*reg + (ACCA << 8) + ACCB) & 0xffff;
                }
                break;
             case 12:                /* n7,PCR */
@@ -1585,11 +1585,11 @@ static int em_6809_read_memory(int address) {
 
 static char *em_6809_get_state(char *buffer) {
    strcpy(buffer, default_state);
-   if (A >= 0) {
-      write_hex2(buffer + OFFSET_A, A);
+   if (ACCA >= 0) {
+      write_hex2(buffer + OFFSET_A, ACCA);
    }
-   if (B >= 0) {
-      write_hex2(buffer + OFFSET_B, B);
+   if (ACCB >= 0) {
+      write_hex2(buffer + OFFSET_B, ACCB);
    }
    if (X >= 0) {
       write_hex4(buffer + OFFSET_X, X);
@@ -1682,8 +1682,8 @@ cpu_emulator_t em_6809 = {
 
 static int op_fn_ABX(operand_t operand, ea_t ea, sample_t *sample_q) {
    // X = X + B
-   if (X >= 0 && B >= 0) {
-      X = (X + B) & 0xFFFF;
+   if (X >= 0 && ACCB >= 0) {
+      X = (X + ACCB) & 0xFFFF;
    } else {
       X = -1;
    }
@@ -1712,28 +1712,28 @@ static int add_helper(int val, int cin, operand_t operand) {
 }
 
 static int op_fn_ADCA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = add_helper(A, C, operand);
+   ACCA = add_helper(ACCA, C, operand);
    return -1;
 }
 
 static int op_fn_ADCB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = add_helper(B, C, operand);
+   ACCB = add_helper(ACCB, C, operand);
    return -1;
 }
 
 static int op_fn_ADDA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = add_helper(A, 0, operand);
+   ACCA = add_helper(ACCA, 0, operand);
    return -1;
 }
 
 static int op_fn_ADDB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = add_helper(B, 0, operand);
+   ACCB = add_helper(ACCB, 0, operand);
    return -1;
 }
 
 static int op_fn_ADDD(operand_t operand, ea_t ea, sample_t *sample_q) {
-   if (A >= 0 && B >= 0) {
-      int d = (A << 8) + B;
+   if (ACCA >= 0 && ACCB >= 0) {
+      int d = (ACCA << 8) + ACCB;
       // Perform the addition (there is no carry in)
       int tmp = d + operand;
       // The carry flag is bit 16 of the result
@@ -1745,11 +1745,11 @@ static int op_fn_ADDD(operand_t operand, ea_t ea, sample_t *sample_q) {
       // Set the flags
       set_NZ16(tmp);
       // Unpack back into A and B
-      A = (tmp >> 8) & 0xff;
-      B = tmp & 0xff;
+      ACCA = (tmp >> 8) & 0xff;
+      ACCB = tmp & 0xff;
    } else {
-      A = -1;
-      B = -1;
+      ACCA = -1;
+      ACCB = -1;
       set_NZVC_unknown();
    }
    return -1;
@@ -1767,12 +1767,12 @@ static int and_helper(int val, operand_t operand) {
 }
 
 static int op_fn_ANDA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = and_helper(A, operand);
+   ACCA = and_helper(ACCA, operand);
    return -1;
 }
 
 static int op_fn_ANDB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = and_helper(B, operand);
+   ACCB = and_helper(ACCB, operand);
    return -1;
 }
 
@@ -1824,12 +1824,12 @@ static int op_fn_ASL(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_ASLA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = asl_helper(A);
+   ACCA = asl_helper(ACCA);
    return -1;
 }
 
 static int op_fn_ASLB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = asl_helper(B);
+   ACCB = asl_helper(ACCB);
    return -1;
 }
 
@@ -1852,12 +1852,12 @@ static int op_fn_ASR(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_ASRA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = asr_helper(A);
+   ACCA = asr_helper(ACCA);
    return -1;
 }
 
 static int op_fn_ASRB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = asr_helper(B);
+   ACCB = asr_helper(ACCB);
    return -1;
 }
 
@@ -1917,12 +1917,12 @@ static void bit_helper(int val, operand_t operand) {
 }
 
 static int op_fn_BITA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   bit_helper(A, operand);
+   bit_helper(ACCA, operand);
    return -1;
 }
 
 static int op_fn_BITB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   bit_helper(B, operand);
+   bit_helper(ACCB, operand);
    return -1;
 }
 
@@ -2038,12 +2038,12 @@ static int op_fn_CLR(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_CLRA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = clr_helper();
+   ACCA = clr_helper();
    return -1;
 }
 
 static int op_fn_CLRB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = clr_helper();
+   ACCB = clr_helper();
    return -1;
 }
 
@@ -2079,17 +2079,17 @@ static void cmp_helper16(int val, operand_t operand) {
 }
 
 static int op_fn_CMPA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   cmp_helper8(A, operand);
+   cmp_helper8(ACCA, operand);
    return -1;
 }
 
 static int op_fn_CMPB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   cmp_helper8(B, operand);
+   cmp_helper8(ACCB, operand);
    return -1;
 }
 
 static int op_fn_CMPD(operand_t operand, ea_t ea, sample_t *sample_q) {
-   int D = (A << 8) + B;
+   int D = (ACCA << 8) + ACCB;
    cmp_helper16(D, operand);
    return -1;
 }
@@ -2131,12 +2131,12 @@ static int op_fn_COM(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_COMA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = com_helper(A);
+   ACCA = com_helper(ACCA);
    return -1;
 }
 
 static int op_fn_COMB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = com_helper(B);
+   ACCB = com_helper(ACCB);
    return -1;
 }
 
@@ -2146,22 +2146,22 @@ static int op_fn_CWAI(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_DAA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   if (A >= 0 && H >= 0 && C >= 0) {
+   if (ACCA >= 0 && H >= 0 && C >= 0) {
       int correction = 0x00;
-      if (H == 1 && (A & 0x0F) > 0x09) {
+      if (H == 1 && (ACCA & 0x0F) > 0x09) {
          correction |= 0x06;
       }
-      if (C == 1 || (A & 0xF0) > 0x90 || ((A & 0xF0) > 0x80 && (A & 0x0F) > 0x09)) {
+      if (C == 1 || (ACCA & 0xF0) > 0x90 || ((ACCA & 0xF0) > 0x80 && (ACCA & 0x0F) > 0x09)) {
          correction |= 0x60;
       }
-      int tmp = A + correction;
+      int tmp = ACCA + correction;
       // C is apparently only ever set by DAA, never cleared
       C |= (tmp >> 8) & 1;
       tmp &= 0xff;
       set_NZ(tmp);
-      A = tmp;
+      ACCA = tmp;
    } else {
-      A = -1;
+      ACCA = -1;
       set_NZC_unknown();
    }
    // The datasheet says V is 0; this reference says V is undefined:
@@ -2198,12 +2198,12 @@ static int op_fn_DEC(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_DECA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = dec_helper(A);
+   ACCA = dec_helper(ACCA);
    return -1;
 }
 
 static int op_fn_DECB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = dec_helper(B);
+   ACCB = dec_helper(ACCB);
    return -1;
 }
 
@@ -2219,12 +2219,12 @@ static int eor_helper(int val, operand_t operand) {
 }
 
 static int op_fn_EORA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = eor_helper(A, operand);
+   ACCA = eor_helper(ACCA, operand);
    return -1;
 }
 
 static int op_fn_EORB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = eor_helper(B, operand);
+   ACCB = eor_helper(ACCB, operand);
    return -1;
 }
 
@@ -2257,12 +2257,12 @@ static int op_fn_INC(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_INCA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = inc_helper(A);
+   ACCA = inc_helper(ACCA);
    return -1;
 }
 
 static int op_fn_INCB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = inc_helper(B);
+   ACCB = inc_helper(ACCB);
    return -1;
 }
 
@@ -2294,19 +2294,19 @@ static int ld_helper16(int val) {
 }
 
 static int op_fn_LDA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = ld_helper8(operand);
+   ACCA = ld_helper8(operand);
    return -1;
 }
 
 static int op_fn_LDB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = ld_helper8(operand);
+   ACCB = ld_helper8(operand);
    return -1;
 }
 
 static int op_fn_LDD(operand_t operand, ea_t ea, sample_t *sample_q) {
    int tmp = ld_helper16(operand);
-   A = (tmp >> 8) & 0xff;
-   B = tmp & 0xff;
+   ACCA = (tmp >> 8) & 0xff;
+   ACCB = tmp & 0xff;
    return -1;
 }
 
@@ -2370,26 +2370,26 @@ static int op_fn_LSR(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_LSRA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = lsr_helper(A);
+   ACCA = lsr_helper(ACCA);
    return -1;
 }
 
 static int op_fn_LSRB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = lsr_helper(B);
+   ACCB = lsr_helper(ACCB);
    return -1;
 }
 
 static int op_fn_MUL(operand_t operand, ea_t ea, sample_t *sample_q) {
    // D = A * B
-   if (A >= 0 && B >= 0) {
-      uint16_t tmp = A * B;
-      A = (tmp >> 8) & 0xff;
-      B = tmp & 0xff;
+   if (ACCA >= 0 && ACCB >= 0) {
+      uint16_t tmp = ACCA * ACCB;
+      ACCA = (tmp >> 8) & 0xff;
+      ACCB = tmp & 0xff;
       Z = (tmp == 0);
-      C = (B >> 7) & 1;
+      C = (ACCB >> 7) & 1;
    } else {
-      A = -1;
-      B = -1;
+      ACCA = -1;
+      ACCB = -1;
       Z = -1;
       C = -1;
    }
@@ -2412,12 +2412,12 @@ static int op_fn_NEG(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_NEGA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = neg_helper(A);
+   ACCA = neg_helper(ACCA);
    return -1;
 }
 
 static int op_fn_NEGB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = neg_helper(B);
+   ACCB = neg_helper(ACCB);
    return -1;
 }
 
@@ -2437,12 +2437,12 @@ static int or_helper(int val, operand_t operand) {
 }
 
 static int op_fn_ORA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = or_helper(A, operand);
+   ACCA = or_helper(ACCA, operand);
    return -1;
 }
 
 static int op_fn_ORB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = or_helper(B, operand);
+   ACCB = or_helper(ACCB, operand);
    return -1;
 }
 
@@ -2558,18 +2558,18 @@ static void push_helper(sample_t *sample_q, int system) {
    if (pb & 0x04) {
       tmp = sample_q[i++].data;
       push8(tmp);
-      if (B >= 0 && B != tmp) {
+      if (ACCB >= 0 && ACCB != tmp) {
          failflag |= FAIL_B;
       }
-      B = tmp;
+      ACCB = tmp;
    }
    if (pb & 0x02) {
       tmp = sample_q[i++].data;
       push8(tmp);
-      if (A >= 0 && A != tmp) {
+      if (ACCA >= 0 && ACCA != tmp) {
          failflag |= FAIL_A;
       }
-      A = tmp;
+      ACCA = tmp;
    }
    if (pb & 0x01) {
       tmp = sample_q[i++].data;
@@ -2633,12 +2633,12 @@ static void pull_helper(sample_t *sample_q, int system) {
    if (pb & 0x02) {
       tmp = sample_q[i++].data;
       pop8(tmp);
-      A = tmp;
+      ACCA = tmp;
    }
    if (pb & 0x04) {
       tmp = sample_q[i++].data;
       pop8(tmp);
-      B = tmp;
+      ACCB = tmp;
    }
    if (pb & 0x08) {
       tmp = sample_q[i++].data;
@@ -2703,12 +2703,12 @@ static int op_fn_ROL(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_ROLA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = rol_helper(A);
+   ACCA = rol_helper(ACCA);
    return -1;
 }
 
 static int op_fn_ROLB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = rol_helper(B);
+   ACCB = rol_helper(ACCB);
    return -1;
 }
 
@@ -2732,12 +2732,12 @@ static int op_fn_ROR(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_RORA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = ror_helper(A);
+   ACCA = ror_helper(ACCA);
    return -1;
 }
 
 static int op_fn_RORB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = ror_helper(B);
+   ACCB = ror_helper(ACCB);
    return -1;
 }
 
@@ -2772,8 +2772,8 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_t *sample_q) {
 
    // Update the register state
    if (E == 1) {
-      A  = sample_q[3].data;
-      B  = sample_q[4].data;
+      ACCA  = sample_q[3].data;
+      ACCB  = sample_q[4].data;
       DP = sample_q[5].data;
       X  = (sample_q[6].data << 8) + sample_q[7].data;
       Y  = (sample_q[8].data << 8) + sample_q[9].data;
@@ -2822,25 +2822,25 @@ static int sub_helper(int val, int cin, operand_t operand) {
 }
 
 static int op_fn_SBCA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = sub_helper(A, C, operand);
+   ACCA = sub_helper(ACCA, C, operand);
    return -1;
 }
 
 static int op_fn_SBCB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = sub_helper(B, C, operand);
+   ACCB = sub_helper(ACCB, C, operand);
    return -1;
 }
 
 static int op_fn_SEX(operand_t operand, ea_t ea, sample_t *sample_q) {
-   if (B >= 0) {
-      if (B & 0x80) {
-         A = 0xFF;
+   if (ACCB >= 0) {
+      if (ACCB & 0x80) {
+         ACCA = 0xFF;
       } else {
-         A = 0x00;
+         ACCA = 0x00;
       }
-      set_NZ(B);
+      set_NZ(ACCB);
    } else {
-      A = -1;
+      ACCA = -1;
       set_NZ_unknown();
    }
    V = 0;
@@ -2870,20 +2870,20 @@ static int st_helper16(int val, operand_t operand, int fail) {
 }
 
 static int op_fn_STA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = st_helper8(A, operand, FAIL_A);
+   ACCA = st_helper8(ACCA, operand, FAIL_A);
    return operand;
 }
 
 static int op_fn_STB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = st_helper8(B, operand, FAIL_B);
+   ACCB = st_helper8(ACCB, operand, FAIL_B);
    return operand;
 }
 
 static int op_fn_STD(operand_t operand, ea_t ea, sample_t *sample_q) {
-   int D = (A >= 0 && B >= 0) ? (A << 8) + B : -1;
+   int D = (ACCA >= 0 && ACCB >= 0) ? (ACCA << 8) + ACCB : -1;
    D = st_helper16(D, operand, FAIL_A | FAIL_B);
-   A = (D >> 8) & 0xff;
-   B = D & 0xff;
+   ACCA = (D >> 8) & 0xff;
+   ACCB = D & 0xff;
    return operand;
 }
 
@@ -2908,18 +2908,18 @@ static int op_fn_STY(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_SUBA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   A = sub_helper(A, 0, operand);
+   ACCA = sub_helper(ACCA, 0, operand);
    return -1;
 }
 
 static int op_fn_SUBB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   B = sub_helper(B, 0, operand);
+   ACCB = sub_helper(ACCB, 0, operand);
    return -1;
 }
 
 static int op_fn_SUBD(operand_t operand, ea_t ea, sample_t *sample_q) {
-   if (A >= 0 && B >= 0) {
-      int d = (A << 8) + B;
+   if (ACCA >= 0 && ACCB >= 0) {
+      int d = (ACCA << 8) + ACCB;
       // Perform the addition (there is no carry in)
       int tmp = d - operand;
       // The carry flag is bit 16 of the result
@@ -2931,11 +2931,11 @@ static int op_fn_SUBD(operand_t operand, ea_t ea, sample_t *sample_q) {
       // Set the flags
       set_NZ16(tmp);
       // Unpack back into A and B
-      A = (tmp >> 8) & 0xff;
-      B = tmp & 0xff;
+      ACCA = (tmp >> 8) & 0xff;
+      ACCB = tmp & 0xff;
    } else {
-      A = -1;
-      B = -1;
+      ACCA = -1;
+      ACCB = -1;
       set_NZVC_unknown();
    }
    return -1;
@@ -2976,13 +2976,13 @@ static int op_fn_TST(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_TSTA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   set_NZ(A);
+   set_NZ(ACCA);
    V = 0;
    return -1;
 }
 
 static int op_fn_TSTB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   set_NZ(B);
+   set_NZ(ACCB);
    V = 0;
    return -1;
 }
