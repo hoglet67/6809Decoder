@@ -1245,6 +1245,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
             }
          }
       }
+      break;
    default:
       break;
    }
