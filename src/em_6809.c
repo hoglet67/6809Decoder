@@ -405,6 +405,33 @@ static void check_FLAGS(int operand) {
    }
 }
 
+static int get_FLAG(int i) {
+   switch (i) {
+   case 0: return C;
+   case 1: return V;
+   case 2: return Z;
+   case 3: return N;
+   case 4: return I;
+   case 5: return H;
+   case 6: return F;
+   case 7: return E;
+   }
+   return -1;
+}
+
+static void set_FLAG(int i, int val) {
+   switch (i) {
+   case 0: C = val; break;
+   case 1: V = val; break;
+   case 2: Z = val; break;
+   case 3: N = val; break;
+   case 4: I = val; break;
+   case 5: H = val; break;
+   case 6: F = val; break;
+   case 7: E = val; break;
+   }
+}
+
 static int get_FLAGS() {
    if (E < 0 || F < 0 || H < 0 || I < 0 || N < 0 || Z < 0 || V < 0 || C < 0) {
       return -1;
@@ -413,15 +440,26 @@ static int get_FLAGS() {
    }
 }
 
-static void set_FLAGS(int operand) {
-   E = (operand >> 7) & 1;
-   F = (operand >> 6) & 1;
-   H = (operand >> 5) & 1;
-   I = (operand >> 4) & 1;
-   N = (operand >> 3) & 1;
-   Z = (operand >> 2) & 1;
-   V = (operand >> 1) & 1;
-   C = (operand >> 0) & 1;
+static void set_FLAGS(int val) {
+   if (val >= 0) {
+      E = (val >> 7) & 1;
+      F = (val >> 6) & 1;
+      H = (val >> 5) & 1;
+      I = (val >> 4) & 1;
+      N = (val >> 3) & 1;
+      Z = (val >> 2) & 1;
+      V = (val >> 1) & 1;
+      C = (val >> 0) & 1;
+   } else {
+      E = -1;
+      F = -1;
+      H = -1;
+      I = -1;
+      N = -1;
+      Z = -1;
+      V = -1;
+      C = -1;
+   }
 }
 
 static void set_NZ_unknown() {
@@ -450,17 +488,6 @@ static void set_HNZVC_unknown() {
 }
 
 static void set_NZVC_unknown() {
-   N = -1;
-   Z = -1;
-   V = -1;
-   C = -1;
-}
-
-static void set_EFHINZVC_unknown() {
-   E = -1;
-   F = -1;
-   H = -1;
-   I = -1;
    N = -1;
    Z = -1;
    V = -1;
@@ -537,6 +564,23 @@ static instr_mode_t *get_instruction(uint8_t b0, uint8_t b1) {
    }
 }
 
+static int pack0(int byte) {
+   return (byte >= 0) ? ((byte << 8) + byte) : -1;
+}
+
+static int pack(int hi_byte, int lo_byte) {
+   return (hi_byte >= 0 && lo_byte >= 0) ? ((hi_byte << 8) + lo_byte) : -1;
+}
+
+static void unpack(int result, int *hi_byte, int *lo_byte) {
+   if (hi_byte) {
+      *hi_byte = result < 0 ? -1 : (result >> 8) & 0xff;
+   }
+   if (lo_byte) {
+      *lo_byte = result < 0 ? -1 : result & 0xff;
+   }
+}
+
 static int *get_regi(int i) {
    i &= 3;
    switch(i) {
@@ -547,22 +591,23 @@ static int *get_regi(int i) {
    }
 }
 
-// Returns the register 1-extended to 16-bits, or -1 if undefined
-static int get_regp(int i) {
+
+// Used in EXN/TRV on the 6809
+static int get_regp_6809(int i) {
    i &= 15;
    int ret;
    switch(i) {
-   case  0: ret = (ACCA >= 0 && ACCB >= 0) ? ((ACCA << 8) + ACCB) : -1; break;
-   case  1: ret = X;                                        break;
-   case  2: ret = Y;                                        break;
-   case  3: ret = U;                                        break;
-   case  4: ret = S;                                        break;
-   case  5: ret = PC;                                       break;
-   case  8: ret = ACCA;                                        break;
-   case  9: ret = ACCB;                                        break;
-   case 10: ret = get_FLAGS();                              break;
-   case 11: ret = DP;                                       break;
-   default: ret = 0xFFFF;                                   break;
+   case  0: ret = pack(ACCA, ACCB); break;
+   case  1: ret = X;                break;
+   case  2: ret = Y;                break;
+   case  3: ret = U;                break;
+   case  4: ret = S;                break;
+   case  5: ret = PC;               break;
+   case  8: ret = ACCA;             break;
+   case  9: ret = ACCB;             break;
+   case 10: ret = get_FLAGS();      break;
+   case 11: ret = DP;               break;
+   default: ret = 0xFFFF;           break;
    }
    if (ret >= 0 && i >= 8) {
       // Extend 8-bit values to 16 bits by padding with FF
@@ -573,35 +618,88 @@ static int get_regp(int i) {
    }
 }
 
-static void set_regp(int i, int val) {
+// Used in EXN/TRV on the 6809
+static void set_regp_6809(int i, int val) {
    i &= 15;
    switch(i) {
-   case  0:
-      if (val < 0) {
-         ACCA = -1;
-         ACCB = -1;
-      } else {
-         ACCA = (val >> 8) & 0xff;
-         ACCB = val & 0xff;
-      }
-      break;
-   case  1: X  = val       ; break;
-   case  2: Y  = val       ; break;
-   case  3: U  = val       ; break;
-   case  4: S  = val       ; break;
-   case  5: PC = val       ; break;
-   case  8: ACCA  = val & 0xff; break;
-   case  9: ACCB  = val & 0xff; break;
-   case 10:
-      if (val < 0) {
-         set_EFHINZVC_unknown();
-      } else {
-         set_FLAGS(val & 0xff);
-      }
-      break;
-   case 11: DP = val & 0xff; break;
+   case  0: unpack(val, &ACCA, &ACCB); break;
+   case  1: X  = val;                  break;
+   case  2: Y  = val;                  break;
+   case  3: U  = val;                  break;
+   case  4: S  = val;                  break;
+   case  5: PC = val;                  break;
+   case  8: ACCA  = val & 0xff;        break;
+   case  9: ACCB  = val & 0xff;        break;
+   case 10: set_FLAGS(val);            break;
+   case 11: DP = val & 0xff;           break;
    }
 }
+
+// Used in EXN/TRV on the 6309
+static int get_regp_6309(int i) {
+   i &= 15;
+   int ret;
+   switch(i) {
+   case  0: ret = pack(ACCA, ACCB);   break;
+   case  1: ret = X;                  break;
+   case  2: ret = Y;                  break;
+   case  3: ret = U;                  break;
+   case  4: ret = S;                  break;
+   case  5: ret = PC;                 break;
+   case  6: ret = pack(ACCE, ACCF);   break;
+   case  7: ret = TV;                 break;
+   case  8: ret = pack0(ACCA);        break;
+   case  9: ret = pack0(ACCB);        break;
+   case 10: ret = pack0(get_FLAGS()); break;
+   case 11: ret = pack0(DP);          break;
+   case 12: ret = 0;                  break;
+   case 13: ret = 0;                  break;
+   case 14: ret = pack0(ACCE);        break;
+   case 15: ret = pack0(ACCF);        break;
+   }
+   return ret;
+}
+
+// Used in EXN/TRV on the 6309
+static void set_regp_6309(int i, int val) {
+   i &= 15;
+   switch(i) {
+   case  0: unpack(val, &ACCA, &ACCB); break;
+   case  1: X  = val;                  break;
+   case  2: Y  = val;                  break;
+   case  3: U  = val;                  break;
+   case  4: S  = val;                  break;
+   case  5: PC = val;                  break;
+   case  6: unpack(val, &ACCE, &ACCF); break;
+   case  7: TV = val;                  break;
+   case  8: unpack(val, &ACCA,  NULL); break;
+   case  9: unpack(val,  NULL, &ACCB); break;
+   case 10: set_FLAGS(val & 0xff);     break;
+   case 11: DP = (val >> 8) & 0xff;    break;
+   case 14: unpack(val, &ACCE,  NULL); break;
+   case 15: unpack(val,  NULL, &ACCF); break;
+   }
+}
+
+// Used in EXN/TFR
+static int get_regp(int i) {
+   if (cpu6309) {
+      return get_regp_6309(i);
+   } else {
+      return get_regp_6809(i);
+   }
+}
+
+
+// Used in EXN/TFR
+static void set_regp(int i, int val) {
+   if (cpu6309) {
+      set_regp_6309(i, val);
+   } else {
+      set_regp_6809(i, val);
+   }
+}
+
 
 // ====================================================================
 // Public Methods
@@ -1786,21 +1884,11 @@ cpu_emulator_t em_6809 = {
 };
 
 // ====================================================================
-// Individual Instructions
+// Instruction helpers
 // ====================================================================
 
-static int op_fn_ABX(operand_t operand, ea_t ea, sample_t *sample_q) {
-   // X = X + B
-   if (X >= 0 && ACCB >= 0) {
-      X = (X + ACCB) & 0xFFFF;
-   } else {
-      X = -1;
-   }
-   return -1;
-}
-
 static int add_helper(int val, int cin, operand_t operand) {
-   if (val >= 0 && cin >= 0) {
+   if (val >= 0 && cin >= 0 && operand >= 0) {
       int tmp = val + operand + cin;
       // The carry flag is bit 8 of the result
       C = (tmp >> 8) & 1;
@@ -1812,12 +1900,607 @@ static int add_helper(int val, int cin, operand_t operand) {
       tmp &= 0xff;
       // Set the flags
       set_NZ(tmp);
-      // Save the result back to the register
+      // Return the 8-bit result
       return tmp;
    } else {
       set_HNZVC_unknown();
       return -1;
    }
+}
+
+static int add16_helper(int val, int cin, int operand) {
+   if (val >= 0 && cin >= 0 && operand >= 0) {
+      // Perform the addition (there is no carry in)
+      int tmp = val + operand + cin;
+      // The carry flag is bit 16 of the result
+      C = (tmp >> 16) & 1;
+      // The overflow flag is: IF ((a^b^res^(res>>1))&0x80) SEV else CLV
+      V = (((val ^ operand ^ tmp) >> 15) & 1) ^ C;
+      // Truncate the result to 16 bits
+      tmp &= 0xFFFF;
+      // Set the flags
+      set_NZ16(tmp);
+      // Return the 16-bit result
+      return tmp;
+   } else {
+      set_NZVC_unknown();
+      return -1;
+   }
+}
+
+static int and_helper(int val, operand_t operand) {
+   if (val >= 0 && operand >= 0) {
+      val &= operand;
+      set_NZ(val);
+   } else {
+      set_NZ_unknown();
+   }
+   V = 0;
+   return val;
+}
+
+static int and16_helper(int val, operand_t operand) {
+   if (val >= 0 && operand >= 0) {
+      val &= operand;
+      set_NZ16(val);
+   } else {
+      set_NZ_unknown();
+   }
+   V = 0;
+   return val;
+}
+
+static int asl_helper(int val) {
+   if (val >= 0) {
+      C = (val >> 7) & 1;
+      val = (val << 1) & 0xff;
+      V = (val >> 7) & C & 1;
+      set_NZ(val);
+   } else {
+      set_NZVC_unknown();
+   }
+   // The datasheet says the half-carry flag is undefined, but in practice
+   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
+   // H = -1;
+   return val;
+}
+
+static int asl16_helper(int val) {
+   if (val >= 0) {
+      C = (val >> 15) & 1;
+      val = (val << 1) & 0xffff;
+      V = (val >> 15) & C & 1;
+      set_NZ(val);
+   } else {
+      set_NZVC_unknown();
+   }
+   return val;
+}
+
+static int asr_helper(int val) {
+   if (val >= 0) {
+      C = val & 1;
+      val = (val & 0x80) | (val >> 1);
+      set_NZ(val);
+   } else {
+      set_NZC_unknown();
+   }
+   // The datasheet says the half-carry flag is undefined, but in practice
+   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
+   // H = -1;
+   return val;
+}
+
+static int asr16_helper(int val) {
+   if (val >= 0) {
+      C = val & 1;
+      val = (val & 0x8000) | (val >> 1);
+      set_NZ(val);
+   } else {
+      set_NZC_unknown();
+   }
+   return val;
+}
+
+static void bit_helper(int val, operand_t operand) {
+   if (val >= 0 && operand >= 0) {
+      set_NZ(val & operand);
+   } else {
+      set_NZ_unknown();
+   }
+   V = 0;
+}
+
+static void bit16_helper(int val, operand_t operand) {
+   if (val >= 0 && operand >= 0) {
+      set_NZ16(val & operand);
+   } else {
+      set_NZ_unknown();
+   }
+   V = 0;
+}
+
+static int clr_helper() {
+   N = 0;
+   Z = 1;
+   C = 0;
+   V = 0;
+   return 0;
+}
+
+static void cmp_helper(int val, operand_t operand) {
+   if (val >= 0 && operand >= 0) {
+      int tmp = val - operand;
+      // The carry flag is bit 8 of the result
+      C = (tmp >> 8) & 1;
+      // The overflow flag is: IF ((a^b^res^(res>>1))&0x80) SEV else CLV
+      V = (((val ^ operand ^ tmp) >> 7) & 1) ^ C;
+      tmp &= 0xff;
+      set_NZ(tmp);
+   } else {
+      set_NZVC_unknown();
+   }
+   // The datasheet says the half-carry flag is undefined, but in practice
+   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
+   // H = -1;
+}
+
+static void cmp16_helper(int val, operand_t operand) {
+   if (val >= 0 && operand >= 0) {
+      int tmp = val - operand;
+      // The carry flag is bit 16 of the result
+      C = (tmp >> 16) & 1;
+      // The overflow flag is: IF ((a^b^res^(res>>1))&0x8000) SEV else CLV
+      V = (((val ^ operand ^ tmp) >> 15) & 1) ^ C;
+      tmp &= 0xffff;
+      set_NZ16(tmp);
+   } else {
+      set_NZVC_unknown();
+   }
+}
+
+static int com_helper(int val) {
+   if (val >= 0) {
+      val ^= 0xff;
+      set_NZ(val);
+   } else {
+      set_NZ_unknown();
+   }
+   V = 0;
+   C = 1;
+   return val;
+}
+
+static int com16_helper(int val) {
+   if (val >= 0) {
+      val ^= 0xffff;
+      set_NZ16(val);
+   } else {
+      set_NZ_unknown();
+   }
+   V = 0;
+   C = 1;
+   return val;
+}
+
+static int dec_helper(int val) {
+   if (val >= 0) {
+      val = (val - 1) & 0xff;
+      set_NZ(val);
+      // V indicates signed overflow, which onlt happens when going from 0x80->0x7f
+      V = (val == 0x7f);
+   } else {
+      val = -1;
+      set_NZV_unknown();
+   }
+   return val;
+}
+
+static int dec16_helper(int val) {
+   if (val >= 0) {
+      val = (val - 1) & 0xffff;
+      set_NZ16(val);
+      // V indicates signed overflow, which onlt happens when going from 0x8000->0x7fff
+      V = (val == 0x7fff);
+   } else {
+      val = -1;
+      set_NZV_unknown();
+   }
+   return val;
+}
+
+static int eor_helper(int val, operand_t operand) {
+   if (val >= 0 && operand >= 0) {
+      val ^= operand;
+      set_NZ(val);
+   } else {
+      set_NZ_unknown();
+   }
+   V = 0;
+   return val;
+}
+
+static int eor16_helper(int val, operand_t operand) {
+   if (val >= 0 && operand >= 0) {
+      val ^= operand;
+      set_NZ16(val);
+   } else {
+      set_NZ_unknown();
+   }
+   V = 0;
+   return val;
+}
+
+static int inc_helper(int val) {
+   if (val >= 0) {
+      val = (val + 1) & 0xff;
+      set_NZ(val);
+      // V indicates signed overflow, which only happens when going from 127->128
+      V = (val == 0x80);
+   } else {
+      val = -1;
+      set_NZV_unknown();
+   }
+   return val;
+}
+
+static int ld_helper(int val) {
+   val &= 0xff;
+   set_NZ(val);
+   V = 0;
+   return val;
+}
+
+static int ld16_helper(int val) {
+   val &= 0xffff;
+   set_NZ16(val);
+   V = 0;
+   return val;
+}
+
+static int lsr_helper(int val) {
+   if (val >= 0) {
+      C = val & 1;
+      val >>= 1;
+      Z = (val == 0);
+   } else {
+      C = -1;
+      Z = -1;
+   }
+   N = 0;
+   return val;
+}
+
+
+static int neg_helper(int val) {
+   V = (val == 0x80);
+   C = (val == 0x00);
+   val = (-val) & 0xff;
+   set_NZ(val);
+   // The datasheet says the half-carry flag is undefined, but in practice
+   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
+   // H = -1;
+   return val;
+}
+
+static int or_helper(int val, operand_t operand) {
+   if (val >= 0 && operand >= 0) {
+      val |= operand;
+      set_NZ(val);
+   } else {
+      set_NZ_unknown();
+   }
+   V = 0;
+   return val;
+}
+
+static int or16_helper(int val, operand_t operand) {
+   if (val >= 0 && operand >= 0) {
+      val |= operand;
+      set_NZ16(val);
+   } else {
+      set_NZ_unknown();
+   }
+   V = 0;
+   return val;
+}
+
+static void push_helper(sample_t *sample_q, int system) {
+   //  0 opcode
+   //  1 postbyte
+   //  2 ---
+   //  3 ---
+   //  4 ---
+   //  5 PCL    skipped if bit 7=0
+   //  6 PCH    skipped if bit 7=0
+   //  7 UL/SL  skipped if bit 6=0
+   //  8 UH/SH  skipped if bit 6=0
+   //  9 YL     skipped if bit 5=0
+   // 10 YH     skipped if bit 5=0
+   // 11 XL     skipped if bit 4=0
+   // 12 XH     skipped if bit 4=0
+   // 13 DP     skipped if bit 3=0
+   // 14 B      skipped if bit 2=0
+   // 15 A      skipped if bit 1=0
+   // 16 Flags  skipped if bit 0=0
+   int *us;
+   void (*push8)(int);
+   void (*push16)(int);
+   int fail_us;
+   if (system) {
+      push8 = push8s;
+      push16 = push16s;
+      us = &U;
+      fail_us = FAIL_U;
+   } else {
+      push8 = push8u;
+      push16 = push16u;
+      us = &S;
+      fail_us = FAIL_S;
+   }
+
+   int pb = sample_q[1].data;
+   int tmp;
+   int i = 5;
+   if (pb & 0x80) {
+      tmp = (sample_q[i + 1].data << 8) + sample_q[i].data;
+      i += 2;
+      push16(tmp);
+      if (PC >= 0 && PC != tmp) {
+         failflag |= FAIL_PC;
+      }
+      PC = tmp;
+   }
+   if (pb & 0x40) {
+      tmp = (sample_q[i + 1].data << 8) + sample_q[i].data;
+      i += 2;
+      push16(tmp);
+      if (*us >= 0 && *us != tmp) {
+         failflag |= fail_us;
+      }
+      *us = tmp;
+   }
+   if (pb & 0x20) {
+      tmp = (sample_q[i + 1].data << 8) + sample_q[i].data;
+      i += 2;
+      push16(tmp);
+      if (Y >= 0 && Y != tmp) {
+         failflag |= FAIL_Y;
+      }
+      Y = tmp;
+   }
+   if (pb & 0x10) {
+      tmp = (sample_q[i + 1].data << 8) + sample_q[i].data;
+      i += 2;
+      push16(tmp);
+      if (X >= 0 && X != tmp) {
+         failflag |= FAIL_X;
+      }
+      X = tmp;
+   }
+   if (pb & 0x08) {
+      tmp = sample_q[i++].data;
+      push8(tmp);
+      if (DP >= 0 && DP != tmp) {
+         failflag |= FAIL_DP;
+      }
+      DP = tmp;
+   }
+   if (pb & 0x04) {
+      tmp = sample_q[i++].data;
+      push8(tmp);
+      if (ACCB >= 0 && ACCB != tmp) {
+         failflag |= FAIL_ACCB;
+      }
+      ACCB = tmp;
+   }
+   if (pb & 0x02) {
+      tmp = sample_q[i++].data;
+      push8(tmp);
+      if (ACCA >= 0 && ACCA != tmp) {
+         failflag |= FAIL_ACCA;
+      }
+      ACCA = tmp;
+   }
+   if (pb & 0x01) {
+      tmp = sample_q[i++].data;
+      push8(tmp);
+      check_FLAGS(tmp);
+      set_FLAGS(tmp);
+   }
+}
+
+static void pull_helper(sample_t *sample_q, int system) {
+   //  0 opcode
+   //  1 postbyte
+   //  2 ---
+   //  3 ---
+   //  4 Flags  skipped if bit 0=0
+   //  5 A      skipped if bit 1=0
+   //  6 B      skipped if bit 2=0
+   //  7 DP     skipped if bit 3=0
+   //  8 XH     skipped if bit 4=0
+   //  9 XL     skipped if bit 4=0
+   // 10 YH     skipped if bit 5=0
+   // 11 YL     skipped if bit 5=0
+   // 12 UH/SH  skipped if bit 6=0
+   // 13 UL/SL  skipped if bit 6=0
+   // 14 PCH    skipped if bit 7=0
+   // 15 PCL    skipped if bit 7=0
+   // 16 --
+
+   int *us;
+   void (*pop8)(int);
+   void (*pop16)(int);
+   if (system) {
+      pop8 = pop8s;
+      pop16 = pop16s;
+      us = &U;
+   } else {
+      pop8 = pop8u;
+      pop16 = pop16u;
+      us = &S;
+   }
+
+   int pb = sample_q[1].data;
+   int tmp;
+   int i = 4;
+   if (pb & 0x01) {
+      tmp = sample_q[i++].data;
+      pop8(tmp);
+      set_FLAGS(tmp);
+   }
+   if (pb & 0x02) {
+      tmp = sample_q[i++].data;
+      pop8(tmp);
+      ACCA = tmp;
+   }
+   if (pb & 0x04) {
+      tmp = sample_q[i++].data;
+      pop8(tmp);
+      ACCB = tmp;
+   }
+   if (pb & 0x08) {
+      tmp = sample_q[i++].data;
+      pop8(tmp);
+      DP = tmp;
+   }
+   if (pb & 0x10) {
+      tmp = (sample_q[i].data << 8) + sample_q[i + 1].data;
+      i += 2;
+      pop16(tmp);
+      X = tmp;
+   }
+   if (pb & 0x20) {
+      tmp = (sample_q[i].data << 8) + sample_q[i + 1].data;
+      i += 2;
+      pop16(tmp);
+      Y = tmp;
+   }
+   if (pb & 0x40) {
+      tmp = (sample_q[i].data << 8) + sample_q[i + 1].data;
+      i += 2;
+      pop16(tmp);
+      *us = tmp;
+   }
+   if (pb & 0x80) {
+      tmp = (sample_q[i].data << 8) + sample_q[i + 1].data;
+      i += 2;
+      pop16(tmp);
+      PC = tmp;
+   }
+}
+
+static int rol_helper(int val) {
+   if (val >= 0 && C >= 0) {
+      int tmp = (val << 1) + C;
+      // C is bit 7 of val
+      C = (val >> 7) & 1;
+      // V is the xor of bits 7,6 of val
+      V = ((tmp ^ val) >> 7) & 1;
+      // truncate to 8 bits
+      val = tmp & 255;
+      set_NZ(val);
+   } else {
+      val = -1;
+      set_NZVC_unknown();
+   }
+   return val;
+}
+
+static int ror_helper(int val) {
+   if (val >= 0 && C >= 0) {
+      int tmp = (val >> 1) + (C << 7);
+      // C is bit 0 of val (V is unaffected)
+      C = val & 1;
+      // truncate to 8 bits
+      val = tmp & 255;
+      set_NZ(val);
+   } else {
+      val = -1;
+      set_NZC_unknown();
+   }
+   return val;
+}
+
+static int st_helper(int val, operand_t operand, int fail) {
+   if (val >= 0 && operand >= 0) {
+      if (operand != val) {
+         failflag |= fail;
+      }
+   }
+   V = 0;
+   set_NZ(operand);
+   return operand;
+}
+
+static int st16_helper(int val, operand_t operand, int fail) {
+   if (val >= 0 && operand >= 0) {
+      if (operand != val) {
+         failflag |= fail;
+      }
+   }
+   V = 0;
+   set_NZ16(operand);
+   return operand;
+}
+
+static int sub_helper(int val, int cin, operand_t operand) {
+   if (val >= 0 && cin >= 0  && operand >= 0) {
+      int tmp = val - operand - cin;
+      // The carry flag is bit 8 of the result
+      C = (tmp >> 8) & 1;
+      // The overflow flag is: IF ((a^b^res^(res>>1))&0x80) SEV else CLV
+      V = (((val ^ operand ^ tmp) >> 7) & 1) ^ C;
+      // Truncate the result to 8 bits
+      tmp &= 0xff;
+      // Set the flags
+      set_NZ(tmp);
+      // Save the result back to the register
+      return tmp;
+   } else {
+      set_NZVC_unknown();
+      return -1;
+   }
+   // The datasheet says the half-carry flag is undefined, but in practice
+   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
+   // H = -1;
+}
+
+static int sub16_helper(int val, int cin, operand_t operand) {
+   if (val >= 0 && cin >= 0 && operand >= 0) {
+      int tmp = val - operand - cin;
+      // The carry flag is bit 16 of the result
+      C = (tmp >> 16) & 1;
+      // The overflow flag is: IF ((a^b^res^(res>>1))&0x8000) SEV else CLV
+      V = (((val ^ operand ^ tmp) >> 15) & 1) ^ C;
+      // Truncate the result to 16 bits
+      tmp &= 0xFFFF;
+      // Set the flags
+      set_NZ16(tmp);
+      // Save the result back to the register
+      return tmp;
+   } else {
+      set_NZVC_unknown();
+      return -1;
+   }
+   // The datasheet says the half-carry flag is undefined, but in practice
+   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
+   // H = -1;
+}
+
+// ====================================================================
+// Common 6809/6309 Instructions
+// ====================================================================
+
+static int op_fn_ABX(operand_t operand, ea_t ea, sample_t *sample_q) {
+   // X = X + B
+   if (X >= 0 && ACCB >= 0) {
+      X = (X + ACCB) & 0xFFFF;
+   } else {
+      X = -1;
+   }
+   return -1;
 }
 
 static int op_fn_ADCA(operand_t operand, ea_t ea, sample_t *sample_q) {
@@ -1841,38 +2524,10 @@ static int op_fn_ADDB(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_ADDD(operand_t operand, ea_t ea, sample_t *sample_q) {
-   if (ACCA >= 0 && ACCB >= 0) {
-      int d = (ACCA << 8) + ACCB;
-      // Perform the addition (there is no carry in)
-      int tmp = d + operand;
-      // The carry flag is bit 16 of the result
-      C = (tmp >> 16) & 1;
-      // The overflow flag is: IF ((a^b^res^(res>>1))&0x80) SEV else CLV
-      V = (((d ^ operand ^ tmp) >> 15) & 1) ^ C;
-      // Truncate the result to 16 bits
-      tmp &= 0xFFFF;
-      // Set the flags
-      set_NZ16(tmp);
-      // Unpack back into A and B
-      ACCA = (tmp >> 8) & 0xff;
-      ACCB = tmp & 0xff;
-   } else {
-      ACCA = -1;
-      ACCB = -1;
-      set_NZVC_unknown();
-   }
+   int D = pack(ACCA, ACCB);
+   int result = add16_helper(D, 0, operand);
+   unpack(result, &ACCA, &ACCB);
    return -1;
-}
-
-static int and_helper(int val, operand_t operand) {
-   if (val >= 0) {
-      val &= operand;
-      set_NZ(val);
-   } else {
-      set_NZ_unknown();
-   }
-   V = 0;
-   return val;
 }
 
 static int op_fn_ANDA(operand_t operand, ea_t ea, sample_t *sample_q) {
@@ -1913,21 +2568,6 @@ static int op_fn_ANDC(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int asl_helper(int val) {
-   if (val >= 0) {
-      C = (val >> 7) & 1;
-      val = (val << 1) & 0xff;
-      V = (val >> 7) & C & 1;
-      set_NZ(val);
-   } else {
-      set_NZVC_unknown();
-   }
-   // The datasheet says the half-carry flag is undefined, but in practice
-   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
-   // H = -1;
-   return val;
-}
-
 static int op_fn_ASL(operand_t operand, ea_t ea, sample_t *sample_q) {
    return asl_helper(operand);
 }
@@ -1940,20 +2580,6 @@ static int op_fn_ASLA(operand_t operand, ea_t ea, sample_t *sample_q) {
 static int op_fn_ASLB(operand_t operand, ea_t ea, sample_t *sample_q) {
    ACCB = asl_helper(ACCB);
    return -1;
-}
-
-static int asr_helper(int val) {
-   if (val >= 0) {
-      C = val & 1;
-      val = (val & 0x80) | (val >> 1);
-      set_NZ(val);
-   } else {
-      set_NZC_unknown();
-   }
-   // The datasheet says the half-carry flag is undefined, but in practice
-   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
-   // H = -1;
-   return val;
 }
 
 static int op_fn_ASR(operand_t operand, ea_t ea, sample_t *sample_q) {
@@ -1969,7 +2595,6 @@ static int op_fn_ASRB(operand_t operand, ea_t ea, sample_t *sample_q) {
    ACCB = asr_helper(ACCB);
    return -1;
 }
-
 
 static int op_fn_BCC(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (C < 0) {
@@ -2014,15 +2639,6 @@ static int op_fn_BHI(operand_t operand, ea_t ea, sample_t *sample_q) {
       PC = ea;
    }
    return -1;
-}
-
-static void bit_helper(int val, operand_t operand) {
-   if (val >= 0) {
-      set_NZ(val & operand);
-   } else {
-      set_NZ_unknown();
-   }
-   V = 0;
 }
 
 static int op_fn_BITA(operand_t operand, ea_t ea, sample_t *sample_q) {
@@ -2134,14 +2750,6 @@ static int op_fn_BVS(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int clr_helper() {
-   N = 0;
-   Z = 1;
-   C = 0;
-   V = 0;
-   return 0;
-
-}
 static int op_fn_CLR(operand_t operand, ea_t ea, sample_t *sample_q) {
    return clr_helper();
 }
@@ -2156,83 +2764,39 @@ static int op_fn_CLRB(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static void cmp_helper8(int val, operand_t operand) {
-   if (val >= 0) {
-      int tmp = val - operand;
-      // The carry flag is bit 8 of the result
-      C = (tmp >> 8) & 1;
-      // The overflow flag is: IF ((a^b^res^(res>>1))&0x80) SEV else CLV
-      V = (((val ^ operand ^ tmp) >> 7) & 1) ^ C;
-      tmp &= 0xff;
-      set_NZ(tmp);
-   } else {
-      set_NZVC_unknown();
-   }
-   // The datasheet says the half-carry flag is undefined, but in practice
-   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
-   // H = -1;
-}
-
-static void cmp_helper16(int val, operand_t operand) {
-   if (val >= 0) {
-      int tmp = val - operand;
-      // The carry flag is bit 16 of the result
-      C = (tmp >> 16) & 1;
-      // The overflow flag is: IF ((a^b^res^(res>>1))&0x8000) SEV else CLV
-      V = (((val ^ operand ^ tmp) >> 15) & 1) ^ C;
-      tmp &= 0xffff;
-      set_NZ16(tmp);
-   } else {
-      set_NZVC_unknown();
-   }
-}
-
 static int op_fn_CMPA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   cmp_helper8(ACCA, operand);
+   cmp_helper(ACCA, operand);
    return -1;
 }
 
 static int op_fn_CMPB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   cmp_helper8(ACCB, operand);
+   cmp_helper(ACCB, operand);
    return -1;
 }
 
 static int op_fn_CMPD(operand_t operand, ea_t ea, sample_t *sample_q) {
-   int D = (ACCA << 8) + ACCB;
-   cmp_helper16(D, operand);
+   cmp16_helper(pack(ACCA, ACCB), operand);
    return -1;
 }
 
 static int op_fn_CMPS(operand_t operand, ea_t ea, sample_t *sample_q) {
-   cmp_helper16(S, operand);
+   cmp16_helper(S, operand);
    return -1;
 }
 
 static int op_fn_CMPU(operand_t operand, ea_t ea, sample_t *sample_q) {
-   cmp_helper16(U, operand);
+   cmp16_helper(U, operand);
    return -1;
 }
 
 static int op_fn_CMPX(operand_t operand, ea_t ea, sample_t *sample_q) {
-   cmp_helper16(X, operand);
+   cmp16_helper(X, operand);
    return -1;
 }
 
 static int op_fn_CMPY(operand_t operand, ea_t ea, sample_t *sample_q) {
-   cmp_helper16(Y, operand);
+   cmp16_helper(Y, operand);
    return -1;
-}
-
-static int com_helper(int val) {
-   if (val >= 0) {
-      val ^= 0xff;
-      set_NZ(val);
-   } else {
-      set_NZ_unknown();
-   }
-   V = 0;
-   C = 1;
-   return val;
 }
 
 static int op_fn_COM(operand_t operand, ea_t ea, sample_t *sample_q) {
@@ -2289,19 +2853,6 @@ static int op_fn_DAA(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int dec_helper(int val) {
-   if (val >= 0) {
-      val = (val - 1) & 0xff;
-      set_NZ(val);
-      // V indicates signed overflow, which onlt happens when going from 128->127
-      V = (val == 0x7f);
-   } else {
-      val = -1;
-      set_NZV_unknown();
-   }
-   return val;
-}
-
 static int op_fn_DEC(operand_t operand, ea_t ea, sample_t *sample_q) {
    return dec_helper(operand);
 }
@@ -2314,17 +2865,6 @@ static int op_fn_DECA(operand_t operand, ea_t ea, sample_t *sample_q) {
 static int op_fn_DECB(operand_t operand, ea_t ea, sample_t *sample_q) {
    ACCB = dec_helper(ACCB);
    return -1;
-}
-
-static int eor_helper(int val, operand_t operand) {
-   if (val >= 0) {
-      val ^= operand;
-      set_NZ(val);
-   } else {
-      set_NZ_unknown();
-   }
-   V = 0;
-   return val;
 }
 
 static int op_fn_EORA(operand_t operand, ea_t ea, sample_t *sample_q) {
@@ -2347,19 +2887,6 @@ static int op_fn_EXG(operand_t operand, ea_t ea, sample_t *sample_q) {
    set_regp(reg1, tmp2);
    set_regp(reg2, tmp1);
    return -1;
-}
-
-static int inc_helper(int val) {
-   if (val >= 0) {
-      val = (val + 1) & 0xff;
-      set_NZ(val);
-      // V indicates signed overflow, which only happens when going from 127->128
-      V = (val == 0x80);
-   } else {
-      val = -1;
-      set_NZV_unknown();
-   }
-   return val;
 }
 
 static int op_fn_INC(operand_t operand, ea_t ea, sample_t *sample_q) {
@@ -2389,54 +2916,40 @@ static int op_fn_JSR(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int ld_helper8(int val) {
-   val &= 0xff;
-   set_NZ(val);
-   V = 0;
-   return val;
-}
-
-static int ld_helper16(int val) {
-   val &= 0xffff;
-   set_NZ16(val);
-   V = 0;
-   return val;
-}
-
 static int op_fn_LDA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   ACCA = ld_helper8(operand);
+   ACCA = ld_helper(operand);
    return -1;
 }
 
 static int op_fn_LDB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   ACCB = ld_helper8(operand);
+   ACCB = ld_helper(operand);
    return -1;
 }
 
 static int op_fn_LDD(operand_t operand, ea_t ea, sample_t *sample_q) {
-   int tmp = ld_helper16(operand);
+   int tmp = ld16_helper(operand);
    ACCA = (tmp >> 8) & 0xff;
    ACCB = tmp & 0xff;
    return -1;
 }
 
 static int op_fn_LDS(operand_t operand, ea_t ea, sample_t *sample_q) {
-   S = ld_helper16(operand);
+   S = ld16_helper(operand);
    return -1;
 }
 
 static int op_fn_LDU(operand_t operand, ea_t ea, sample_t *sample_q) {
-   U = ld_helper16(operand);
+   U = ld16_helper(operand);
    return -1;
 }
 
 static int op_fn_LDX(operand_t operand, ea_t ea, sample_t *sample_q) {
-   X = ld_helper16(operand);
+   X = ld16_helper(operand);
    return -1;
 }
 
 static int op_fn_LDY(operand_t operand, ea_t ea, sample_t *sample_q) {
-   Y = ld_helper16(operand);
+   Y = ld16_helper(operand);
    return -1;
 }
 
@@ -2460,19 +2973,6 @@ static int op_fn_LEAY(operand_t operand, ea_t ea, sample_t *sample_q) {
    Y = ea;
    Z = (Y == 0);
    return -1;
-}
-
-static int lsr_helper(int val) {
-   if (val >= 0) {
-      C = val & 1;
-      val >>= 1;
-      Z = (val == 0);
-   } else {
-      C = -1;
-      Z = -1;
-   }
-   N = 0;
-   return val;
 }
 
 static int op_fn_LSR(operand_t operand, ea_t ea, sample_t *sample_q) {
@@ -2506,17 +3006,6 @@ static int op_fn_MUL(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int neg_helper(int val) {
-   V = (val == 0x80);
-   C = (val == 0x00);
-   val = (-val) & 0xff;
-   set_NZ(val);
-   // The datasheet says the half-carry flag is undefined, but in practice
-   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
-   // H = -1;
-   return val;
-}
-
 static int op_fn_NEG(operand_t operand, ea_t ea, sample_t *sample_q) {
    return neg_helper(operand);
 }
@@ -2533,17 +3022,6 @@ static int op_fn_NEGB(operand_t operand, ea_t ea, sample_t *sample_q) {
 
 static int op_fn_NOP(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
-}
-
-static int or_helper(int val, operand_t operand) {
-   if (val >= 0) {
-      val |= operand;
-      set_NZ(val);
-   } else {
-      set_NZ_unknown();
-   }
-   V = 0;
-   return val;
 }
 
 static int op_fn_ORA(operand_t operand, ea_t ea, sample_t *sample_q) {
@@ -2584,111 +3062,6 @@ static int op_fn_ORCC(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static void push_helper(sample_t *sample_q, int system) {
-   //  0 opcode
-   //  1 postbyte
-   //  2 ---
-   //  3 ---
-   //  4 ---
-   //  5 PCL    skipped if bit 7=0
-   //  6 PCH    skipped if bit 7=0
-   //  7 UL/SL  skipped if bit 6=0
-   //  8 UH/SH  skipped if bit 6=0
-   //  9 YL     skipped if bit 5=0
-   // 10 YH     skipped if bit 5=0
-   // 11 XL     skipped if bit 4=0
-   // 12 XH     skipped if bit 4=0
-   // 13 DP     skipped if bit 3=0
-   // 14 B      skipped if bit 2=0
-   // 15 A      skipped if bit 1=0
-   // 16 Flags  skipped if bit 0=0
-   int *us;
-   void (*push8)(int);
-   void (*push16)(int);
-   int fail_us;
-   if (system) {
-      push8 = push8s;
-      push16 = push16s;
-      us = &U;
-      fail_us = FAIL_U;
-   } else {
-      push8 = push8u;
-      push16 = push16u;
-      us = &S;
-      fail_us = FAIL_S;
-   }
-
-   int pb = sample_q[1].data;
-   int tmp;
-   int i = 5;
-   if (pb & 0x80) {
-      tmp = (sample_q[i + 1].data << 8) + sample_q[i].data;
-      i += 2;
-      push16(tmp);
-      if (PC >= 0 && PC != tmp) {
-         failflag |= FAIL_PC;
-      }
-      PC = tmp;
-   }
-   if (pb & 0x40) {
-      tmp = (sample_q[i + 1].data << 8) + sample_q[i].data;
-      i += 2;
-      push16(tmp);
-      if (*us >= 0 && *us != tmp) {
-         failflag |= fail_us;
-      }
-      *us = tmp;
-   }
-   if (pb & 0x20) {
-      tmp = (sample_q[i + 1].data << 8) + sample_q[i].data;
-      i += 2;
-      push16(tmp);
-      if (Y >= 0 && Y != tmp) {
-         failflag |= FAIL_Y;
-      }
-      Y = tmp;
-   }
-   if (pb & 0x10) {
-      tmp = (sample_q[i + 1].data << 8) + sample_q[i].data;
-      i += 2;
-      push16(tmp);
-      if (X >= 0 && X != tmp) {
-         failflag |= FAIL_X;
-      }
-      X = tmp;
-   }
-   if (pb & 0x08) {
-      tmp = sample_q[i++].data;
-      push8(tmp);
-      if (DP >= 0 && DP != tmp) {
-         failflag |= FAIL_DP;
-      }
-      DP = tmp;
-   }
-   if (pb & 0x04) {
-      tmp = sample_q[i++].data;
-      push8(tmp);
-      if (ACCB >= 0 && ACCB != tmp) {
-         failflag |= FAIL_ACCB;
-      }
-      ACCB = tmp;
-   }
-   if (pb & 0x02) {
-      tmp = sample_q[i++].data;
-      push8(tmp);
-      if (ACCA >= 0 && ACCA != tmp) {
-         failflag |= FAIL_ACCA;
-      }
-      ACCA = tmp;
-   }
-   if (pb & 0x01) {
-      tmp = sample_q[i++].data;
-      push8(tmp);
-      check_FLAGS(tmp);
-      set_FLAGS(tmp);
-   }
-}
-
 static int op_fn_PSHS(operand_t operand, ea_t ea, sample_t *sample_q) {
    push_helper(sample_q, 1); // 1 = PSHS
    return -1;
@@ -2698,89 +3071,6 @@ static int op_fn_PSHU(operand_t operand, ea_t ea, sample_t *sample_q) {
    push_helper(sample_q, 0); // 0 = PSHU
    return -1;
 }
-
-
-static void pull_helper(sample_t *sample_q, int system) {
-   //  0 opcode
-   //  1 postbyte
-   //  2 ---
-   //  3 ---
-   //  4 Flags  skipped if bit 0=0
-   //  5 A      skipped if bit 1=0
-   //  6 B      skipped if bit 2=0
-   //  7 DP     skipped if bit 3=0
-   //  8 XH     skipped if bit 4=0
-   //  9 XL     skipped if bit 4=0
-   // 10 YH     skipped if bit 5=0
-   // 11 YL     skipped if bit 5=0
-   // 12 UH/SH  skipped if bit 6=0
-   // 13 UL/SL  skipped if bit 6=0
-   // 14 PCH    skipped if bit 7=0
-   // 15 PCL    skipped if bit 7=0
-   // 16 --
-
-   int *us;
-   void (*pop8)(int);
-   void (*pop16)(int);
-   if (system) {
-      pop8 = pop8s;
-      pop16 = pop16s;
-      us = &U;
-   } else {
-      pop8 = pop8u;
-      pop16 = pop16u;
-      us = &S;
-   }
-
-   int pb = sample_q[1].data;
-   int tmp;
-   int i = 4;
-   if (pb & 0x01) {
-      tmp = sample_q[i++].data;
-      pop8(tmp);
-      set_FLAGS(tmp);
-   }
-   if (pb & 0x02) {
-      tmp = sample_q[i++].data;
-      pop8(tmp);
-      ACCA = tmp;
-   }
-   if (pb & 0x04) {
-      tmp = sample_q[i++].data;
-      pop8(tmp);
-      ACCB = tmp;
-   }
-   if (pb & 0x08) {
-      tmp = sample_q[i++].data;
-      pop8(tmp);
-      DP = tmp;
-   }
-   if (pb & 0x10) {
-      tmp = (sample_q[i].data << 8) + sample_q[i + 1].data;
-      i += 2;
-      pop16(tmp);
-      X = tmp;
-   }
-   if (pb & 0x20) {
-      tmp = (sample_q[i].data << 8) + sample_q[i + 1].data;
-      i += 2;
-      pop16(tmp);
-      Y = tmp;
-   }
-   if (pb & 0x40) {
-      tmp = (sample_q[i].data << 8) + sample_q[i + 1].data;
-      i += 2;
-      pop16(tmp);
-      *us = tmp;
-   }
-   if (pb & 0x80) {
-      tmp = (sample_q[i].data << 8) + sample_q[i + 1].data;
-      i += 2;
-      pop16(tmp);
-      PC = tmp;
-   }
-}
-
 static int op_fn_PULS(operand_t operand, ea_t ea, sample_t *sample_q) {
    pull_helper(sample_q, 1); // 1 = PULS
    return -1;
@@ -2789,23 +3079,6 @@ static int op_fn_PULS(operand_t operand, ea_t ea, sample_t *sample_q) {
 static int op_fn_PULU(operand_t operand, ea_t ea, sample_t *sample_q) {
    pull_helper(sample_q, 0); // 0 = PULU
    return -1;
-}
-
-static int rol_helper(int val) {
-   if (val >= 0 && C >= 0) {
-      int tmp = (val << 1) + C;
-      // C is bit 7 of val
-      C = (val >> 7) & 1;
-      // V is the xor of bits 7,6 of val
-      V = ((tmp ^ val) >> 7) & 1;
-      // truncate to 8 bits
-      val = tmp & 255;
-      set_NZ(val);
-   } else {
-      val = -1;
-      set_NZVC_unknown();
-   }
-   return val;
 }
 
 static int op_fn_ROL(operand_t operand, ea_t ea, sample_t *sample_q) {
@@ -2820,21 +3093,6 @@ static int op_fn_ROLA(operand_t operand, ea_t ea, sample_t *sample_q) {
 static int op_fn_ROLB(operand_t operand, ea_t ea, sample_t *sample_q) {
    ACCB = rol_helper(ACCB);
    return -1;
-}
-
-static int ror_helper(int val) {
-   if (val >= 0 && C >= 0) {
-      int tmp = (val >> 1) + (C << 7);
-      // C is bit 0 of val (V is unaffected)
-      C = val & 1;
-      // truncate to 8 bits
-      val = tmp & 255;
-      set_NZ(val);
-   } else {
-      val = -1;
-      set_NZC_unknown();
-   }
-   return val;
 }
 
 static int op_fn_ROR(operand_t operand, ea_t ea, sample_t *sample_q) {
@@ -2909,28 +3167,6 @@ static int op_fn_RTS(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int sub_helper(int val, int cin, operand_t operand) {
-   if (val >= 0 && cin >= 0) {
-      int tmp = val - operand - cin;
-      // The carry flag is bit 8 of the result
-      C = (tmp >> 8) & 1;
-      // The overflow flag is: IF ((a^b^res^(res>>1))&0x80) SEV else CLV
-      V = (((val ^ operand ^ tmp) >> 7) & 1) ^ C;
-      // Truncate the result to 8 bits
-      tmp &= 0xff;
-      // Set the flags
-      set_NZ(tmp);
-      // Save the result back to the register
-      return tmp;
-   } else {
-      set_NZVC_unknown();
-      return -1;
-   }
-   // The datasheet says the half-carry flag is undefined, but in practice
-   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
-   // H = -1;
-}
-
 static int op_fn_SBCA(operand_t operand, ea_t ea, sample_t *sample_q) {
    ACCA = sub_helper(ACCA, C, operand);
    return -1;
@@ -2957,63 +3193,41 @@ static int op_fn_SEX(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int st_helper8(int val, operand_t operand, int fail) {
-   if (val >= 0) {
-      if (operand != val) {
-         failflag |= fail;
-      }
-   }
-   V = 0;
-   set_NZ(operand);
-   return operand;
-}
-
-static int st_helper16(int val, operand_t operand, int fail) {
-   if (val >= 0) {
-      if (operand != val) {
-         failflag |= fail;
-      }
-   }
-   V = 0;
-   set_NZ16(operand);
-   return operand;
-}
-
 static int op_fn_STA(operand_t operand, ea_t ea, sample_t *sample_q) {
-   ACCA = st_helper8(ACCA, operand, FAIL_ACCA);
+   ACCA = st_helper(ACCA, operand, FAIL_ACCA);
    return operand;
 }
 
 static int op_fn_STB(operand_t operand, ea_t ea, sample_t *sample_q) {
-   ACCB = st_helper8(ACCB, operand, FAIL_ACCB);
+   ACCB = st_helper(ACCB, operand, FAIL_ACCB);
    return operand;
 }
 
 static int op_fn_STD(operand_t operand, ea_t ea, sample_t *sample_q) {
    int D = (ACCA >= 0 && ACCB >= 0) ? (ACCA << 8) + ACCB : -1;
-   D = st_helper16(D, operand, FAIL_ACCA | FAIL_ACCB);
+   D = st16_helper(D, operand, FAIL_ACCA | FAIL_ACCB);
    ACCA = (D >> 8) & 0xff;
    ACCB = D & 0xff;
    return operand;
 }
 
 static int op_fn_STS(operand_t operand, ea_t ea, sample_t *sample_q) {
-   S = st_helper16(S, operand, FAIL_S);
+   S = st16_helper(S, operand, FAIL_S);
    return operand;
 }
 
 static int op_fn_STU(operand_t operand, ea_t ea, sample_t *sample_q) {
-   U = st_helper16(U, operand, FAIL_U);
+   U = st16_helper(U, operand, FAIL_U);
    return operand;
 }
 
 static int op_fn_STX(operand_t operand, ea_t ea, sample_t *sample_q) {
-   X = st_helper16(X, operand, FAIL_X);
+   X = st16_helper(X, operand, FAIL_X);
    return operand;
 }
 
 static int op_fn_STY(operand_t operand, ea_t ea, sample_t *sample_q) {
-   Y = st_helper16(Y, operand, FAIL_Y);
+   Y = st16_helper(Y, operand, FAIL_Y);
    return operand;
 }
 
@@ -3028,26 +3242,9 @@ static int op_fn_SUBB(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_SUBD(operand_t operand, ea_t ea, sample_t *sample_q) {
-   if (ACCA >= 0 && ACCB >= 0) {
-      int d = (ACCA << 8) + ACCB;
-      // Perform the addition (there is no carry in)
-      int tmp = d - operand;
-      // The carry flag is bit 16 of the result
-      C = (tmp >> 16) & 1;
-      // The overflow flag is: IF ((a^b^res^(res>>1))&0x8000) SEV else CLV
-      V = (((d ^ operand ^ tmp) >> 15) & 1) ^ C;
-      // Truncate the result to 16 bits
-      tmp &= 0xFFFF;
-      // Set the flags
-      set_NZ16(tmp);
-      // Unpack back into A and B
-      ACCA = (tmp >> 8) & 0xff;
-      ACCB = tmp & 0xff;
-   } else {
-      ACCA = -1;
-      ACCB = -1;
-      set_NZVC_unknown();
-   }
+   int D = pack(ACCA, ACCB);
+   int result = sub16_helper(D, 0, operand);
+   unpack(result, &ACCA, &ACCB);
    return -1;
 }
 
@@ -3216,338 +3413,719 @@ static int op_fn_XSTU(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 // ====================================================================
-// Undocumented Instructions
+// 6309 Helpers
 // ====================================================================
 
-static int op_fn_ADCD  (operand_t operand, ea_t ea, sample_t *sample_q) {
-   return -1;
+// Used in ADCR/ADDR/ANDR/CMPR/EORR/ORRR/SBCR/SUBR on the 6309 only
+//
+// 8->16 requires promotion to D or W
+// 16->8 requires demotion (just use LSB)
+//
+// These rules are different to EXN/TRF
+
+// r0 is the src
+static int get_r0(int pb) {
+   int ret;
+   int src = (pb >> 4) & 0xf;
+   int dst = pb & 0xf;
+   if (dst >= 8) {
+      // dst is 8 bits
+      switch(src) {
+         // src is 16 bits, demote to 8 bits
+      case  0: ret = ACCB;                        break;
+      case  1: ret = ( X < 0) ? -1 : ( X & 0xff); break;
+      case  2: ret = ( Y < 0) ? -1 : ( Y & 0xff); break;
+      case  3: ret = ( U < 0) ? -1 : ( U & 0xff); break;
+      case  4: ret = ( S < 0) ? -1 : ( S & 0xff); break;
+      case  5: ret = (PC < 0) ? -1 : (PC & 0xff); break;
+      case  6: ret = ACCF;                        break;
+      case  7: ret = (TV < 0) ? -1 : (TV & 0xff); break;
+         // src is 8 bits
+      case  8: ret = ACCA;                        break;
+      case  9: ret = ACCB;                        break;
+      case 10: ret = get_FLAGS();                 break;
+      case 11: ret = DP;                          break;
+      case 14: ret = ACCE;                        break;
+      case 15: ret = ACCF;                        break;
+      default: ret = 0;
+      }
+   } else {
+      // dst is 16 bits
+      switch(src) {
+         // src is 16 bits
+      case  0: ret = pack(ACCB, ACCB);            break;
+      case  1: ret = X;                           break;
+      case  2: ret = Y;                           break;
+      case  3: ret = U;                           break;
+      case  4: ret = S;                           break;
+      case  5: ret = PC;                          break;
+      case  6: ret = pack(ACCE, ACCF);            break;
+      case  7: ret = TV;                          break;
+         // src is 8 bits, promote to 16 bits
+      case  8: ret = pack(ACCB, ACCB);            break;
+      case  9: ret = pack(ACCB, ACCB);            break;
+      case 10: ret = get_FLAGS();                 break;
+      case 11: ret = (DP < 0) ? -1 : (DP << 8);   break;
+      case 14: ret = pack(ACCE, ACCF);            break;
+      case 15: ret = pack(ACCE, ACCF);            break;
+      default: ret = 0;
+      }
+   }
+   return ret;
+}
+
+
+// r1 is the dst
+static int get_r1(int pb) {
+   int ret;
+   int dst = pb & 0xf;
+   switch(dst) {
+   case  0: ret = pack(ACCB, ACCB);            break;
+   case  1: ret = X;                           break;
+   case  2: ret = Y;                           break;
+   case  3: ret = U;                           break;
+   case  4: ret = S;                           break;
+   case  5: ret = PC;                          break;
+   case  6: ret = pack(ACCE, ACCF);            break;
+   case  7: ret = TV;                          break;
+   case  8: ret = ACCA;                        break;
+   case  9: ret = ACCB;                        break;
+   case 10: ret = get_FLAGS();                 break;
+   case 11: ret = DP;                          break;
+   case 14: ret = ACCE;                        break;
+   case 15: ret = ACCF;                        break;
+   default: ret = 0;
+   }
+   return ret;
+}
+
+
+
+// r1 is the dst
+static void set_r1(int pb, int val) {
+   int dst = pb & 0xf;
+   switch(dst) {
+   case  0: unpack(val, &ACCA, &ACCB); break;
+   case  1: X  = val;                  break;
+   case  2: Y  = val;                  break;
+   case  3: U  = val;                  break;
+   case  4: S  = val;                  break;
+   case  5: PC = val;                  break;
+   case  6: unpack(val, &ACCE, &ACCF); break;
+   case  7: TV = val;                  break;
+   case  8: ACCA = val;                break;
+   case  9: ACCB = val;                break;
+   case 10: set_FLAGS(val);            break;
+   case 11: DP = val;                  break;
+   case 14: ACCE = val;                break;
+   case 15: ACCF = val;                break;
+   }
+}
+
+static void singlebit_helper(operand_t operand, sample_t *sample_q) {
+   // Pickout the opcode and the postbyte from the samples
+   int opcode = sample_q[1].data;
+   int postbyte = sample_q[2].data;
+
+   // Parse the post byte
+   int reg_num    = (postbyte >> 6) & 3; // Bits 7..6
+   int mem_bitnum = (postbyte >> 3) & 7; // Bits 5..3
+   int reg_bitnum = (postbyte     ) & 7; // Bits 2..0
+
+   // Extract the memory bit), which must be 0 or 1
+   int mem_bit = (operand >> mem_bitnum) & 1;
+
+   // Extract register bit, which can be 0, 1 or -1
+   int reg_bit;
+   switch (reg_num) {
+   case 0: reg_bit = get_FLAG(reg_bitnum);                       break;
+   case 1: reg_bit = (ACCA < 0) ? -1 : (ACCA >> reg_bitnum) & 1; break;
+   case 2: reg_bit = (ACCB < 0) ? -1 : (ACCB >> reg_bitnum) & 1; break;
+   default:  return; // TODO Illegal Instruction Trap ?
+   }
+
+   // Compute the bit operation, allowing for reg_bit to be unknown
+   switch (opcode) {
+   case 0x30: // BAND
+      if (reg_bit >= 0) {
+         reg_bit &= mem_bit;
+      } else if (!mem_bit) {
+         reg_bit = 0;
+      }
+      break;
+   case 0x31: // BIAND
+      if (reg_bit >= 0) {
+         reg_bit &= !mem_bit;
+      } else if (mem_bit) {
+         reg_bit = 0;
+      }
+      break;
+   case 0x32: // BOR
+      if (reg_bit >= 0) {
+         reg_bit |= mem_bit;
+      } else if (mem_bit) {
+         reg_bit = 1;
+      }
+      break;
+   case 0x33: // BIOR
+      if (reg_bit >= 0) {
+         reg_bit |= !mem_bit;
+      } else if (!mem_bit) {
+         reg_bit = 1;
+      }
+      break;
+   case 0x34: // BEOR
+      if (reg_bit >= 0) {
+         reg_bit ^= mem_bit;
+      }
+      break;
+   case 0x35: // BIEOR
+      if (reg_bit >= 0) {
+         reg_bit ^= !mem_bit;
+      }
+      break;
+   }
+
+   int reg_mask = 0xff ^ (1 << reg_bitnum);
+   switch (reg_num) {
+   case 0:
+      set_FLAG(reg_bitnum, reg_bit);
+      break;
+   case 1:
+      if (reg_bit >= 0) {
+         ACCA = (ACCA & reg_mask) | (reg_bit << reg_bitnum);
+      } else {
+         ACCA = -1;
+      }
+      break;
+   case 2:
+      if (reg_bit >= 0) {
+         ACCB = (ACCB & reg_mask) | (reg_bit << reg_bitnum);
+      } else {
+         ACCB = -1;
+      }
+      break;
+   }
 }
 
-static int op_fn_ADCR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+// ====================================================================
+// 6309 Instructions
+// ====================================================================
+
+static int op_fn_ADCD(operand_t operand, ea_t ea, sample_t *sample_q) {
+   int D = pack(ACCA, ACCB);
+   int result = add16_helper(D, C, operand);
+   unpack(result, &ACCA, &ACCB);
    return -1;
 }
 
-static int op_fn_ADDE  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_ADCR(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_ADDF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_ADDE(operand_t operand, ea_t ea, sample_t *sample_q) {
+   ACCE = add_helper(ACCE, 0, operand);
    return -1;
 }
 
-static int op_fn_ADDR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_ADDF(operand_t operand, ea_t ea, sample_t *sample_q) {
+   ACCF = add_helper(ACCF, 0, operand);
    return -1;
 }
 
-static int op_fn_ADDW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_ADDR(operand_t operand, ea_t ea, sample_t *sample_q) {
+   // r1 := r1 + r0
+   int r0 = get_r0(operand);
+   int r1 = get_r1(operand);
+   int result;
+   if ((operand & 0x0f) < 8) {
+      result = add16_helper(r0, 0, r1);
+   } else {
+      result = add_helper(r0, 0, r1);
+   }
+   set_r1(operand, result);
    return -1;
 }
 
-static int op_fn_AIM   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_ADDW(operand_t operand, ea_t ea, sample_t *sample_q) {
+   int W = pack(ACCE, ACCF);
+   int result = add16_helper(W, 0, operand);
+   unpack(result, &ACCE, &ACCF);
    return -1;
 }
 
-static int op_fn_ANDD  (operand_t operand, ea_t ea, sample_t *sample_q) {
-   return -1;
+static int op_fn_AIM(operand_t operand, ea_t ea, sample_t *sample_q) {
+   return and_helper(operand, sample_q[1].data);
 }
 
-static int op_fn_ANDR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_ANDD(operand_t operand, ea_t ea, sample_t *sample_q) {
+   int D = pack(ACCA, ACCB);
+   int result = and16_helper(D, operand);
+   unpack(result, &ACCA, &ACCB);
    return -1;
 }
 
-static int op_fn_ASLD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_ANDR(operand_t operand, ea_t ea, sample_t *sample_q) {
+   // r1 := r1 & r0
+   int r0 = get_r0(operand);
+   int r1 = get_r1(operand);
+   int result;
+   if ((operand & 0x0f) < 8) {
+      result = and16_helper(r0, r1);
+   } else {
+      result = and_helper(r0, r1);
+   }
+   set_r1(operand, result);
    return -1;
 }
 
-static int op_fn_ASRD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_ASLD(operand_t operand, ea_t ea, sample_t *sample_q) {
+   int D = pack(ACCA, ACCB);
+   int result = asl16_helper(D);
+   unpack(result, &ACCA, &ACCB);
    return -1;
 }
 
-static int op_fn_BAND  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_ASRD(operand_t operand, ea_t ea, sample_t *sample_q) {
+   int D = pack(ACCA, ACCB);
+   int result = asr16_helper(D);
+   unpack(result, &ACCA, &ACCB);
    return -1;
 }
 
-static int op_fn_BEOR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_BAND(operand_t operand, ea_t ea, sample_t *sample_q) {
+   singlebit_helper(operand, sample_q);
    return -1;
 }
 
-static int op_fn_BIAND (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_BEOR(operand_t operand, ea_t ea, sample_t *sample_q) {
+   singlebit_helper(operand, sample_q);
    return -1;
 }
 
-static int op_fn_BIEOR (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_BIAND(operand_t operand, ea_t ea, sample_t *sample_q) {
+   singlebit_helper(operand, sample_q);
    return -1;
 }
 
-static int op_fn_BIOR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_BIEOR(operand_t operand, ea_t ea, sample_t *sample_q) {
+   singlebit_helper(operand, sample_q);
    return -1;
 }
 
-static int op_fn_BITD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_BIOR(operand_t operand, ea_t ea, sample_t *sample_q) {
+   singlebit_helper(operand, sample_q);
    return -1;
 }
 
-static int op_fn_BITMD (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_BITD(operand_t operand, ea_t ea, sample_t *sample_q) {
+   int D = pack(ACCA, ACCB);
+   bit16_helper(D, operand);
    return -1;
 }
 
-static int op_fn_BOR   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_BITMD(operand_t operand, ea_t ea, sample_t *sample_q) {
+   int b7 = 0;
+   if (operand & 0x80) {
+      b7 = D0;
+      D0 = 0;
+   }
+   int b6 = 0;
+   if (operand & 0x40) {
+      b6 = IL;
+      IL = 0;
+   }
+   if (b6 == 0 && b7 == 0) {
+      Z = 1;
+   } else if (b6 == 1 || b7 == 1) {
+      Z = 0;
+   } else {
+      Z = -1;
+   }
    return -1;
 }
 
-static int op_fn_CLRD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_BOR(operand_t operand, ea_t ea, sample_t *sample_q) {
+   singlebit_helper(operand, sample_q);
    return -1;
 }
 
-static int op_fn_CLRE  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_CLRD(operand_t operand, ea_t ea, sample_t *sample_q) {
+   ACCA = ACCB = clr_helper();
    return -1;
 }
 
-static int op_fn_CLRF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_CLRE(operand_t operand, ea_t ea, sample_t *sample_q) {
+   ACCE = clr_helper();
    return -1;
 }
 
-static int op_fn_CLRW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_CLRF(operand_t operand, ea_t ea, sample_t *sample_q) {
+   ACCF = clr_helper();
    return -1;
 }
 
-static int op_fn_CMPE  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_CLRW(operand_t operand, ea_t ea, sample_t *sample_q) {
+   ACCE = ACCF = clr_helper();
    return -1;
 }
 
-static int op_fn_CMPF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_CMPE(operand_t operand, ea_t ea, sample_t *sample_q) {
+   cmp_helper(ACCE, operand);
    return -1;
 }
 
-static int op_fn_CMPR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_CMPF(operand_t operand, ea_t ea, sample_t *sample_q) {
+   cmp_helper(ACCF, operand);
    return -1;
 }
 
-static int op_fn_CMPW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_CMPR(operand_t operand, ea_t ea, sample_t *sample_q) {
+   // r1 := r1 & r0
+   int r0 = get_r0(operand);
+   int r1 = get_r1(operand);
+   if ((operand & 0x0f) < 8) {
+      cmp16_helper(r0, r1);
+   } else {
+      cmp_helper(r0, r1);
+   }
    return -1;
 }
 
-static int op_fn_COMD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_CMPW(operand_t operand, ea_t ea, sample_t *sample_q) {
+   cmp16_helper(pack(ACCE, ACCF), operand);
    return -1;
 }
 
-static int op_fn_COME  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_COMD(operand_t operand, ea_t ea, sample_t *sample_q) {
+   int D = pack(ACCA, ACCB);
+   int result = com16_helper(D);
+   unpack(result, &ACCA, &ACCB);
    return -1;
 }
 
-static int op_fn_COMF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_COME(operand_t operand, ea_t ea, sample_t *sample_q) {
+   ACCE = com_helper(ACCE);
    return -1;
 }
 
-static int op_fn_COMW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_COMF(operand_t operand, ea_t ea, sample_t *sample_q) {
+   ACCF = com_helper(ACCF);
    return -1;
 }
 
-static int op_fn_DECD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_COMW(operand_t operand, ea_t ea, sample_t *sample_q) {
+   int W = pack(ACCE, ACCF);
+   int result = com16_helper(W);
+   unpack(result, &ACCE, &ACCF);
    return -1;
 }
 
-static int op_fn_DECE  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_DECD(operand_t operand, ea_t ea, sample_t *sample_q) {
+   int D = pack(ACCA, ACCB);
+   int result = dec16_helper(D);
+   unpack(result, &ACCA, &ACCB);
    return -1;
 }
 
-static int op_fn_DECF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_DECE(operand_t operand, ea_t ea, sample_t *sample_q) {
+   ACCE = dec_helper(ACCE);
    return -1;
 }
 
-static int op_fn_DECW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_DECF(operand_t operand, ea_t ea, sample_t *sample_q) {
+   ACCF = dec_helper(ACCF);
    return -1;
 }
 
-static int op_fn_DIVD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_DECW(operand_t operand, ea_t ea, sample_t *sample_q) {
+   int W = pack(ACCE, ACCF);
+   int result = dec16_helper(W);
+   unpack(result, &ACCE, &ACCF);
    return -1;
 }
 
-static int op_fn_DIVQ  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_DIVD(operand_t operand, ea_t ea, sample_t *sample_q) {
+   if (operand == 0) {
+      // TODO: how to determine the length?
+      interrupt_helper(sample_q, 3, 1, 0xfff0);
+   } else if (ACCA < 0 || ACCB < 0) {
+      ACCA = -1;
+      ACCB = -1;
+      set_NZVC_unknown();
+   } else {
+      int16_t         a = (int16_t)((ACCA << 8) + ACCB);
+       int8_t         b = ( int8_t)operand;
+      int16_t  quotient = a / b;
+      int16_t remainder = a % b;
+      // TODO: Check the details of overflow with an exhaustive test
+      if (quotient < -256 || quotient > 255) {
+         // A range overflow has occurred, accumulators not modified
+         N = 0;
+         Z = 0;
+         V = 1;
+         C = 0;
+      } else {
+         ACCA = remainder & 0xff;
+         ACCB = quotient  & 0xff;
+         C    = quotient  & 1;
+         set_NZ(ACCB);
+         if (quotient < -128 || quotient > 127) {
+            // A two-complement overflow has occurred, set overflow
+            V = 1;
+         }
+      }
+   }
    return -1;
 }
 
-static int op_fn_EIM   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_DIVQ(operand_t operand, ea_t ea, sample_t *sample_q) {
+   if (operand == 0) {
+      // TODO: how to determine the length?
+      interrupt_helper(sample_q, 3, 1, 0xfff0);
+   } else if (ACCA < 0 || ACCB < 0 || ACCE < 0 || ACCF < 0) {
+      ACCA = -1;
+      ACCB = -1;
+      ACCE = -1;
+      ACCF = -1;
+      set_NZVC_unknown();
+   } else {
+      int32_t         a = (int32_t)((ACCA << 24) + (ACCB << 16) + (ACCE << 8) + ACCF);
+      int16_t         b = (int16_t)operand;
+      int32_t  quotient = a / b;
+      int32_t remainder = a % b;
+      // TODO: Check the details of overflow with an exhaustive test
+      if (quotient < -65536 || quotient > 65535) {
+         // A range overflow has occurred, accumulators not modified
+         N = 0;
+         Z = 0;
+         V = 1;
+         C = 0;
+      } else {
+         ACCA = (remainder >> 8) & 0xff;
+         ACCB =  remainder       & 0xff;
+         ACCE = (quotient  >> 8) & 0xff;
+         ACCF =  quotient        & 0xff;
+         C    =  quotient & 1;
+         set_NZ(ACCB);
+         if (quotient < -32768 || quotient > 32767) {
+            // A two-complement overflow has occurred, set overflow
+            V = 1;
+         }
+      }
+   }
    return -1;
 }
 
-static int op_fn_EORD  (operand_t operand, ea_t ea, sample_t *sample_q) {
-   return -1;
+static int op_fn_EIM(operand_t operand, ea_t ea, sample_t *sample_q) {
+   return eor_helper(operand, sample_q[1].data);
 }
 
-static int op_fn_EORR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_EORD(operand_t operand, ea_t ea, sample_t *sample_q) {
+   int D = pack(ACCA, ACCB);
+   int result = eor16_helper(D, operand);
+   unpack(result, &ACCA, &ACCB);
    return -1;
 }
 
-static int op_fn_INCD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_EORR(operand_t operand, ea_t ea, sample_t *sample_q) {
+   // r1 := r1 ^ r0
+   int r0 = get_r0(operand);
+   int r1 = get_r1(operand);
+   int result;
+   if ((operand & 0x0f) < 8) {
+      result = eor16_helper(r0, r1);
+   } else {
+      result = eor_helper(r0, r1);
+   }
+   set_r1(operand, result);
    return -1;
 }
 
-static int op_fn_INCE  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_INCD(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_INCF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_INCE(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_INCW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_INCF(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_LDBT  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_INCW(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_LDE   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_LDBT(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_LDF   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_LDE(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_LDMD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_LDF(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_LDQ   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_LDMD(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_LDW   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_LDQ(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_LSRD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_LDW(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_LSRW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_LSRD(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_MULD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_LSRW(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_NEGD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_MULD(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_OIM   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_NEGD(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
+}
+
+static int op_fn_OIM(operand_t operand, ea_t ea, sample_t *sample_q) {
+   return or_helper(operand, sample_q[1].data);
 }
 
-static int op_fn_ORD   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_ORD(operand_t operand, ea_t ea, sample_t *sample_q) {
+   int D = pack(ACCA, ACCB);
+   int result = or16_helper(D, operand);
+   unpack(result, &ACCA, &ACCB);
    return -1;
 }
 
-static int op_fn_ORR   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_ORR(operand_t operand, ea_t ea, sample_t *sample_q) {
+   // r1 := r1 | r0
+   int r0 = get_r0(operand);
+   int r1 = get_r1(operand);
+   int result;
+   if ((operand & 0x0f) < 8) {
+      result = or16_helper(r0, r1);
+   } else {
+      result = or_helper(r0, r1);
+   }
+   set_r1(operand, result);
    return -1;
 }
 
-static int op_fn_PSHSW (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_PSHSW(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_PSHUW (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_PSHUW(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_PULSW (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_PULSW(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_PULUW (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_PULUW(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_ROLD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_ROLD(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_ROLW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_ROLW(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_RORD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_RORD(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_RORW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_RORW(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_SBCD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_SBCD(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_SBCR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_SBCR(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_SEXW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_SEXW(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_STBT  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_STBT(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_STE   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_STE(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_STF   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_STF(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_STQ   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_STQ(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_STW   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_STW(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_SUBE  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_SUBE(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_SUBF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_SUBF(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_SUBR  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_SUBR(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_SUBW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_SUBW(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_TFM   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_TFM(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_TIM   (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_TIM(operand_t operand, ea_t ea, sample_t *sample_q) {
+   set_NZ(operand & sample_q[1].data);
+   V = 0;
    return -1;
 }
 
-static int op_fn_TSTD  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_TSTD(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_TSTE  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_TSTE(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_TSTF  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_TSTF(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-static int op_fn_TSTW  (operand_t operand, ea_t ea, sample_t *sample_q) {
+static int op_fn_TSTW(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
