@@ -28,6 +28,7 @@ static const char tfmr1inc[] = { '+', '-', ' ', '+' };
 
 static opcode_t *instr_table;
 
+int cpu6309 = 0;
 
 static char *strinsert(char *ptr, const char *str) {
    while (*str) {
@@ -40,8 +41,10 @@ static char *strinsert(char *ptr, const char *str) {
 void dis_6809_init(cpu_t cpu_type, opcode_t *cpu_instr_table) {
    if (cpu_type == CPU_6309 || cpu_type == CPU_6309E) {
       regi4 = regi4_6309;
+      cpu6309 = 1;
    } else {
       regi4 = regi4_6809;
+      cpu6309 = 0;
    }
    instr_table = cpu_instr_table;
 }
@@ -319,6 +322,15 @@ int dis_6809_disassemble(char *buffer, instruction_t *instruction) {
                *ptr++ = ',';
                *ptr++ = reg;
                break;
+            case 7:                 /* E,R */
+               if (cpu6309) {
+                  *ptr++ = 'E';
+                  *ptr++ = ',';
+                  *ptr++ = reg;
+               } else {
+                  *ptr++ = '?';
+               }
+               break;
             case 8:                 /* n7,R */
                *ptr++ = '$';
                write_hex2(ptr, op8);
@@ -332,6 +344,15 @@ int dis_6809_disassemble(char *buffer, instruction_t *instruction) {
                ptr += 4;
                *ptr++ = ',';
                *ptr++ = reg;
+               break;
+            case 10:                /* F,R */
+               if (cpu6309) {
+                  *ptr++ = 'F';
+                  *ptr++ = ',';
+                  *ptr++ = reg;
+               } else {
+                  *ptr++ = '?';
+               }
                break;
             case 11:                /* D,R */
                *ptr++ = 'D';
@@ -356,14 +377,19 @@ int dis_6809_disassemble(char *buffer, instruction_t *instruction) {
                *ptr++ = 'C';
                *ptr++ = 'R';
                break;
+            case 14:                /* W,R */
+               if (cpu6309) {
+                  *ptr++ = 'W';
+                  *ptr++ = ',';
+                  *ptr++ = reg;
+               } else {
+                  *ptr++ = '?';
+               }
+               break;
             case 15:                /* [n] */
                *ptr++ = '$';
                write_hex4(ptr, op16);
                ptr += 4;
-               break;
-            default:
-               *ptr++ = '?';
-               *ptr++ = '?';
                break;
             }
             if (pb & 0x10) {

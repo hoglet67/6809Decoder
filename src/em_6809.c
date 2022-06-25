@@ -1306,6 +1306,11 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                   ea = (*reg + ACCA) & 0xffff;
                }
                break;
+            case 7:                 /* E,R */
+               if (cpu6309 && *reg >= 0 && ACCE >= 0) {
+                  ea = (*reg + ACCE) & 0xffff;
+               }
+               break;
             case 8:                 /* n7,R */
                if (*reg >= 0) {
                   ea = (*reg + (int8_t)(sample_q[oi + 2].data)) & 0xffff;
@@ -1314,6 +1319,11 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
             case 9:                 /* n15,R */
                if (*reg >= 0) {
                   ea = (*reg + (int16_t)((sample_q[oi + 2].data << 8) + sample_q[oi + 3].data)) & 0xffff;
+               }
+               break;
+            case 10:                /* F,R */
+               if (cpu6309 && *reg >= 0 && ACCF >= 0) {
+                  ea = (*reg + ACCF) & 0xffff;
                }
                break;
             case 11:                /* D,R */
@@ -1329,6 +1339,11 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
             case 13:                /* n15,PCR */
                if (PC >= 0) {
                   ea = (PC + (int16_t)((sample_q[oi + 2].data << 8) + sample_q[oi + 3].data)) & 0xffff;
+               }
+               break;
+            case 14:                /* W,R */
+               if (cpu6309 && *reg >= 0 && ACCE >= 0 && ACCF >= 0) {
+                  ea = (*reg + (ACCE << 8) + ACCF) & 0xffff;
                }
                break;
             case 15:                /* [n] */
