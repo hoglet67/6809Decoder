@@ -135,7 +135,7 @@ static const char *pshuregi[] = { "PC", "S", "Y", "X", "DP", "B", "A", "CC" };
 
 static const char *cpu_state;
 static const char cpu_6809_state[] = "A=?? B=?? X=???? Y=???? U=???? S=???? DP=?? E=? F=? H=? I=? N=? Z=? V=? C=?";
-static const char cpu_6309_state[] = "A=?? B=?? E=?? F=?? X=???? Y=???? U=???? S=???? DP=?? T=???? E=? F=? H=? I=? N=? Z=? V=? C=? D0=? IL=? FM=? NM=?";
+static const char cpu_6309_state[] = "A=?? B=?? E=?? F=?? X=???? Y=???? U=???? S=???? DP=?? T=???? E=? F=? H=? I=? N=? Z=? V=? C=? DZ=? IL=? FM=? NM=?";
 
 // Indexed indirect modes, an extra level of indirection occurs
 //
@@ -193,7 +193,7 @@ static int TV   = -1;
 static int NM   = -1; // Native Mode
 static int FM   = -1; // FIRQ Mode
 static int IL   = -1; // Illegal Instruction Trap
-static int D0   = -1; // Divide by zero trap
+static int DZ   = -1; // Divide by zero trap
 
 // Misc
 static int show_cycle_errors = 0;
@@ -949,7 +949,7 @@ static void em_6809_reset(sample_t *sample_q, int num_cycles, instruction_t *ins
       NM = 0;
       FM = 0;
       IL = 0;
-      D0 = 0;
+      DZ = 0;
    }
    PC = (sample_q[num_cycles - 3].data << 8) + sample_q[num_cycles - 2].data;
 }
@@ -1738,7 +1738,7 @@ static int em_6809_read_memory(int address) {
 
 static char *em_6809_get_state(char *buffer) {
    // 6809: A=?? B=?? X=???? Y=???? U=???? S=???? DP=?? E=? F=? H=? I=? N=? Z=? V=? C=?";
-   // 6309: A=?? B=?? E=?? F=?? X=???? Y=???? U=???? S=???? DP=?? T=???? E=? F=? H=? I=? N=? Z=? V=? C=? D0=? IL=? FM=? NM=?"
+   // 6309: A=?? B=?? E=?? F=?? X=???? Y=???? U=???? S=???? DP=?? T=???? E=? F=? H=? I=? N=? Z=? V=? C=? DZ=? IL=? FM=? NM=?"
    char *bp = buffer;
    strcpy(bp, cpu_state);
    bp += 2;
@@ -1819,8 +1819,8 @@ static char *em_6809_get_state(char *buffer) {
    }
    if (cpu6309) {
       bp += 5;
-      if (D0 >= 0) {
-         *bp = '0' + D0;
+      if (DZ >= 0) {
+         *bp = '0' + DZ;
       }
       bp += 5;
       if (IL >= 0) {
@@ -3837,8 +3837,8 @@ static int op_fn_BITD(operand_t operand, ea_t ea, sample_t *sample_q) {
 static int op_fn_BITMD(operand_t operand, ea_t ea, sample_t *sample_q) {
    int b7 = 0;
    if (operand & 0x80) {
-      b7 = D0;
-      D0 = 0;
+      b7 = DZ;
+      DZ = 0;
    }
    int b6 = 0;
    if (operand & 0x40) {
