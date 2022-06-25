@@ -7,6 +7,166 @@
 #include "em_6809.h"
 #include "dis_6809.h"
 
+
+// ====================================================================
+// CPU state display
+// ====================================================================
+
+static const char cpu_6809_state[] = "A=?? B=?? X=???? Y=???? U=???? S=???? DP=?? E=? F=? H=? I=? N=? Z=? V=? C=?";
+static const char cpu_6309_state[] = "A=?? B=?? E=?? F=?? X=???? Y=???? U=???? S=???? DP=?? T=???? E=? F=? H=? I=? N=? Z=? V=? C=? DZ=? IL=? FM=? NM=?";
+
+
+// ====================================================================
+// Instruction cycle extras
+// ====================================================================
+
+// In indexed indirect modes, there are extra cycles compuring the effective
+// address that cannot be included in the opcode table, as they depend on the
+// indexing mode in the post byte.
+
+static int postbyte_cycles_6809[] = {
+   2, //  0 : ,R+
+   3, //  1 : ,R++
+   2, //  2 : ,-R
+   3, //  3 : ,--R
+   0, //  4 : ,R
+   1, //  5 : B,R
+   1, //  6 : A,R
+   0, //  7 : ?
+   1, //  8 : n7,R
+   4, //  9 : n15,R
+   0, // 10 : ?
+   4, // 11 : D,R
+   1, // 12 : n7,PCR
+   5, // 13 : n15,PCR
+   0, // 14 : ?
+   2  // 15 : n
+};
+
+static int postbyte_cycles_6309_emu[] = {
+   2, //  0 : ,R+
+   3, //  1 : ,R++
+   2, //  2 : ,-R
+   3, //  3 : ,--R
+   0, //  4 : ,R
+   1, //  5 : B,R
+   1, //  6 : A,R
+   1, //  7 : E,R
+   1, //  8 : n7,R
+   4, //  9 : n15,R
+   1, // 10 : F,R
+   4, // 11 : D,R
+   1, // 12 : n7,PCR
+   5, // 13 : n15,PCR
+   4, // 14 : W,R
+   0  // 15 : n
+};
+
+static int postbyte_cycles_6309_nat[] = {
+   1, //  0 : ,R+
+   2, //  1 : ,R++
+   1, //  2 : ,-R
+   2, //  3 : ,--R
+   0, //  4 : ,R
+   1, //  5 : B,R
+   1, //  6 : A,R
+   1, //  7 : E,R
+   1, //  8 : n7,R
+   3, //  9 : n15,R
+   1, // 10 : F,R
+   2, // 11 : D,R
+   1, // 12 : n7,PCR
+   3, // 13 : n15,PCR
+   1, // 14 : W,R
+   0  // 15 : n
+};
+
+
+// When there is an indirect indexed access, a second memory access
+// happens before the effiective address is known. For each indexed
+// addressing mode, it helps to know where how many cycles to skip
+// before type access occurs.
+//
+// Cycle numbers from http://atjs.mbnet.fi/mc6809/Information/6809cyc.txt
+// and cross-checked with Figure 17 in the 6809E datasheet.
+
+static const int indirect_offset[] = {
+   0, //  0 : [,R+]       illegal
+   6, //  1 : [,R++]
+   0, //  2 : [,-R]       illegal
+   6, //  3 : [,--R]
+   3, //  4 : [,R]
+   4, //  5 : [B,R]
+   4, //  6 : [A,R]
+   0, //  7 :             undefined
+   4, //  8 : [n7,R]
+   7, //  9 : [n15,R]
+   0, // 10 :             undefined
+   7, // 11 : [D,R]
+   4, // 12 : [n7,PCR]
+   8, // 13 : [n15,PCR]
+   0, // 14 :             undefined
+   5  // 15 : [n]
+};
+
+
+
+// In PSHS/PSHU/PULS/PULU, the postbyte controls which registers are pulled
+//
+// It helps to have a quick way to count the number of '1' in a nibble, in order
+// to quickly calculate the total cycles.
+
+static int count_ones_in_nibble[] =    { 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4};
+
+
+// ====================================================================
+// Static variables
+// ====================================================================
+
+// Which state string to use
+static const char *cpu_state;
+
+// Is the CPU the 6309?
+static int cpu6309 = 0;
+
+// Which opcode table to use
+static opcode_t *instr_table;
+
+// 6809 registers: -1 means unknown
+static int ACCA = -1;
+static int ACCB = -1;
+static int X = -1;
+static int Y = -1;
+static int S = -1;
+static int U = -1;
+static int DP = -1;
+static int PC = -1;
+
+// 6809 flags: -1 means unknown
+static int E = -1;
+static int F = -1;
+static int H = -1;
+static int I = -1;
+static int N = -1;
+static int Z = -1;
+static int V = -1;
+static int C = -1;
+
+// Additional 6309 registers: -1 means unknown
+static int ACCE = -1;
+static int ACCF = -1;
+static int TV   = -1;
+
+// Additional 6309 flags: -1 means unknown
+static int NM   = -1; // Native Mode
+static int FM   = -1; // FIRQ Mode
+static int IL   = -1; // Illegal Instruction Trap
+static int DZ   = -1; // Divide by zero trap
+
+// Misc
+static int show_cycle_errors = 0;
+
+
 // ====================================================================
 // Fail flags
 // ====================================================================
@@ -72,227 +232,15 @@ static const char * fail_hints[32] = {
 };
 
 // ====================================================================
-// Static variables
-// ====================================================================
-
-// For the CPU state display
-
-static const char *cpu_state;
-static const char cpu_6809_state[] = "A=?? B=?? X=???? Y=???? U=???? S=???? DP=?? E=? F=? H=? I=? N=? Z=? V=? C=?";
-static const char cpu_6309_state[] = "A=?? B=?? E=?? F=?? X=???? Y=???? U=???? S=???? DP=?? T=???? E=? F=? H=? I=? N=? Z=? V=? C=? DZ=? IL=? FM=? NM=?";
-
-// Indexed indirect modes, an extra level of indirection occurs
-//
-// Cycle numbers from http://atjs.mbnet.fi/mc6809/Information/6809cyc.txt
-// and cross-checked with Figure 17 in the 6809E datasheet.
-
-static const int indirect_offset[] = {
-   0, //  0 : [,R+]       illegal
-   6, //  1 : [,R++]
-   0, //  2 : [,-R]       illegal
-   6, //  3 : [,--R]
-   3, //  4 : [,R]
-   4, //  5 : [B,R]
-   4, //  6 : [A,R]
-   0, //  7 :             undefined
-   4, //  8 : [n7,R]
-   7, //  9 : [n15,R]
-   0, // 10 :             undefined
-   7, // 11 : [D,R]
-   4, // 12 : [n7,PCR]
-   8, // 13 : [n15,PCR]
-   0, // 14 :             undefined
-   5  // 15 : [n]
-};
-
-// Is the CPU the 6309?
-static int cpu6309 = 0;
-
-// 6809 registers: -1 means unknown
-static int ACCA = -1;
-static int ACCB = -1;
-static int X = -1;
-static int Y = -1;
-static int S = -1;
-static int U = -1;
-static int DP = -1;
-static int PC = -1;
-
-// 6809 flags: -1 means unknown
-static int E = -1;
-static int F = -1;
-static int H = -1;
-static int I = -1;
-static int N = -1;
-static int Z = -1;
-static int V = -1;
-static int C = -1;
-
-// Additional 6309 registers: -1 means unknown
-static int ACCE = -1;
-static int ACCF = -1;
-static int TV   = -1;
-
-// Additional 6309 flags: -1 means unknown
-static int NM   = -1; // Native Mode
-static int FM   = -1; // FIRQ Mode
-static int IL   = -1; // Illegal Instruction Trap
-static int DZ   = -1; // Divide by zero trap
-
-// Misc
-static int show_cycle_errors = 0;
-
-// ====================================================================
 // Forward declarations
 // ====================================================================
 
 static opcode_t instr_table_6809[];
 static opcode_t instr_table_6309[];
-static opcode_t *instr_table;
 
-static operation_t op_ABX  ;
-static operation_t op_ADCA ;
-static operation_t op_ADCB ;
-static operation_t op_ADDA ;
-static operation_t op_ADDB ;
-static operation_t op_ADDD ;
-static operation_t op_ANDA ;
-static operation_t op_ANDB ;
-static operation_t op_ANDC ;
-static operation_t op_ASL  ;
-static operation_t op_ASLA ;
-static operation_t op_ASLB ;
-static operation_t op_ASR  ;
-static operation_t op_ASRA ;
-static operation_t op_ASRB ;
-static operation_t op_BCC  ;
-static operation_t op_BEQ  ;
-static operation_t op_BGE  ;
-static operation_t op_BGT  ;
-static operation_t op_BHI  ;
-static operation_t op_BITA ;
-static operation_t op_BITB ;
-static operation_t op_BLE  ;
-static operation_t op_BLO  ;
-static operation_t op_BLS  ;
-static operation_t op_BLT  ;
-static operation_t op_BMI  ;
-static operation_t op_BNE  ;
-static operation_t op_BPL  ;
-static operation_t op_BRA  ;
-static operation_t op_BRN  ;
-static operation_t op_BSR  ;
-static operation_t op_BVC  ;
-static operation_t op_BVS  ;
-static operation_t op_CLR  ;
-static operation_t op_CLRA ;
-static operation_t op_CLRB ;
-static operation_t op_CMPA ;
-static operation_t op_CMPB ;
-static operation_t op_CMPD ;
-static operation_t op_CMPS ;
-static operation_t op_CMPU ;
-static operation_t op_CMPX ;
-static operation_t op_CMPY ;
-static operation_t op_COM  ;
-static operation_t op_COMA ;
-static operation_t op_COMB ;
-static operation_t op_CWAI ;
-static operation_t op_DAA  ;
-static operation_t op_DEC  ;
-static operation_t op_DECA ;
-static operation_t op_DECB ;
-static operation_t op_EORA ;
-static operation_t op_EORB ;
-static operation_t op_EXG  ;
-static operation_t op_INC  ;
-static operation_t op_INCA ;
-static operation_t op_INCB ;
-static operation_t op_JMP  ;
-static operation_t op_JSR  ;
-static operation_t op_LBCC ;
-static operation_t op_LBEQ ;
-static operation_t op_LBGE ;
-static operation_t op_LBGT ;
-static operation_t op_LBHI ;
-static operation_t op_LBLE ;
-static operation_t op_LBLO ;
-static operation_t op_LBLS ;
-static operation_t op_LBLT ;
-static operation_t op_LBMI ;
-static operation_t op_LBNE ;
-static operation_t op_LBPL ;
-static operation_t op_LBRA ;
-static operation_t op_LBRN ;
-static operation_t op_LBSR ;
-static operation_t op_LBVC ;
-static operation_t op_LBVS ;
-static operation_t op_LDA  ;
-static operation_t op_LDB  ;
-static operation_t op_LDD  ;
-static operation_t op_LDS  ;
-static operation_t op_LDU  ;
-static operation_t op_LDX  ;
-static operation_t op_LDY  ;
-static operation_t op_LEAS ;
-static operation_t op_LEAU ;
-static operation_t op_LEAX ;
-static operation_t op_LEAY ;
-static operation_t op_LSR  ;
-static operation_t op_LSRA ;
-static operation_t op_LSRB ;
-static operation_t op_MUL  ;
-static operation_t op_NEG  ;
-static operation_t op_NEGA ;
-static operation_t op_NEGB ;
-static operation_t op_NOP  ;
-static operation_t op_ORA  ;
-static operation_t op_ORB  ;
-static operation_t op_ORCC ;
-static operation_t op_PSHS ;
-static operation_t op_PSHU ;
-static operation_t op_PULS ;
-static operation_t op_PULU ;
-static operation_t op_ROL  ;
-static operation_t op_ROLA ;
-static operation_t op_ROLB ;
-static operation_t op_ROR  ;
-static operation_t op_RORA ;
-static operation_t op_RORB ;
-static operation_t op_RTS  ;
-static operation_t op_SBCA ;
-static operation_t op_SBCB ;
-static operation_t op_SEX  ;
-static operation_t op_STA  ;
-static operation_t op_STB  ;
-static operation_t op_STD  ;
-static operation_t op_STS  ;
-static operation_t op_STU  ;
-static operation_t op_STX  ;
-static operation_t op_STY  ;
-static operation_t op_SUBA ;
-static operation_t op_SUBB ;
-static operation_t op_SUBD ;
-static operation_t op_SWI  ;
-static operation_t op_SWI2 ;
-static operation_t op_SWI3 ;
-static operation_t op_SYNC ;
-static operation_t op_TFR  ;
 static operation_t op_TST  ;
-static operation_t op_TSTA ;
-static operation_t op_TSTB ;
-static operation_t op_UU   ;
-
-// Undocumented
-
-static operation_t op_XX   ;
-static operation_t op_X18  ;
-static operation_t op_X8C7 ;
-static operation_t op_XHCF ;
-static operation_t op_XNC  ;
 static operation_t op_XSTX ;
 static operation_t op_XSTU ;
-static operation_t op_XRES ;
 
 // ====================================================================
 // Helper Methods
@@ -716,10 +664,6 @@ static int em_6809_match_reset(sample_t *sample_q, int num_samples) {
    return 0;
 }
 
-static int postbyte_cycles[] = { 2, 3, 2, 3, 0, 1, 1, 0, 1, 4, 0, 4, 1, 5, 0, 2 };
-
-static int count_bits[] =    { 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4};
-
 // TODO: Update for 6309
 static int get_num_cycles(sample_t *sample_q) {
    uint8_t b0 = sample_q[0].data;
@@ -810,15 +754,23 @@ static int get_num_cycles(sample_t *sample_q) {
       cycle_count += 9;
    } else if (b0 >= 0x34 && b0 <= 0x37) {
       // PSHS/PULS/PSHU/PULU
-      cycle_count += count_bits[b1 & 0x0f];            // bits 0..3 are 8 bit registers
-      cycle_count += count_bits[(b1 >> 4) & 0x0f] * 2; // bits 4..7 are 16 bit registers
+      cycle_count += count_ones_in_nibble[b1 & 0x0f];            // bits 0..3 are 8 bit registers
+      cycle_count += count_ones_in_nibble[(b1 >> 4) & 0x0f] * 2; // bits 4..7 are 16 bit registers
    } else if (instr->mode == INDEXED) {
       // For INDEXED address, the instruction table cycles
       // are the minimum the instruction will execute in
       int postindex = (b0 == 0x10 || b0 == 0x11) ? 2 : 1;
       int postbyte = sample_q[postindex].data;
       if (postbyte & 0x80) {
-         cycle_count += postbyte_cycles[postbyte & 0x0F];
+         if (cpu6309) {
+            if (NM == 1) {
+               cycle_count += postbyte_cycles_6309_nat[postbyte & 0x0F];
+            } else {
+               cycle_count += postbyte_cycles_6309_emu[postbyte & 0x0F];
+            }
+         } else {
+            cycle_count += postbyte_cycles_6809[postbyte & 0x0F];
+         }
          if (postbyte & 0x10) {
             cycle_count += 3;
          }
