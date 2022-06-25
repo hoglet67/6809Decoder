@@ -728,6 +728,40 @@ static void em_6809_init(arguments_t *args) {
       instr_table_map1 = instr_table_6809_map1;
       instr_table_map2 = instr_table_6809_map2;
    }
+
+   // Validate the cycles in the maps are consistent
+   int fail = 0;
+   for (int i = 0; i <= 2; i++) {
+      instr_mode_t *instr_6309;
+      instr_mode_t *instr_6809;
+      switch (i) {
+      case 1:
+         instr_6309 = instr_table_6309_map1;
+         instr_6809 = instr_table_6809_map1;
+         break;
+      case 2:
+         instr_6309 = instr_table_6309_map2;
+         instr_6809 = instr_table_6809_map2;
+         break;
+      default:
+         instr_6309 = instr_table_6309_map0;
+         instr_6809 = instr_table_6809_map0;
+         break;
+      }
+      for (int j = 0; j <= 0xff; j++) {
+         if (!instr_6809->undocumented) {
+            if (instr_6309->cycles != instr_6809->cycles) {
+               printf("cycle mismatch in instruction table: %02x %02x (%d cf %d)\n", i, j, instr_6309->cycles, instr_6809->cycles);
+               fail = 1;
+            }
+         }
+         instr_6309++;
+         instr_6809++;
+      }
+      if (fail) {
+         exit(1);
+      }
+   }
 }
 
 static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
