@@ -835,6 +835,7 @@ static int postbyte_cycles[] = { 2, 3, 2, 3, 0, 1, 1, 0, 1, 4, 0, 4, 1, 5, 0, 2 
 
 static int count_bits[] =    { 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4};
 
+// TODO: Update for 6309
 static int get_num_cycles(sample_t *sample_q) {
    uint8_t b0 = sample_q[0].data;
    uint8_t b1 = sample_q[1].data;
@@ -1209,6 +1210,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    index++;
    instr = instr_table_map0;
 
+   // Flag that an instruction marked as undocumented has been encoutered
    if (instr->undocumented) {
       failflag |= FAIL_UNDOC;
    }
@@ -1673,9 +1675,9 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
          case 0x113a: // TFM r0+, r1
          case 0x113b: // TFM r0 , r1+
             *ptr++ = tfmreg[(pb >> 4) & 0xf];
-            *ptr++ = tfmr0inc[instruction->opcode & 3];
+            *ptr++ = tfmr0inc[opcode & 3];
             *ptr++ = tfmreg[pb & 0xf];
-            *ptr++ = tfmr1inc[instruction->opcode & 3];
+            *ptr++ = tfmr1inc[opcode & 3];
             break;
          }
       }
@@ -3078,7 +3080,6 @@ static int op_fn_EORB(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 // Operand is the postbyte
-// TODO 6309 is different
 static int op_fn_EXG(operand_t operand, ea_t ea, sample_t *sample_q) {
    int reg1 = (operand >> 4) & 15;
    int reg2 = operand  & 15;
@@ -3469,7 +3470,6 @@ static int op_fn_SYNC(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 // Operand is the postbyte
-// TODO 6309 is different
 static int op_fn_TFR(operand_t operand, ea_t ea, sample_t *sample_q) {
    int reg1 = (operand >> 4) & 15;
    int reg2 = operand  & 15;
@@ -3600,7 +3600,6 @@ static int op_fn_XSTX(operand_t operand, ea_t ea, sample_t *sample_q) {
    N = 1;
    Z = 0;
    V = 0;
-   // TODO, need to force the EA to be PC + 2
    return X & 0xff;
 }
 
@@ -3608,7 +3607,6 @@ static int op_fn_XSTU(operand_t operand, ea_t ea, sample_t *sample_q) {
    N = 1;
    Z = 0;
    V = 0;
-   // TODO, need to force the EA to be PC + 2
    return U & 0xff;
 }
 
