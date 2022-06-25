@@ -130,14 +130,29 @@ typedef struct {
 // Static variables
 // ====================================================================
 
-static const char regi[] = { 'X', 'Y', 'U', 'S' };
+// For the disassember
 
-static const char *exgi[] = { "D", "X", "Y", "U", "S", "PC", "??", "??", "A",
-                              "B", "CC", "DP", "??", "??", "??", "??" };
+static const char regi2[] = { 'X', 'Y', 'U', 'S' };
+
+static const char **regi4;
+
+static const char *regi4_6809[] = { "D",  "X",  "Y",  "U",  "S", "PC", "??", "??",
+                                    "A",  "B", "CC", "DP", "??", "??", "??", "??" };
+
+static const char *regi4_6309[] = { "D",  "X",  "Y",  "U",  "S", "PC",  "W", "TV",
+                                    "A",  "B", "CC", "DP",  "0",  "0",  "E",  "F" };
 
 static const char *pshsregi[] = { "PC", "U", "Y", "X", "DP", "B", "A", "CC" };
 
 static const char *pshuregi[] = { "PC", "S", "Y", "X", "DP", "B", "A", "CC" };
+
+static const char tfmreg[] = { 'D', 'X', 'Y', 'U', 'S', '?', '?', '?',
+                               '?', '?', '?', '?', '?', '?', '?', '?' };
+
+static const char tfmr0inc[] = { '+', '-', '+', ' ' };
+static const char tfmr1inc[] = { '+', '-', ' ', '+' };
+
+// For the CPU state display
 
 static const char *cpu_state;
 static const char cpu_6809_state[] = "A=?? B=?? X=???? Y=???? U=???? S=???? DP=?? E=? F=? H=? I=? N=? Z=? V=? C=?";
@@ -728,11 +743,13 @@ static void em_6809_init(arguments_t *args) {
       instr_table_map0 = instr_table_6309_map0;
       instr_table_map1 = instr_table_6309_map1;
       instr_table_map2 = instr_table_6309_map2;
+      regi4 = regi4_6309;
    } else {
       cpu_state = cpu_6809_state;
       instr_table_map0 = instr_table_6809_map0;
       instr_table_map1 = instr_table_6809_map1;
       instr_table_map2 = instr_table_6809_map2;
+      regi4 = regi4_6809;
    }
 
    // Validate the cycles in the maps are consistent
@@ -1529,17 +1546,22 @@ static char *strinsert(char *ptr, const char *str) {
 }
 
 static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
-   uint8_t b0 = instruction->instr[0];
-   uint8_t b1 = instruction->instr[1];
-   uint8_t pb = 0;
+   int b0 = instruction->instr[0];
+   int b1 = instruction->instr[1];
+   int pb = 0;
    instr_mode_t *instr = get_instruction(b0, b1);
 
    // Work out where in the instruction the operand is
    // [Prefix] Opcode [ Postbyte] Op1 Op2
-   int oi = 1;
+   int oi;
+   int opcode;
+   // Extract the prefix/opcode
    if (b0 == 0x10 || b0 == 0x11) {
-      // Skip over the prefix
-      oi++;
+      opcode = (b0 << 8) | b1;
+      oi = 2;
+   } else {
+      opcode = b0;
+      oi = 1;
    }
    if (instr->mode == INDEXED || instr->mode == DIRECTBIT || instr->mode == REGISTER) {
       // Skip over the post byte
@@ -1564,23 +1586,29 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
       break;
    case REGISTER:
       {
-         switch (instruction->opcode) {
-         case 0x1a:
-         case 0x1c:
-            /* orr, andc */
+         switch (opcode) {
+         case 0x001a: // ORC
+         case 0x001c: // ANDC
             *ptr++ = '#';
             *ptr++ = '$';
             write_hex2(ptr, pb);
             ptr += 2;
             break;
-         case 0x1e:
-         case 0x1f:
-            /* exg tfr */
-            ptr = strinsert(ptr, exgi[(pb >> 4) & 0x0f]);
+         case 0x001e: // EXG
+         case 0x001f: // TFR
+         case 0x1030: // ADDR
+         case 0x1031: // ADCR
+         case 0x1032: // SUBR
+         case 0x1033: // SBCR
+         case 0x1034: // ANDR
+         case 0x1035: // OR
+         case 0x1036: // EORR
+         case 0x1037: // CMPR
+            ptr = strinsert(ptr, regi4[(pb >> 4) & 0x0f]);
             *ptr++ = ',';
-            ptr = strinsert(ptr, exgi[pb & 0x0f]);
+            ptr = strinsert(ptr, regi4[pb & 0x0f]);
             break;
-         case 0x34:                         /* pshs */
+         case 0x0034: // PSHS
             {
                int p = 0;
                for (int i = 0; i < 8; i++) {
@@ -1595,7 +1623,7 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
                }
             }
             break;
-         case 0x35:                         /* puls */
+         case 0x0035: // PULS
             {
                int p = 0;
                for (int i = 7; i >= 0; i--) {
@@ -1610,7 +1638,7 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
                }
             }
             break;
-         case 0x36:                         /* pshu */
+         case 0x0036: // PSHU
             {
                int p = 0;
                for (int i = 0; i < 8; i++) {
@@ -1625,7 +1653,7 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
                }
             }
             break;
-         case 0x37:                         /* pulu */
+         case 0x0037: // PULU
             {
                int p = 0;
                for (int i = 7; i >= 0; i--) {
@@ -1639,6 +1667,15 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
                   pb >>= 1;
                }
             }
+            break;
+         case 0x1138: // TFM r0+, r1+
+         case 0x1139: // TFM r0-, r1-
+         case 0x113a: // TFM r0+, r1
+         case 0x113b: // TFM r0 , r1+
+            *ptr++ = tfmreg[(pb >> 4) & 0xf];
+            *ptr++ = tfmr0inc[instruction->opcode & 3];
+            *ptr++ = tfmreg[pb & 0xf];
+            *ptr++ = tfmr1inc[instruction->opcode & 3];
             break;
          }
       }
@@ -1726,7 +1763,7 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
       break;
    case INDEXED:
       {
-         char reg = regi[(pb >> 5) & 0x03];
+         char reg = regi2[(pb >> 5) & 0x03];
          if (!(pb & 0x80)) {       /* n4,R */
             if (pb & 0x10) {
                *ptr++ = '-';
