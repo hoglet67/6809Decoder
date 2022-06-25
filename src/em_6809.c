@@ -1083,57 +1083,49 @@ static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t 
 
 static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
 
-   opcode_t *instr;
-   int index = 0;
+   int b0 = sample_q[0].data;
+   int b1 = sample_q[1].data;
    int oi = 0;
-
-   instruction->prefix = 0;
-   instruction->opcode = sample_q[index].data;
-   if (PC >= 0) {
-      memory_read(instruction->opcode, PC + index, MEM_INSTR);
-   }
-   index++;
-   instr = instr_table;
+   int pb = 0;
+   int index = 0;
+   opcode_t *instr = get_instruction(instr_table, b0, b1);
 
    // Flag that an instruction marked as undocumented has been encoutered
    if (instr->undocumented) {
       failflag |= FAIL_UNDOC;
    }
 
-   // Handle the 0x10/0x11 prefixes
-   if (instruction->opcode == 0x10 || instruction->opcode == 0x11) {
-      // The first byte is the prefix
-      instruction->prefix = instruction->opcode;
-      // The second byte is the opcode
-      instruction->opcode = sample_q[index].data;
+   // Memory modelling of the opcode and the prefic
+   if (PC > 0) {
+      memory_read(b0, PC + index, MEM_INSTR);
+   }
+   index++;
+
+   // If there is a prefix, skip past it and read the opcode
+   if (b0 == 0x10 || b0 == 0x11) {
       if (PC >= 0) {
-         memory_read(instruction->opcode, PC + index, MEM_INSTR);
+         memory_read(b0, PC + index, MEM_INSTR);
       }
       index++;
-      // Move to the appropriate section of the instruction table
-      instr+= 0x100 * ((instruction->prefix & 1) + 1);
-      oi = 1;
+      // Increment opcode index (oi), which allows the rest of the code to ignore the prefix
+      oi++;
    }
 
-   // Move down to the instruction metadata
-   instr += instruction->opcode;
+   // If there is a post byte, skip past it
+   if (instr->mode == REGISTER || instr->mode == INDEXED || instr->mode == DIRECTBIT) {
+      pb = sample_q[index].data;
+      if (PC >= 0) {
+         memory_read(pb, PC + index, MEM_INSTR);
+      }
+      index++;
+   }
 
+   // Process any additional operand bytes
    switch (instr->mode) {
-   case REGISTER:
-      instruction->postbyte = sample_q[index].data;
-      if (PC >= 0) {
-         memory_read(instruction->postbyte, PC + index, MEM_INSTR);
-      }
-      index++;
-      break;
    case INDEXED:
-      instruction->postbyte = sample_q[index].data;
-      if (PC >= 0) {
-         memory_read(instruction->postbyte, PC + index, MEM_INSTR);
-      }
-      index++;
-      if (instruction->postbyte & 0x80) {
-         int type = instruction->postbyte & 0x0f;
+      // In some indexed addressing modes there is also a displacement
+      if (pb & 0x80) {
+         int type = pb & 0x0f;
          if (type == 8 || type == 9 || type == 12 || type == 13 || type == 15) {
             if (PC >= 0) {
                memory_read(sample_q[index].data, PC + index, MEM_INSTR);
@@ -1149,12 +1141,6 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       }
       break;
    case DIRECTBIT:
-      instruction->postbyte = sample_q[index].data;
-      if (PC >= 0) {
-         memory_read(instruction->postbyte, PC + index, MEM_INSTR);
-      }
-      index++;
-      __attribute__((__fallthrough__));
    case DIRECT:
    case RELATIVE_8:
    case IMMEDIATE_8:
@@ -1270,7 +1256,6 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       break;
    case INDEXED:
       {
-         int pb = instruction->postbyte;
          int *reg = get_regi((pb >> 5) & 0x03);
          if (!(pb & 0x80)) {       /* n4,R */
             if (*reg >= 0) {

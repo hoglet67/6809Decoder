@@ -48,12 +48,10 @@ typedef struct {
 } sample_t;
 
 
+// This is used to pa
 typedef struct {
    int           pc;
    uint8_t       instr[8];
-   uint8_t       prefix;
-   uint8_t       opcode;
-   uint8_t       postbyte;
    uint8_t       length;
 } instruction_t;
 

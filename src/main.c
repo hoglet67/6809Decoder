@@ -490,7 +490,6 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
    // Sanity check the pc prediction has not gone awry
    // (e.g. in JSR the emulation can use the stacked PC)
 
-   int opcode = instruction.opcode;
    int pc = instruction.pc;
 
    if (pc >= 0) {
@@ -519,7 +518,8 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
       if (intr_seen) {
          interrupt_depth++;
          skipping_interrupted = 1;
-      } else if (interrupt_depth > 0 && opcode == 0x40) {
+      } else if (interrupt_depth > 0 && instruction.instr[0] == 0x3b) {
+         // RTI seen
          interrupt_depth--;
       }
    }
