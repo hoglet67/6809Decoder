@@ -32,6 +32,7 @@ static const char cpu_6309_state[] = "A=?? B=?? E=?? F=?? X=???? Y=???? U=???? S
 #define XX 0
 
 static int postbyte_cycles_6809[0x100] = {
+// x0  x1  x2  x3  x4  x5  x6  x7  x8  x9  xA  xB  xC  xD  xE  xF
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 0x
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1x
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 2x
@@ -40,14 +41,14 @@ static int postbyte_cycles_6809[0x100] = {
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 5x
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 6x
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 7x
-   2,  3,  2,  3,  0,  1,  1,  0,  1,  4,  0,  4,  1,  5,  0, XX,  // 8x
-  XX,  6, XX,  6,  3,  4,  4,  3,  4,  7,  3,  8,  4,  8,  3,  5,  // 9x
-   2,  3,  2,  3,  0,  1,  1,  0,  1,  4,  0,  4,  1,  5,  0, XX,  // Ax
-  XX,  6, XX,  6,  3,  4,  4,  3,  4,  7,  3,  8,  4,  8,  3, XX,  // Bx
-   2,  3,  2,  3,  0,  1,  1,  0,  1,  4,  0,  4,  1,  5,  0, XX,  // Cx
-  XX,  6, XX,  6,  3,  4,  4,  3,  4,  7,  3,  8,  4,  8,  3, XX,  // Dx
-   2,  3,  2,  3,  0,  1,  1,  0,  1,  4,  0,  4,  1,  5,  0, XX,  // Ex
-  XX,  6, XX,  6,  3,  4,  4,  3,  4,  7,  3,  8,  4,  8,  3, XX   // Fx
+   2,  3,  2,  3,  0,  1,  1, XX,  1,  4, XX,  4,  1,  5, XX, XX,  // 8x
+  XX,  6, XX,  6,  3,  4,  4, XX,  4,  7, XX,  8,  4,  8, XX,  5,  // 9x
+   2,  3,  2,  3,  0,  1,  1, XX,  1,  4, XX,  4,  1,  5, XX, XX,  // Ax
+  XX,  6, XX,  6,  3,  4,  4, XX,  4,  7, XX,  8,  4,  8, XX, XX,  // Bx
+   2,  3,  2,  3,  0,  1,  1, XX,  1,  4, XX,  4,  1,  5, XX, XX,  // Cx
+  XX,  6, XX,  6,  3,  4,  4, XX,  4,  7, XX,  8,  4,  8, XX, XX,  // Dx
+   2,  3,  2,  3,  0,  1,  1, XX,  1,  4, XX,  4,  1,  5, XX, XX,  // Ex
+  XX,  6, XX,  6,  3,  4,  4, XX,  4,  7, XX,  8,  4,  8, XX, XX   // Fx
 };
 
 
@@ -56,6 +57,7 @@ static int postbyte_cycles_6809[0x100] = {
 // https://colorcomputerarchive.com/repo/Documents/Microprocessors/HD6309/6309%20Indexed%20Cycle%20Counts.pdf
 
 static int postbyte_cycles_6309_emu[0x100] = {
+// x0  x1  x2  x3  x4  x5  x6  x7  x8  x9  xA  xB  xC  xD  xE  xF
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 0x
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1x
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 2x
@@ -79,6 +81,7 @@ static int postbyte_cycles_6309_emu[0x100] = {
 // https://colorcomputerarchive.com/repo/Documents/Microprocessors/HD6309/6309%20Indexed%20Cycle%20Counts.pdf
 
 static int postbyte_cycles_6309_nat[0x100] = {
+// x0  x1  x2  x3  x4  x5  x6  x7  x8  x9  xA  xB  xC  xD  xE  xF
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 0x
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1x
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 2x
@@ -97,16 +100,25 @@ static int postbyte_cycles_6309_nat[0x100] = {
    4,  5, 19,  5,  3,  4,  4,  4,  4,  7,  4,  5,  4,  6,  4, 19   // Fx
 };
 
-// When there is an indirect indexed access, a second memory access
-// happens before the effiective address is known. For each indexed
+// When there is an indirect indexed access, an additional memory access
+// is required to determine the effictive address. For each indexed
 // addressing mode, it helps to know where how many cycles to skip
 // before type access occurs.
 //
 // Cycle numbers from http://atjs.mbnet.fi/mc6809/Information/6809cyc.txt
 // and cross-checked with Figure 17 in the 6809E datasheet.
 //
-// TODO: Need to extend this to cover the 6309 indirect modes
-// (postbytes 0x90, 0xb0, 0xd0, 0xf0)
+// TODO
+//
+// - A seperate version of this is needed for 6309 in native mode, as
+//   there are fewer dead cycles.
+//
+// - It needs to account for tht asymmetry caused by the 8 W based
+//   indirect modes (postbytes 0x90, 0xb0, 0xd0, 0xf0)
+//
+// - It may be possible to eliminate this table entirely, as the data in
+//   looks identical to the above tables, e.g.
+//   XX,  6, XX,  6,  3,  4,  4, XX,  4,  7, XX,  8,  4,  8, XX,  5,  // 9x
 
 static const int indirect_offset[] = {
    0, //  0 : [,R+]       illegal
