@@ -285,112 +285,144 @@ int dis_6809_disassemble(char *buffer, instruction_t *instruction) {
             if (pb & 0x10) {
                *ptr++ = '[';
             }
-            switch (pb & 0x0f) {
-            case 0:                 /* ,R+ */
-               *ptr++ = ',';
-               *ptr++ = reg;
-               *ptr++ = '+';
-               break;
-            case 1:                 /* ,R++ */
-               *ptr++ = ',';
-               *ptr++ = reg;
-               *ptr++ = '+';
-               *ptr++ = '+';
-               break;
-            case 2:                 /* ,-R */
-               *ptr++ = ',';
-               *ptr++ = '-';
-               *ptr++ = reg;
-               break;
-            case 3:                 /* ,--R */
-               *ptr++ = ',';
-               *ptr++ = '-';
-               *ptr++ = '-';
-               *ptr++ = reg;
-               break;
-            case 4:                 /* ,R */
-               *ptr++ = ',';
-               *ptr++ = reg;
-               break;
-            case 5:                 /* B,R */
-               *ptr++ = 'B';
-               *ptr++ = ',';
-               *ptr++ = reg;
-               break;
-            case 6:                 /* A,R */
-               *ptr++ = 'A';
-               *ptr++ = ',';
-               *ptr++ = reg;
-               break;
-            case 7:                 /* E,R */
-               if (cpu6309) {
-                  *ptr++ = 'E';
+            if (cpu6309 && ((pb & 0x1f) == 0x0f || (pb & 0x1f) == 0x10)) {
+
+               // Extra 6309 W indexed modes
+               switch ((pb >> 5) & 3) {
+               case 0:           /* ,W */
                   *ptr++ = ',';
-                  *ptr++ = reg;
-               } else {
-                  *ptr++ = '?';
-               }
-               break;
-            case 8:                 /* n7,R */
-               *ptr++ = '$';
-               write_hex2(ptr, op8);
-               ptr += 2;
-               *ptr++ = ',';
-               *ptr++ = reg;
-               break;
-            case 9:                 /* n15,R */
-               *ptr++ = '$';
-               write_hex4(ptr, op16);
-               ptr += 4;
-               *ptr++ = ',';
-               *ptr++ = reg;
-               break;
-            case 10:                /* F,R */
-               if (cpu6309) {
-                  *ptr++ = 'F';
-                  *ptr++ = ',';
-                  *ptr++ = reg;
-               } else {
-                  *ptr++ = '?';
-               }
-               break;
-            case 11:                /* D,R */
-               *ptr++ = 'D';
-               *ptr++ = ',';
-               *ptr++ = reg;
-               break;
-            case 12:                /* n7,PCR */
-               *ptr++ = '$';
-               write_hex2(ptr, op8);
-               ptr += 2;
-               *ptr++ = ',';
-               *ptr++ = 'P';
-               *ptr++ = 'C';
-               *ptr++ = 'R';
-               break;
-            case 13:                /* n15,PCR */
-               *ptr++ = '$';
-               write_hex4(ptr, op16);
-               ptr += 4;
-               *ptr++ = ',';
-               *ptr++ = 'P';
-               *ptr++ = 'C';
-               *ptr++ = 'R';
-               break;
-            case 14:                /* W,R */
-               if (cpu6309) {
                   *ptr++ = 'W';
+                  *ptr++ = '+';
+                  break;
+               case 1:           /* n15,W */
+                  write_hex4(ptr, op16);
+                  ptr += 4;
+                  *ptr++ = ',';
+                  *ptr++ = 'W';
+                  break;
+               case 2:           /* ,W++ */
+                  *ptr++ = ',';
+                  *ptr++ = 'W';
+                  *ptr++ = '+';
+                  *ptr++ = '+';
+                  break;
+               case 3:           /* ,--W */
+                  *ptr++ = ',';
+                  *ptr++ = '-';
+                  *ptr++ = '-';
+                  *ptr++ = 'W';
+                  break;
+               }
+
+            } else {
+
+               switch (pb & 0x0f) {
+               case 0:                 /* ,R+ */
                   *ptr++ = ',';
                   *ptr++ = reg;
-               } else {
-                  *ptr++ = '?';
+                  *ptr++ = '+';
+                  break;
+               case 1:                 /* ,R++ */
+                  *ptr++ = ',';
+                  *ptr++ = reg;
+                  *ptr++ = '+';
+                  *ptr++ = '+';
+                  break;
+               case 2:                 /* ,-R */
+                  *ptr++ = ',';
+                  *ptr++ = '-';
+                  *ptr++ = reg;
+                  break;
+               case 3:                 /* ,--R */
+                  *ptr++ = ',';
+                  *ptr++ = '-';
+                  *ptr++ = '-';
+                  *ptr++ = reg;
+                  break;
+               case 4:                 /* ,R */
+                  *ptr++ = ',';
+                  *ptr++ = reg;
+                  break;
+               case 5:                 /* B,R */
+                  *ptr++ = 'B';
+                  *ptr++ = ',';
+                  *ptr++ = reg;
+                  break;
+               case 6:                 /* A,R */
+                  *ptr++ = 'A';
+                  *ptr++ = ',';
+                  *ptr++ = reg;
+                  break;
+               case 7:                 /* E,R */
+                  if (cpu6309) {
+                     *ptr++ = 'E';
+                     *ptr++ = ',';
+                     *ptr++ = reg;
+                  } else {
+                     *ptr++ = '?';
+                  }
+                  break;
+               case 8:                 /* n7,R */
+                  *ptr++ = '$';
+                  write_hex2(ptr, op8);
+                  ptr += 2;
+                  *ptr++ = ',';
+                  *ptr++ = reg;
+                  break;
+               case 9:                 /* n15,R */
+                  *ptr++ = '$';
+                  write_hex4(ptr, op16);
+                  ptr += 4;
+                  *ptr++ = ',';
+                  *ptr++ = reg;
+                  break;
+               case 10:                /* F,R */
+                  if (cpu6309) {
+                     *ptr++ = 'F';
+                     *ptr++ = ',';
+                     *ptr++ = reg;
+                  } else {
+                     *ptr++ = '?';
+                  }
+                  break;
+               case 11:                /* D,R */
+                  *ptr++ = 'D';
+                  *ptr++ = ',';
+                  *ptr++ = reg;
+                  break;
+               case 12:                /* n7,PCR */
+                  *ptr++ = '$';
+                  write_hex2(ptr, op8);
+                  ptr += 2;
+                  *ptr++ = ',';
+                  *ptr++ = 'P';
+                  *ptr++ = 'C';
+                  *ptr++ = 'R';
+                  break;
+               case 13:                /* n15,PCR */
+                  *ptr++ = '$';
+                  write_hex4(ptr, op16);
+                  ptr += 4;
+                  *ptr++ = ',';
+                  *ptr++ = 'P';
+                  *ptr++ = 'C';
+                  *ptr++ = 'R';
+                  break;
+               case 14:                /* W,R */
+                  if (cpu6309) {
+                     *ptr++ = 'W';
+                     *ptr++ = ',';
+                     *ptr++ = reg;
+                  } else {
+                     *ptr++ = '?';
+                  }
+                  break;
+               case 15:                /* [n] */
+                  *ptr++ = '$';
+                  write_hex4(ptr, op16);
+                  ptr += 4;
+                  break;
                }
-               break;
-            case 15:                /* [n] */
-               *ptr++ = '$';
-               write_hex4(ptr, op16);
-               ptr += 4;
-               break;
             }
             if (pb & 0x10) {
                *ptr++ = ']';

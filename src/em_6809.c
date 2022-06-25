@@ -1217,7 +1217,31 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                   ea = (*reg + (pb & 0x0f)) & 0xffff;
                }
             }
+         } else if (cpu6309 && ((pb & 0x1f) == 0x0f || (pb & 0x1f) == 0x10)) {
+
+            // Extra 6309 W indexed modes
+            int W = pack(ACCE, ACCF);
+            if (W >= 0) {
+               switch ((pb >> 5) & 3) {
+               case 0:           /* ,W */
+                  ea = W;
+                  break;
+               case 1:           /* n15,W */
+                  ea = (W + (sample_q[oi + 2].data << 8) + sample_q[oi + 3].data) & 0xffff;
+                  break;
+               case 2:           /* ,W++ */
+                  ea = W;
+                  W = (W + 2) & 0xffff;
+                  break;
+               case 3:           /* ,--W */
+                  W = (W - 2) & 0xffff;
+                  ea = W;
+                  break;
+               }
+            }
+
          } else {
+
             switch (pb & 0x0f) {
             case 0:                 /* ,R+ */
                if (*reg >= 0) {
