@@ -78,7 +78,7 @@ typedef enum {
    REGISTER,
    IMMEDIATE_8,
    IMMEDIATE_16,
-   IMMEDIATE_32, // TODO: Implement
+   IMMEDIATE_32,
    RELATIVE_8,
    RELATIVE_16,
    DIRECT,
@@ -1249,10 +1249,19 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    case RELATIVE_16:
    case EXTENDED:
       if (PC >= 0) {
-         memory_read(sample_q[index].data, PC + index, MEM_INSTR);
+         memory_read(sample_q[index    ].data, PC + index    , MEM_INSTR);
          memory_read(sample_q[index + 1].data, PC + index + 1, MEM_INSTR);
       }
       index += 2;
+      break;
+   case IMMEDIATE_32:
+      if (PC >= 0) {
+         memory_read(sample_q[index    ].data, PC + index    , MEM_INSTR);
+         memory_read(sample_q[index + 1].data, PC + index + 1, MEM_INSTR);
+         memory_read(sample_q[index + 2].data, PC + index + 2, MEM_INSTR);
+         memory_read(sample_q[index + 3].data, PC + index + 3, MEM_INSTR);
+      }
+      index += 4;
       break;
    default:
       break;
@@ -1510,7 +1519,6 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
    int len = strlen(instr->op->mnemonic);
    strcpy(ptr, instr->op->mnemonic);
    ptr += len;
-
    for (int i = len; i < 6; i++) {
       *ptr++ = ' ';
    }
@@ -1612,6 +1620,14 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
       *ptr++ = '$';
       write_hex4(ptr, op16);
       ptr += 4;
+      break;
+   case IMMEDIATE_32:
+      *ptr++ = '#';
+      *ptr++ = '$';
+      for (int i = 0; i < 4; i++) {
+         write_hex2(ptr, instruction->instr[oi + i]);
+         ptr += 2;
+      }
       break;
    case RELATIVE_8:
    case RELATIVE_16:
