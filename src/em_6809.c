@@ -104,11 +104,17 @@ typedef int operand_t;
 
 typedef int ea_t;
 
+typedef enum {
+   SIZE_8    = 0,
+   SIZE_16   = 1,
+   SIZE_32   = 2
+} opsize_t;
+
 typedef struct {
    const char *mnemonic;
    int (*emulate)(operand_t, ea_t, sample_t *);
    optype_t type;
-   int size16;
+   opsize_t size;
 } operation_t;
 
 typedef struct {
@@ -1296,7 +1302,9 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    } else if (instr->op->type == RMWOP) {
       // Read-modify-wrie instruction (always 8-bit)
       operand = sample_q[num_cycles - 3].data;
-   } else if (instr->op->size16) {
+   } else if (instr->op->size == SIZE_32) {
+      operand = (sample_q[num_cycles - 4].data << 24) + (sample_q[num_cycles - 3].data << 16) + (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
+   } else if (instr->op->size == SIZE_16) {
       if (instr->op->type == LOADOP || instr->op->type == STOREOP || instr->op->type == JSROP) {
          // No dead cycle at the end with LDD/LDS/LDU/LDX/LDY/STD/STS/STU/STX/STY/JSR
          operand = (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
@@ -1311,7 +1319,9 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    // Operand 2 is the value written back in a store or read-modify-write
    operand_t operand2 = operand;
    if (instr->op->type == RMWOP || instr->op->type == STOREOP) {
-      if (instr->op->size16) {
+      if (instr->op->size == SIZE_32) {
+         operand2 = (sample_q[num_cycles - 4].data << 24) + (sample_q[num_cycles - 3].data << 16) + (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
+      } else if (instr->op->size == SIZE_16) {
          operand2 = (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
       } else {
          operand2 = sample_q[num_cycles - 1].data;
@@ -1449,11 +1459,16 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
 
    // Model memory reads
    if (ea >= 0 && (instr->op->type == LOADOP || instr->op->type == READOP || instr->op->type == RMWOP)) {
-      if (instr->op->size16) {
-         memory_read((operand  >> 8) & 0xff,  ea,     MEM_DATA);
-         memory_read( operand        & 0xff,  ea + 1, MEM_DATA);
+      if (instr->op->size == SIZE_32) {
+         memory_read((operand >> 24) & 0xff, ea,     MEM_DATA);
+         memory_read((operand >> 16) & 0xff, ea + 1, MEM_DATA);
+         memory_read((operand >>  8) & 0xff, ea + 2, MEM_DATA);
+         memory_read( operand         & 0xff, ea + 3, MEM_DATA);
+      } else if (instr->op->size == SIZE_16) {
+         memory_read((operand >>  8) & 0xff, ea,     MEM_DATA);
+         memory_read( operand        & 0xff, ea + 1, MEM_DATA);
       } else {
-         memory_read( operand        & 0xff,  ea,     MEM_DATA);
+         memory_read( operand        & 0xff, ea,     MEM_DATA);
       }
    }
 
@@ -1477,11 +1492,16 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
 
          // Model memory writes based on result seen on bus
          if (ea >= 0) {
-            if (instr->op->size16) {
-               memory_write((operand2 >> 8) & 0xff,  ea,     MEM_DATA);
-               memory_write( operand2       & 0xff,  ea + 1, MEM_DATA);
+            if (instr->op->size == SIZE_32) {
+               memory_write((operand2 >> 24) & 0xff, ea,     MEM_DATA);
+               memory_write((operand2 >> 16) & 0xff, ea + 1, MEM_DATA);
+               memory_write((operand2 >>  8) & 0xff, ea + 2, MEM_DATA);
+               memory_write( operand2        & 0xff, ea + 3, MEM_DATA);
+            } else if (instr->op->size == SIZE_16) {
+               memory_write((operand2 >>  8) & 0xff, ea,     MEM_DATA);
+               memory_write( operand2        & 0xff, ea + 1, MEM_DATA);
             } else {
-               memory_write( operand2       & 0xff,  ea,     MEM_DATA);
+               memory_write( operand2        & 0xff, ea,     MEM_DATA);
             }
          }
       }
@@ -4716,14 +4736,14 @@ static operation_t op_XRES  = { "XRES",  op_fn_XRES,     OTHER , 0 };
 // 6309
 
 static operation_t op_ADCD  = { "ADCD",  op_fn_ADCD,    READOP , 1 };
-static operation_t op_ADCR  = { "ADCR",  op_fn_ADCR,    READOP , 0 }; // 8 or 16 bits
+static operation_t op_ADCR  = { "ADCR",  op_fn_ADCR,     REGOP , 0 };
 static operation_t op_ADDE  = { "ADDE",  op_fn_ADDE,    READOP , 0 };
 static operation_t op_ADDF  = { "ADDF",  op_fn_ADDF,    READOP , 0 };
-static operation_t op_ADDR  = { "ADDR",  op_fn_ADDR,    READOP , 0 }; // 8 or 16 bits
+static operation_t op_ADDR  = { "ADDR",  op_fn_ADDR,     REGOP , 0 };
 static operation_t op_ADDW  = { "ADDW",  op_fn_ADDW,    READOP , 1 };
 static operation_t op_AIM   = { "AIM",   op_fn_AIM,      RMWOP , 0 };
 static operation_t op_ANDD  = { "ANDD",  op_fn_ANDD,    READOP , 1 };
-static operation_t op_ANDR  = { "ANDR",  op_fn_ANDR,    READOP , 0 }; // 8 or 16 bits
+static operation_t op_ANDR  = { "ANDR",  op_fn_ANDR,     REGOP , 0 };
 static operation_t op_ASLD  = { "ASLD",  op_fn_ASLD,     REGOP , 0 };
 static operation_t op_ASRD  = { "ASRD",  op_fn_ASRD,     REGOP , 0 };
 static operation_t op_BAND  = { "BAND",  op_fn_BAND,    READOP , 0 };
@@ -4734,44 +4754,44 @@ static operation_t op_BIOR  = { "BIOR",  op_fn_BIOR,    READOP , 0 };
 static operation_t op_BITD  = { "BITD",  op_fn_BITD,    READOP , 1 };
 static operation_t op_BITMD = { "BITMD", op_fn_BITMD,   READOP , 0 };
 static operation_t op_BOR   = { "BOR",   op_fn_BOR,     READOP , 0 };
-static operation_t op_CLRD  = { "CLRD",  op_fn_CLRD,     REGOP , 1 };
+static operation_t op_CLRD  = { "CLRD",  op_fn_CLRD,     REGOP , 0 };
 static operation_t op_CLRE  = { "CLRE",  op_fn_CLRE,     REGOP , 0 };
 static operation_t op_CLRF  = { "CLRF",  op_fn_CLRF,     REGOP , 0 };
 static operation_t op_CLRW  = { "CLRW",  op_fn_CLRW,     REGOP , 0 };
 static operation_t op_CMPE  = { "CMPE",  op_fn_CMPE,    READOP , 0 };
 static operation_t op_CMPF  = { "CMPF",  op_fn_CMPF,    READOP , 0 };
-static operation_t op_CMPR  = { "CMPR",  op_fn_CMPR,    READOP , 0 }; // 8 or 16 bits
+static operation_t op_CMPR  = { "CMPR",  op_fn_CMPR,     REGOP , 0 };
 static operation_t op_CMPW  = { "CMPW",  op_fn_CMPW,    READOP , 1 };
-static operation_t op_COMD  = { "COMD",  op_fn_COMD,     REGOP , 1 };
+static operation_t op_COMD  = { "COMD",  op_fn_COMD,     REGOP , 0 };
 static operation_t op_COME  = { "COME",  op_fn_COME,     REGOP , 0 };
 static operation_t op_COMF  = { "COMF",  op_fn_COMF,     REGOP , 0 };
-static operation_t op_COMW  = { "COMW",  op_fn_COMW,     REGOP , 1 };
+static operation_t op_COMW  = { "COMW",  op_fn_COMW,     REGOP , 0 };
 static operation_t op_DECD  = { "DECD",  op_fn_DECD,     REGOP , 0 };
 static operation_t op_DECE  = { "DECE",  op_fn_DECE,     REGOP , 0 };
 static operation_t op_DECF  = { "DECF",  op_fn_DECF,     REGOP , 0 };
 static operation_t op_DECW  = { "DECW",  op_fn_DECW,     REGOP , 0 };
-static operation_t op_DIVD  = { "DIVD",  op_fn_DIVD,    READOP , 0 }; // operand in memory is 8 bits
-static operation_t op_DIVQ  = { "DIVQ",  op_fn_DIVQ,    READOP , 1 }; // operand in memory is 16 bits
+static operation_t op_DIVD  = { "DIVD",  op_fn_DIVD,    READOP , 0 };
+static operation_t op_DIVQ  = { "DIVQ",  op_fn_DIVQ,    READOP , 1 };
 static operation_t op_EIM   = { "EIM",   op_fn_EIM,      RMWOP , 0 };
 static operation_t op_EORD  = { "EORD",  op_fn_EORD,    READOP , 1 };
-static operation_t op_EORR  = { "EORR",  op_fn_EORR,    READOP , 0 }; // 8 or 16 bits
+static operation_t op_EORR  = { "EORR",  op_fn_EORR,     REGOP , 0 };
 static operation_t op_INCD  = { "INCD",  op_fn_INCD,     REGOP , 0 };
 static operation_t op_INCE  = { "INCE",  op_fn_INCE,     REGOP , 0 };
 static operation_t op_INCF  = { "INCF",  op_fn_INCF,     REGOP , 0 };
 static operation_t op_INCW  = { "INCW",  op_fn_INCW,     REGOP , 0 };
-static operation_t op_LDBT  = { "LDBT",  op_fn_LDBT,    LOADOP , 0 };
+static operation_t op_LDBT  = { "LDBT",  op_fn_LDBT,    READOP , 0 };
 static operation_t op_LDE   = { "LDE",   op_fn_LDE,     LOADOP , 0 };
 static operation_t op_LDF   = { "LDF",   op_fn_LDF,     LOADOP , 0 };
 static operation_t op_LDMD  = { "LDMD",  op_fn_LDMD,     REGOP , 0 };
-static operation_t op_LDQ   = { "LDQ",   op_fn_LDQ,     LOADOP , 2 }; // 32 bits
+static operation_t op_LDQ   = { "LDQ",   op_fn_LDQ,     LOADOP , 2 };
 static operation_t op_LDW   = { "LDW",   op_fn_LDW,     LOADOP , 0 };
 static operation_t op_LSRD  = { "LSRD",  op_fn_LSRD,     REGOP , 0 };
 static operation_t op_LSRW  = { "LSRW",  op_fn_LSRW,     REGOP , 0 };
-static operation_t op_MULD  = { "MULD",  op_fn_MULD,     REGOP , 0 };
+static operation_t op_MULD  = { "MULD",  op_fn_MULD,    READOP , 1 };
 static operation_t op_NEGD  = { "NEGD",  op_fn_NEGD,     REGOP , 0 };
 static operation_t op_OIM   = { "OIM",   op_fn_OIM,      RMWOP , 0 };
 static operation_t op_ORD   = { "ORD",   op_fn_ORD,     READOP , 1 };
-static operation_t op_ORR   = { "ORR",   op_fn_ORR,     READOP , 0 }; // 8 or 16 bits
+static operation_t op_ORR   = { "ORR",   op_fn_ORR,      REGOP , 0 };
 static operation_t op_PSHSW = { "PSHSW", op_fn_PSHSW,    OTHER , 0 };
 static operation_t op_PSHUW = { "PSHUW", op_fn_PSHUW,    OTHER , 0 };
 static operation_t op_PULSW = { "PULSW", op_fn_PULSW,    OTHER , 0 };
@@ -4781,16 +4801,16 @@ static operation_t op_ROLW  = { "ROLW",  op_fn_ROLW,     REGOP , 0 };
 static operation_t op_RORD  = { "RORD",  op_fn_RORD,     REGOP , 0 };
 static operation_t op_RORW  = { "RORW",  op_fn_RORW,     REGOP , 0 };
 static operation_t op_SBCD  = { "SBCD",  op_fn_SBCD,    READOP , 1 };
-static operation_t op_SBCR  = { "SBCR",  op_fn_SBCR,    READOP , 0 }; // 8 or 16 bits
+static operation_t op_SBCR  = { "SBCR",  op_fn_SBCR,     REGOP , 0 };
 static operation_t op_SEXW  = { "SEXW",  op_fn_SEXW,     REGOP , 0 };
-static operation_t op_STBT  = { "STBT",  op_fn_STBT,   STOREOP , 0 };
+static operation_t op_STBT  = { "STBT",  op_fn_STBT,     RMWOP , 0 };
 static operation_t op_STE   = { "STE",   op_fn_STE,    STOREOP , 0 };
 static operation_t op_STF   = { "STF",   op_fn_STF,    STOREOP , 0 };
 static operation_t op_STQ   = { "STQ",   op_fn_STQ,    STOREOP , 2 };
 static operation_t op_STW   = { "STW",   op_fn_STW,    STOREOP , 1 };
 static operation_t op_SUBE  = { "SUBE",  op_fn_SUBE,    READOP , 0 };
 static operation_t op_SUBF  = { "SUBF",  op_fn_SUBF,    READOP , 0 };
-static operation_t op_SUBR  = { "SUBR",  op_fn_SUBR,    READOP , 0 }; // 8 or 16 bits
+static operation_t op_SUBR  = { "SUBR",  op_fn_SUBR,     REGOP , 0 };
 static operation_t op_SUBW  = { "SUBW",  op_fn_SUBW,    READOP , 1 };
 static operation_t op_TFM   = { "TFM",   op_fn_TFM,      OTHER , 0 };
 static operation_t op_TIM   = { "TIM",   op_fn_TIM,     READOP , 0 };
