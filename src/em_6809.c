@@ -82,9 +82,9 @@ typedef enum {
    RELATIVE_8,
    RELATIVE_16,
    DIRECT,
+   DIRECTBIT,
    EXTENDED,
    INDEXED,
-   SINGLEBIT, // TODO Implement
    ILLEGAL
 } addr_mode_t ;
 
@@ -1243,17 +1243,24 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
          }
       }
       break;
-   case IMMEDIATE_8:
-   case RELATIVE_8:
+   case DIRECTBIT:
+      instruction->postbyte = sample_q[index].data;
+      if (PC >= 0) {
+         memory_read(instruction->postbyte, PC + index, MEM_INSTR);
+      }
+      index++;
+      __attribute__((__fallthrough__));
    case DIRECT:
+   case RELATIVE_8:
+   case IMMEDIATE_8:
       if (PC >= 0) {
          memory_read(sample_q[index].data, PC + index, MEM_INSTR);
       }
       index++;
       break;
-   case IMMEDIATE_16:
-   case RELATIVE_16:
    case EXTENDED:
+   case RELATIVE_16:
+   case IMMEDIATE_16:
       if (PC >= 0) {
          memory_read(sample_q[index    ].data, PC + index    , MEM_INSTR);
          memory_read(sample_q[index + 1].data, PC + index + 1, MEM_INSTR);
@@ -1345,6 +1352,12 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    case DIRECT:
       if (DP >= 0) {
          ea = (DP << 8) + sample_q[oi + 1].data;
+      }
+      break;
+   case DIRECTBIT:
+      // There is a postbyte
+      if (DP >= 0) {
+         ea = (DP << 8) + sample_q[oi + 2].data;
       }
       break;
    case EXTENDED:
@@ -1518,6 +1531,7 @@ static char *strinsert(char *ptr, const char *str) {
 static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
    uint8_t b0 = instruction->instr[0];
    uint8_t b1 = instruction->instr[1];
+   uint8_t pb = 0;
    instr_mode_t *instr = get_instruction(b0, b1);
 
    // Work out where in the instruction the operand is
@@ -1527,8 +1541,9 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
       // Skip over the prefix
       oi++;
    }
-   if (instr->mode == INDEXED) {
+   if (instr->mode == INDEXED || instr->mode == DIRECTBIT || instr->mode == REGISTER) {
       // Skip over the post byte
+      pb = instruction->instr[oi];
       oi++;
    }
    int op8 = instruction->instr[oi];
@@ -1549,7 +1564,6 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
       break;
    case REGISTER:
       {
-         int pb = instruction->postbyte;
          switch (instruction->opcode) {
          case 0x1a:
          case 0x1c:
@@ -1676,6 +1690,35 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
       write_hex2(ptr, op8);
       ptr += 2;
       break;
+   case DIRECTBIT:
+      // r,sBit,dBit,addr
+      // Reg num is in bits 7..6
+      switch ((pb >> 6) & 3) {
+      case 0:
+         *ptr++ = 'C';
+         *ptr++ = 'C';
+         break;
+      case 1:
+         *ptr++ = 'A';
+         break;
+      case 2:
+         *ptr++ = 'B';
+         break;
+      default:
+         *ptr++ = '?';
+         break;
+      }
+      *ptr++ = ',';
+      // Src Bit is in bits 5..3
+      *ptr++ = '0' + ((pb >> 3) & 7);
+      *ptr++ = ',';
+      // Dest Bit is in bits 2..0
+      *ptr++ = '0' + (pb & 7);
+      *ptr++ = ',';
+      *ptr++ = '$';
+      write_hex2(ptr, op8);
+      ptr += 2;
+      break;
    case EXTENDED:
       *ptr++ = '$';
       write_hex4(ptr, op16);
@@ -1683,7 +1726,6 @@ static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
       break;
    case INDEXED:
       {
-         int pb = instruction->postbyte;
          char reg = regi[(pb >> 5) & 0x03];
          if (!(pb & 0x80)) {       /* n4,R */
             if (pb & 0x10) {
@@ -6172,14 +6214,14 @@ static instr_mode_t instr_table_6309_map2[] = {
    /* 2D */    { &op_TRAP , ILLEGAL      , 0,20,22 },
    /* 2E */    { &op_TRAP , ILLEGAL      , 0,20,22 },
    /* 2F */    { &op_TRAP , ILLEGAL      , 0,20,22 },
-   /* 30 */    { &op_BAND , SINGLEBIT    , 0, 7, 6 },
-   /* 31 */    { &op_BIAND, SINGLEBIT    , 0, 7, 6 },
-   /* 32 */    { &op_BOR  , SINGLEBIT    , 0, 7, 6 },
-   /* 33 */    { &op_BIOR , SINGLEBIT    , 0, 7, 6 },
-   /* 34 */    { &op_BEOR , SINGLEBIT    , 0, 7, 6 },
-   /* 35 */    { &op_BIEOR, SINGLEBIT    , 0, 7, 6 },
-   /* 36 */    { &op_LDBT , SINGLEBIT    , 0, 7, 6 },
-   /* 37 */    { &op_STBT , SINGLEBIT    , 0, 8, 7 },
+   /* 30 */    { &op_BAND , DIRECTBIT    , 0, 7, 6 },
+   /* 31 */    { &op_BIAND, DIRECTBIT    , 0, 7, 6 },
+   /* 32 */    { &op_BOR  , DIRECTBIT    , 0, 7, 6 },
+   /* 33 */    { &op_BIOR , DIRECTBIT    , 0, 7, 6 },
+   /* 34 */    { &op_BEOR , DIRECTBIT    , 0, 7, 6 },
+   /* 35 */    { &op_BIEOR, DIRECTBIT    , 0, 7, 6 },
+   /* 36 */    { &op_LDBT , DIRECTBIT    , 0, 7, 6 },
+   /* 37 */    { &op_STBT , DIRECTBIT    , 0, 8, 7 },
    /* 38 */    { &op_TFM  , REGISTER     , 0, 6, 6 },
    /* 39 */    { &op_TFM  , REGISTER     , 0, 6, 6 },
    /* 3A */    { &op_TFM  , REGISTER     , 0, 6, 6 },
