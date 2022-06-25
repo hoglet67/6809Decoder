@@ -20,67 +20,82 @@ static const char cpu_6309_state[] = "A=?? B=?? E=?? F=?? X=???? Y=???? U=???? S
 // Instruction cycle extras
 // ====================================================================
 
-// In indexed indirect modes, there are extra cycles compuring the effective
+// In indexed indirect modes, there are extra cycles computing the effective
 // address that cannot be included in the opcode table, as they depend on the
 // indexing mode in the post byte.
 
-static int postbyte_cycles_6809[] = {
-   2, //  0 : ,R+
-   3, //  1 : ,R++
-   2, //  2 : ,-R
-   3, //  3 : ,--R
-   0, //  4 : ,R
-   1, //  5 : B,R
-   1, //  6 : A,R
-   0, //  7 : ?
-   1, //  8 : n7,R
-   4, //  9 : n15,R
-   0, // 10 : ?
-   4, // 11 : D,R
-   1, // 12 : n7,PCR
-   5, // 13 : n15,PCR
-   0, // 14 : ?
-   2  // 15 : n
+// On the 6809 there are 15 undefined postbytes, marked as XX below
+// On the 6309 8 of these are used for the W based modes, leaving 7 as traps
+
+// TODO: What actually happens on the 6809 with these?
+
+#define XX 0
+
+static int postbyte_cycles_6809[0x100] = {
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 0x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 2x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 3x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 4x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 5x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 6x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 7x
+   2,  3,  2,  3,  0,  1,  1,  0,  1,  4,  0,  4,  1,  5,  0, XX,  // 8x
+  XX,  6, XX,  6,  3,  4,  4,  3,  4,  7,  3,  8,  4,  8,  3,  5,  // 9x
+   2,  3,  2,  3,  0,  1,  1,  0,  1,  4,  0,  4,  1,  5,  0, XX,  // Ax
+  XX,  6, XX,  6,  3,  4,  4,  3,  4,  7,  3,  8,  4,  8,  3, XX,  // Bx
+   2,  3,  2,  3,  0,  1,  1,  0,  1,  4,  0,  4,  1,  5,  0, XX,  // Cx
+  XX,  6, XX,  6,  3,  4,  4,  3,  4,  7,  3,  8,  4,  8,  3, XX,  // Dx
+   2,  3,  2,  3,  0,  1,  1,  0,  1,  4,  0,  4,  1,  5,  0, XX,  // Ex
+  XX,  6, XX,  6,  3,  4,  4,  3,  4,  7,  3,  8,  4,  8,  3, XX   // Fx
 };
 
-static int postbyte_cycles_6309_emu[] = {
-   2, //  0 : ,R+
-   3, //  1 : ,R++
-   2, //  2 : ,-R
-   3, //  3 : ,--R
-   0, //  4 : ,R
-   1, //  5 : B,R
-   1, //  6 : A,R
-   1, //  7 : E,R
-   1, //  8 : n7,R
-   4, //  9 : n15,R
-   1, // 10 : F,R
-   4, // 11 : D,R
-   1, // 12 : n7,PCR
-   5, // 13 : n15,PCR
-   4, // 14 : W,R
-   0  // 15 : n
+
+// From Addendum to The 6309 Book
+// Indexed Addressing Mode Post Bytes
+// https://colorcomputerarchive.com/repo/Documents/Microprocessors/HD6309/6309%20Indexed%20Cycle%20Counts.pdf
+
+static int postbyte_cycles_6309_emu[0x100] = {
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 0x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 2x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 3x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 4x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 5x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 6x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 7x
+   2,  3,  2,  3,  0,  1,  1,  1,  1,  4,  1,  4,  1,  5,  4,  0,  // 8x
+   3,  6, 20,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  7,  5,  // 9x
+   2,  3,  2,  3,  0,  1,  1,  1,  1,  4,  1,  4,  1,  5,  4,  5,  // Ax
+   5,  6, 20,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  7, 20,  // Bx
+   2,  3,  2,  3,  0,  1,  1,  1,  1,  4,  1,  4,  1,  5,  4,  3,  // Cx
+   4,  6, 20,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  7, 20,  // Dx
+   2,  3,  2,  3,  0,  1,  1,  1,  1,  4,  1,  4,  1,  5,  4,  3,  // Ex
+   4,  6, 20,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  7, 20   // Fx
 };
 
-static int postbyte_cycles_6309_nat[] = {
-   1, //  0 : ,R+
-   2, //  1 : ,R++
-   1, //  2 : ,-R
-   2, //  3 : ,--R
-   0, //  4 : ,R
-   1, //  5 : B,R
-   1, //  6 : A,R
-   1, //  7 : E,R
-   1, //  8 : n7,R
-   3, //  9 : n15,R
-   1, // 10 : F,R
-   2, // 11 : D,R
-   1, // 12 : n7,PCR
-   3, // 13 : n15,PCR
-   1, // 14 : W,R
-   0  // 15 : n
-};
+// From Addendum to The 6309 Book
+// Indexed Addressing Mode Post Bytes
+// https://colorcomputerarchive.com/repo/Documents/Microprocessors/HD6309/6309%20Indexed%20Cycle%20Counts.pdf
 
+static int postbyte_cycles_6309_nat[0x100] = {
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 0x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 1x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 2x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 3x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 4x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 5x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 6x
+   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 7x
+   1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  0,  // 8x
+   3,  5, 19,  5,  3,  4,  4,  4,  4,  7,  4,  5,  4,  6,  4,  5,  // 9x
+   1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  2,  // Ax
+   5,  5, 19,  5,  3,  4,  4,  4,  4,  7,  4,  5,  4,  6,  4, 19,  // Bx
+   1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  1,  // Cx
+   4,  5, 19,  5,  3,  4,  4,  4,  4,  7,  4,  5,  4,  6,  4, 19,  // Dx
+   1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  1,  // Ex
+   4,  5, 19,  5,  3,  4,  4,  4,  4,  7,  4,  5,  4,  6,  4, 19   // Fx
+};
 
 // When there is an indirect indexed access, a second memory access
 // happens before the effiective address is known. For each indexed
@@ -89,6 +104,9 @@ static int postbyte_cycles_6309_nat[] = {
 //
 // Cycle numbers from http://atjs.mbnet.fi/mc6809/Information/6809cyc.txt
 // and cross-checked with Figure 17 in the 6809E datasheet.
+//
+// TODO: Need to extend this to cover the 6309 indirect modes
+// (postbytes 0x90, 0xb0, 0xd0, 0xf0)
 
 static const int indirect_offset[] = {
    0, //  0 : [,R+]       illegal
@@ -108,8 +126,6 @@ static const int indirect_offset[] = {
    0, // 14 :             undefined
    5  // 15 : [n]
 };
-
-
 
 // In PSHS/PSHU/PULS/PULU, the postbyte controls which registers are pulled
 //
@@ -761,21 +777,14 @@ static int get_num_cycles(sample_t *sample_q) {
       // are the minimum the instruction will execute in
       int postindex = (b0 == 0x10 || b0 == 0x11) ? 2 : 1;
       int postbyte = sample_q[postindex].data;
-      if (postbyte & 0x80) {
-         if (cpu6309) {
-            if (NM == 1) {
-               cycle_count += postbyte_cycles_6309_nat[postbyte & 0x0F];
-            } else {
-               cycle_count += postbyte_cycles_6309_emu[postbyte & 0x0F];
-            }
+      if (cpu6309) {
+         if (NM == 1) {
+            cycle_count += postbyte_cycles_6309_nat[postbyte];
          } else {
-            cycle_count += postbyte_cycles_6809[postbyte & 0x0F];
-         }
-         if (postbyte & 0x10) {
-            cycle_count += 3;
+            cycle_count += postbyte_cycles_6309_emu[postbyte];
          }
       } else {
-         cycle_count += 1;
+         cycle_count += postbyte_cycles_6809[postbyte];
       }
    }
    return cycle_count;
