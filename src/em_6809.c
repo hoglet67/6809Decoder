@@ -3,7 +3,9 @@
 #include <string.h>
 #include <inttypes.h>
 #include "memory.h"
+#include "types_6809.h"
 #include "em_6809.h"
+#include "dis_6809.h"
 
 // ====================================================================
 // Fail flags
@@ -70,87 +72,8 @@ static const char * fail_hints[32] = {
 };
 
 // ====================================================================
-// Type Defs
-// ====================================================================
-
-typedef enum {
-   INHERENT,
-   REGISTER,
-   IMMEDIATE_8,
-   IMMEDIATE_16,
-   IMMEDIATE_32,
-   RELATIVE_8,
-   RELATIVE_16,
-   DIRECT,
-   DIRECTBIT,
-   EXTENDED,
-   INDEXED,
-   ILLEGAL
-} addr_mode_t ;
-
-typedef enum {
-   READOP,
-   REGOP,     // operates on rehisters onlt; no EA
-   LEAOP,     // LEA or
-   JSROP,     // JSR
-   LOADOP,    // LDx
-   STOREOP,   // STx
-   RMWOP,
-   BRANCHOP,
-   OTHER
-} optype_t;
-
-typedef int operand_t;
-
-typedef int ea_t;
-
-typedef enum {
-   SIZE_8    = 0,
-   SIZE_16   = 1,
-   SIZE_32   = 2
-} opsize_t;
-
-typedef struct {
-   const char *mnemonic;
-   int (*emulate)(operand_t, ea_t, sample_t *);
-   optype_t type;
-   opsize_t size;
-} operation_t;
-
-typedef struct {
-   operation_t *op;
-   addr_mode_t mode;
-   int undocumented;
-   int cycles;
-   int cycles_native;
-} instr_mode_t;
-
-
-// ====================================================================
 // Static variables
 // ====================================================================
-
-// For the disassember
-
-static const char regi2[] = { 'X', 'Y', 'U', 'S' };
-
-static const char **regi4;
-
-static const char *regi4_6809[] = { "D",  "X",  "Y",  "U",  "S", "PC", "??", "??",
-                                    "A",  "B", "CC", "DP", "??", "??", "??", "??" };
-
-static const char *regi4_6309[] = { "D",  "X",  "Y",  "U",  "S", "PC",  "W", "TV",
-                                    "A",  "B", "CC", "DP",  "0",  "0",  "E",  "F" };
-
-static const char *pshsregi[] = { "PC", "U", "Y", "X", "DP", "B", "A", "CC" };
-
-static const char *pshuregi[] = { "PC", "S", "Y", "X", "DP", "B", "A", "CC" };
-
-static const char tfmreg[] = { 'D', 'X', 'Y', 'U', 'S', '?', '?', '?',
-                               '?', '?', '?', '?', '?', '?', '?', '?' };
-
-static const char tfmr0inc[] = { '+', '-', '+', ' ' };
-static const char tfmr1inc[] = { '+', '-', ' ', '+' };
 
 // For the CPU state display
 
@@ -223,17 +146,9 @@ static int show_cycle_errors = 0;
 // Forward declarations
 // ====================================================================
 
-static instr_mode_t instr_table_6809_map0[];
-static instr_mode_t instr_table_6809_map1[];
-static instr_mode_t instr_table_6809_map2[];
-
-static instr_mode_t instr_table_6309_map0[];
-static instr_mode_t instr_table_6309_map1[];
-static instr_mode_t instr_table_6309_map2[];
-
-static instr_mode_t *instr_table_map0;
-static instr_mode_t *instr_table_map1;
-static instr_mode_t *instr_table_map2;
+static opcode_t instr_table_6809[];
+static opcode_t instr_table_6309[];
+static opcode_t *instr_table;
 
 static operation_t op_ABX  ;
 static operation_t op_ADCA ;
@@ -574,16 +489,6 @@ static void push16u(int value) {
    push8u(value >> 8);
 }
 
-static instr_mode_t *get_instruction(uint8_t b0, uint8_t b1) {
-   if (b0 == 0x11) {
-      return instr_table_map2 + b1;
-   } else if (b0 == 0x10) {
-      return instr_table_map1 + b1;
-   } else {
-      return instr_table_map0 + b0;
-   }
-}
-
 static int pack0(int byte) {
    return (byte >= 0) ? ((byte << 8) + byte) : -1;
 }
@@ -740,50 +645,30 @@ static void em_6809_init(arguments_t *args) {
 
    if (cpu6309) {
       cpu_state = cpu_6309_state;
-      instr_table_map0 = instr_table_6309_map0;
-      instr_table_map1 = instr_table_6309_map1;
-      instr_table_map2 = instr_table_6309_map2;
-      regi4 = regi4_6309;
+      instr_table = instr_table_6309;
    } else {
       cpu_state = cpu_6809_state;
-      instr_table_map0 = instr_table_6809_map0;
-      instr_table_map1 = instr_table_6809_map1;
-      instr_table_map2 = instr_table_6809_map2;
-      regi4 = regi4_6809;
+      instr_table = instr_table_6809;
    }
 
+   dis_6809_init(args->cpu_type, instr_table);
+
    // Validate the cycles in the maps are consistent
+   opcode_t *instr_6309 = instr_table_6309;
+   opcode_t *instr_6809 = instr_table_6809;
    int fail = 0;
-   for (int i = 0; i <= 2; i++) {
-      instr_mode_t *instr_6309;
-      instr_mode_t *instr_6809;
-      switch (i) {
-      case 1:
-         instr_6309 = instr_table_6309_map1;
-         instr_6809 = instr_table_6809_map1;
-         break;
-      case 2:
-         instr_6309 = instr_table_6309_map2;
-         instr_6809 = instr_table_6809_map2;
-         break;
-      default:
-         instr_6309 = instr_table_6309_map0;
-         instr_6809 = instr_table_6809_map0;
-         break;
-      }
-      for (int j = 0; j <= 0xff; j++) {
-         if (!instr_6809->undocumented) {
-            if (instr_6309->cycles != instr_6809->cycles) {
-               printf("cycle mismatch in instruction table: %02x %02x (%d cf %d)\n", i, j, instr_6309->cycles, instr_6809->cycles);
-               fail = 1;
-            }
+   for (int i = 0; i < 0x300; i++) {
+      if (!instr_6809->undocumented) {
+         if (instr_6309->cycles != instr_6809->cycles) {
+            printf("cycle mismatch in instruction table: %04x (%d cf %d)\n", i, instr_6309->cycles, instr_6809->cycles);
+            fail = 1;
          }
-         instr_6309++;
-         instr_6809++;
       }
-      if (fail) {
-         exit(1);
-      }
+      instr_6309++;
+      instr_6809++;
+   }
+   if (fail) {
+      exit(1);
    }
 }
 
@@ -839,7 +724,7 @@ static int count_bits[] =    { 0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4};
 static int get_num_cycles(sample_t *sample_q) {
    uint8_t b0 = sample_q[0].data;
    uint8_t b1 = sample_q[1].data;
-   instr_mode_t *instr = get_instruction(b0, b1);
+   opcode_t *instr = get_instruction(instr_table, b0, b1);
    int cycle_count = instr->cycles;
    // Long Branch, one additional cycle if branch taken
    if (b0 == 0x10) {
@@ -1198,7 +1083,7 @@ static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t 
 
 static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
 
-   instr_mode_t *instr;
+   opcode_t *instr;
    int index = 0;
    int oi = 0;
 
@@ -1208,7 +1093,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       memory_read(instruction->opcode, PC + index, MEM_INSTR);
    }
    index++;
-   instr = instr_table_map0;
+   instr = instr_table;
 
    // Flag that an instruction marked as undocumented has been encoutered
    if (instr->undocumented) {
@@ -1225,7 +1110,8 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
          memory_read(instruction->opcode, PC + index, MEM_INSTR);
       }
       index++;
-      instr = instruction->prefix == 0x11 ? instr_table_map2 : instr_table_map1;
+      // Move to the appropriate section of the instruction table
+      instr+= 0x100 * ((instruction->prefix & 1) + 1);
       oi = 1;
    }
 
@@ -1540,343 +1426,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    }
 }
 
-static char *strinsert(char *ptr, const char *str) {
-   while (*str) {
-      *ptr++ = *str++;
-   }
-   return ptr;
-}
 
-static int em_6809_disassemble(char *buffer, instruction_t *instruction) {
-   int b0 = instruction->instr[0];
-   int b1 = instruction->instr[1];
-   int pb = 0;
-   instr_mode_t *instr = get_instruction(b0, b1);
-
-   // Work out where in the instruction the operand is
-   // [Prefix] Opcode [ Postbyte] Op1 Op2
-   int oi;
-   int opcode;
-   // Extract the prefix/opcode
-   if (b0 == 0x10 || b0 == 0x11) {
-      opcode = (b0 << 8) | b1;
-      oi = 2;
-   } else {
-      opcode = b0;
-      oi = 1;
-   }
-   if (instr->mode == INDEXED || instr->mode == DIRECTBIT || instr->mode == REGISTER) {
-      // Skip over the post byte
-      pb = instruction->instr[oi];
-      oi++;
-   }
-   int op8 = instruction->instr[oi];
-   int op16 = (instruction->instr[oi] << 8) + instruction->instr[oi + 1];
-
-   /// Output the mnemonic
-   char *ptr = buffer;
-   int len = strlen(instr->op->mnemonic);
-   strcpy(ptr, instr->op->mnemonic);
-   ptr += len;
-   for (int i = len; i < 6; i++) {
-      *ptr++ = ' ';
-   }
-
-   // Output the operand
-   switch (instr->mode) {
-   case INHERENT:
-      break;
-   case REGISTER:
-      {
-         switch (opcode) {
-         case 0x001a: // ORC
-         case 0x001c: // ANDC
-            *ptr++ = '#';
-            *ptr++ = '$';
-            write_hex2(ptr, pb);
-            ptr += 2;
-            break;
-         case 0x001e: // EXG
-         case 0x001f: // TFR
-         case 0x1030: // ADDR
-         case 0x1031: // ADCR
-         case 0x1032: // SUBR
-         case 0x1033: // SBCR
-         case 0x1034: // ANDR
-         case 0x1035: // OR
-         case 0x1036: // EORR
-         case 0x1037: // CMPR
-            ptr = strinsert(ptr, regi4[(pb >> 4) & 0x0f]);
-            *ptr++ = ',';
-            ptr = strinsert(ptr, regi4[pb & 0x0f]);
-            break;
-         case 0x0034: // PSHS
-            {
-               int p = 0;
-               for (int i = 0; i < 8; i++) {
-                  if (pb & 0x80) {
-                     if (p) {
-                        *ptr++ = ',';
-                     }
-                     ptr = strinsert(ptr, pshsregi[i]);
-                     p = 1;
-                  }
-                  pb <<= 1;
-               }
-            }
-            break;
-         case 0x0035: // PULS
-            {
-               int p = 0;
-               for (int i = 7; i >= 0; i--) {
-                  if (pb & 0x01) {
-                     if (p) {
-                        *ptr++ = ',';
-                     }
-                     ptr = strinsert(ptr, pshsregi[i]);
-                     p = 1;
-                  }
-                  pb >>= 1;
-               }
-            }
-            break;
-         case 0x0036: // PSHU
-            {
-               int p = 0;
-               for (int i = 0; i < 8; i++) {
-                  if (pb & 0x80) {
-                     if (p) {
-                        *ptr++ = ',';
-                     }
-                     ptr = strinsert(ptr, pshuregi[i]);
-                     p = 1;
-                  }
-                  pb <<= 1;
-               }
-            }
-            break;
-         case 0x0037: // PULU
-            {
-               int p = 0;
-               for (int i = 7; i >= 0; i--) {
-                  if (pb & 0x01) {
-                     if (p) {
-                        *ptr++ = ',';
-                     }
-                     ptr = strinsert(ptr, pshuregi[i]);
-                     p = 1;
-                  }
-                  pb >>= 1;
-               }
-            }
-            break;
-         case 0x1138: // TFM r0+, r1+
-         case 0x1139: // TFM r0-, r1-
-         case 0x113a: // TFM r0+, r1
-         case 0x113b: // TFM r0 , r1+
-            *ptr++ = tfmreg[(pb >> 4) & 0xf];
-            *ptr++ = tfmr0inc[opcode & 3];
-            *ptr++ = tfmreg[pb & 0xf];
-            *ptr++ = tfmr1inc[opcode & 3];
-            break;
-         }
-      }
-      break;
-   case IMMEDIATE_8:
-      *ptr++ = '#';
-      *ptr++ = '$';
-      write_hex2(ptr, op8);
-      ptr += 2;
-      break;
-   case IMMEDIATE_16:
-      *ptr++ = '#';
-      *ptr++ = '$';
-      write_hex4(ptr, op16);
-      ptr += 4;
-      break;
-   case IMMEDIATE_32:
-      *ptr++ = '#';
-      *ptr++ = '$';
-      for (int i = 0; i < 4; i++) {
-         write_hex2(ptr, instruction->instr[oi + i]);
-         ptr += 2;
-      }
-      break;
-   case RELATIVE_8:
-   case RELATIVE_16:
-      {
-         int16_t offset;
-         if (instr->mode == RELATIVE_8) {
-            offset = (int16_t)((int8_t)op8);
-         } else {
-            offset = (int16_t)(op16);
-         }
-         if (instruction->pc < 0) {
-            if (offset < 0) {
-               ptr += sprintf(ptr, "pc-%d", -offset);
-            } else {
-               ptr += sprintf(ptr, "pc+%d", offset);
-            }
-         } else {
-            *ptr++ = '$';
-            write_hex4(ptr, (instruction->pc + instruction->length + offset) & 0xffff);
-            ptr += 4;
-         }
-      }
-      break;
-   case DIRECT:
-      *ptr++ = '$';
-      write_hex2(ptr, op8);
-      ptr += 2;
-      break;
-   case DIRECTBIT:
-      // r,sBit,dBit,addr
-      // Reg num is in bits 7..6
-      switch ((pb >> 6) & 3) {
-      case 0:
-         *ptr++ = 'C';
-         *ptr++ = 'C';
-         break;
-      case 1:
-         *ptr++ = 'A';
-         break;
-      case 2:
-         *ptr++ = 'B';
-         break;
-      default:
-         *ptr++ = '?';
-         break;
-      }
-      *ptr++ = ',';
-      // Src Bit is in bits 5..3
-      *ptr++ = '0' + ((pb >> 3) & 7);
-      *ptr++ = ',';
-      // Dest Bit is in bits 2..0
-      *ptr++ = '0' + (pb & 7);
-      *ptr++ = ',';
-      *ptr++ = '$';
-      write_hex2(ptr, op8);
-      ptr += 2;
-      break;
-   case EXTENDED:
-      *ptr++ = '$';
-      write_hex4(ptr, op16);
-      ptr += 4;
-      break;
-   case INDEXED:
-      {
-         char reg = regi2[(pb >> 5) & 0x03];
-         if (!(pb & 0x80)) {       /* n4,R */
-            if (pb & 0x10) {
-               *ptr++ = '-';
-               *ptr++ = '$';
-               write_hex2(ptr, ((pb & 0x0f) ^ 0x0f) + 1);
-            } else {
-               *ptr++ = '$';
-               write_hex2(ptr, pb & 0x0f);
-            }
-            ptr += 2;
-            *ptr++ = ',';
-            *ptr++ = reg;
-         } else {
-            if (pb & 0x10) {
-               *ptr++ = '[';
-            }
-            switch (pb & 0x0f) {
-            case 0:                 /* ,R+ */
-               *ptr++ = ',';
-               *ptr++ = reg;
-               *ptr++ = '+';
-               break;
-            case 1:                 /* ,R++ */
-               *ptr++ = ',';
-               *ptr++ = reg;
-               *ptr++ = '+';
-               *ptr++ = '+';
-               break;
-            case 2:                 /* ,-R */
-               *ptr++ = ',';
-               *ptr++ = '-';
-               *ptr++ = reg;
-               break;
-            case 3:                 /* ,--R */
-               *ptr++ = ',';
-               *ptr++ = '-';
-               *ptr++ = '-';
-               *ptr++ = reg;
-               break;
-            case 4:                 /* ,R */
-               *ptr++ = ',';
-               *ptr++ = reg;
-               break;
-            case 5:                 /* B,R */
-               *ptr++ = 'B';
-               *ptr++ = ',';
-               *ptr++ = reg;
-               break;
-            case 6:                 /* A,R */
-               *ptr++ = 'A';
-               *ptr++ = ',';
-               *ptr++ = reg;
-               break;
-            case 8:                 /* n7,R */
-               *ptr++ = '$';
-               write_hex2(ptr, op8);
-               ptr += 2;
-               *ptr++ = ',';
-               *ptr++ = reg;
-               break;
-            case 9:                 /* n15,R */
-               *ptr++ = '$';
-               write_hex4(ptr, op16);
-               ptr += 4;
-               *ptr++ = ',';
-               *ptr++ = reg;
-               break;
-            case 11:                /* D,R */
-               *ptr++ = 'D';
-               *ptr++ = ',';
-               *ptr++ = reg;
-               break;
-            case 12:                /* n7,PCR */
-               *ptr++ = '$';
-               write_hex2(ptr, op8);
-               ptr += 2;
-               *ptr++ = ',';
-               *ptr++ = 'P';
-               *ptr++ = 'C';
-               *ptr++ = 'R';
-               break;
-            case 13:                /* n15,PCR */
-               *ptr++ = '$';
-               write_hex4(ptr, op16);
-               ptr += 4;
-               *ptr++ = ',';
-               *ptr++ = 'P';
-               *ptr++ = 'C';
-               *ptr++ = 'R';
-               break;
-            case 15:                /* [n] */
-               *ptr++ = '$';
-               write_hex4(ptr, op16);
-               ptr += 4;
-               break;
-            default:
-               *ptr++ = '?';
-               *ptr++ = '?';
-               break;
-            }
-            if (pb & 0x10) {
-               *ptr++ = ']';
-            }
-         }
-      }
-      break;
-   default:
-      break;
-   }
-   return ptr - buffer;
-}
 
 static int em_6809_get_PC() {
    return PC;
@@ -2025,7 +1575,7 @@ cpu_emulator_t em_6809 = {
    .reset = em_6809_reset,
    .interrupt = em_6809_interrupt,
    .emulate = em_6809_emulate,
-   .disassemble = em_6809_disassemble,
+   .disassemble = dis_6809_disassemble,
    .get_PC = em_6809_get_PC,
    .read_memory = em_6809_read_memory,
    .get_state = em_6809_get_state,
@@ -4901,7 +4451,8 @@ static operation_t op_TSTW  = { "TSTW",  op_fn_TSTW,    READOP , 1 };
 // 6809 Opcode Tables
 // ====================================================================
 
-static instr_mode_t instr_table_6809_map0[] = {
+static opcode_t instr_table_6809[] = {
+
    /* 00 */    { &op_NEG , DIRECT       , 0, 6 },
    /* 01 */    { &op_NEG , DIRECT       , 1, 6 },
    /* 02 */    { &op_XNC , DIRECT       , 1, 6 },
@@ -5157,10 +4708,8 @@ static instr_mode_t instr_table_6809_map0[] = {
    /* FC */    { &op_LDD , EXTENDED     , 0, 6 },
    /* FD */    { &op_STD , EXTENDED     , 0, 6 },
    /* FE */    { &op_LDU , EXTENDED     , 0, 6 },
-   /* FF */    { &op_STU , EXTENDED     , 0, 6 }
-};
+   /* FF */    { &op_STU , EXTENDED     , 0, 6 },
 
-static instr_mode_t instr_table_6809_map1[] = {
    /* 00 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 01 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 02 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -5416,10 +4965,8 @@ static instr_mode_t instr_table_6809_map1[] = {
    /* FC */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* FD */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* FE */    { &op_LDS , EXTENDED     , 0, 7 },
-   /* FF */    { &op_STS , EXTENDED     , 0, 7 }
-};
+   /* FF */    { &op_STS , EXTENDED     , 0, 7 },
 
-static instr_mode_t instr_table_6809_map2[] = {
    /* 00 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 01 */    { &op_XX  , ILLEGAL      , 1, 1 },
    /* 02 */    { &op_XX  , ILLEGAL      , 1, 1 },
@@ -5682,7 +5229,7 @@ static instr_mode_t instr_table_6809_map2[] = {
 // 6309 Opcode Tables
 // ====================================================================
 
-static instr_mode_t instr_table_6309_map0[] = {
+static opcode_t instr_table_6309[] = {
    /* 00 */    { &op_NEG , DIRECT       , 0, 6, 5 },
    /* 01 */    { &op_OIM , IMMEDIATE_8  , 0, 6, 6 },
    /* 02 */    { &op_AIM , IMMEDIATE_8  , 0, 6, 6 },
@@ -5938,10 +5485,8 @@ static instr_mode_t instr_table_6309_map0[] = {
    /* FC */    { &op_LDD , EXTENDED     , 0, 6, 5 },
    /* FD */    { &op_STD , EXTENDED     , 0, 6, 5 },
    /* FE */    { &op_LDU , EXTENDED     , 0, 6, 5 },
-   /* FF */    { &op_STU , EXTENDED     , 0, 6, 5 }
-};
+   /* FF */    { &op_STU , EXTENDED     , 0, 6, 5 },
 
-static instr_mode_t instr_table_6309_map1[] = {
    /* 00 */    { &op_TRAP , ILLEGAL      , 1,20,22 },
    /* 01 */    { &op_TRAP , ILLEGAL      , 1,20,22 },
    /* 02 */    { &op_TRAP , ILLEGAL      , 1,20,22 },
@@ -6197,10 +5742,8 @@ static instr_mode_t instr_table_6309_map1[] = {
    /* FC */    { &op_LDQ  , EXTENDED     , 0, 9, 8 },
    /* FD */    { &op_STQ  , EXTENDED     , 0, 9, 8 },
    /* FE */    { &op_LDS  , EXTENDED     , 0, 7, 6 },
-   /* FF */    { &op_STS  , EXTENDED     , 0, 7, 6 }
-};
+   /* FF */    { &op_STS  , EXTENDED     , 0, 7, 6 },
 
-static instr_mode_t instr_table_6309_map2[] = {
    /* 00 */    { &op_TRAP , ILLEGAL      , 0,20,22 },
    /* 01 */    { &op_TRAP , ILLEGAL      , 0,20,22 },
    /* 02 */    { &op_TRAP , ILLEGAL      , 0,20,22 },

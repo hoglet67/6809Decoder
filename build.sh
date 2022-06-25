@@ -21,4 +21,4 @@ else
   DEFS="-D_GNU_SOURCE"
 fi
 
-gcc -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -O3 $DEFS $INCS -o decode6809 src/main.c src/memory.c src/em_6809.c $LIBS
+gcc -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -O3 $DEFS $INCS -o decode6809 src/main.c src/memory.c src/em_6809.c src/dis_6809.c $LIBS
