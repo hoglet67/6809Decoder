@@ -66,7 +66,7 @@ static int *init_ram(int size) {
 static int memory_read_default(int data, int ea) {
    int fail = 0;
    if (memory[ea] >= 0 && memory[ea] != data) {
-      fail = 1;
+      fail = memory[ea] ^ data;
       failflag |= FAIL_MEMORY;
    }
    memory[ea] = data;
@@ -90,7 +90,7 @@ static void init_default() {
 static int memory_read_dragon(int data, int ea) {
    int fail = 0;
    if (memory[ea] >= 0 && memory[ea] != data && (ea < 0xff00 || ea >= 0xfff0)) {
-      fail = 1;
+      fail = memory[ea] ^ data;
       failflag |= FAIL_MEMORY;
    }
    memory[ea] = data;
@@ -109,7 +109,7 @@ static void init_dragon() {
 static int memory_read_beeb(int data, int ea) {
    int fail = 0;
    if (memory[ea] >= 0 && memory[ea] != data && (ea < 0xfc00 || ea >= 0xff00)) {
-      fail = 1;
+      fail = memory[ea] ^ data;
       failflag |= FAIL_MEMORY;
    }
    memory[ea] = data;
@@ -171,7 +171,7 @@ void memory_read(int data, int ea, mem_access_t type) {
    if (mem_rd_logging & (1 << type)) {
       log_memory_access("Rd: ", data, ea, 0);
       if (fail) {
-         log_memory_fail(ea, memory[ea], data);
+         log_memory_fail(ea, data ^ fail, data);
       }
    }
 }
