@@ -1320,18 +1320,18 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
 
    // Pick out the operand (Fig 17 in datasheet, esp sheet 5)
    operand_t operand;
-   if (instr->op == &op_TST) {
+   if (instr->op == &op_TST && (NM != 1)) {
       // There are two dead cycles at the end of TST
       operand = sample_q[num_cycles - 3].data;
    } else if (instr->mode == REGISTER) {
       operand = sample_q[1].data; // This is the postbyte
    } else if (instr->op->type == RMWOP) {
-      // Read-modify-wrie instruction (always 8-bit)
+      // Read-modify-write instruction (always 8-bit)
       operand = sample_q[num_cycles - 3].data;
    } else if (instr->op->size == SIZE_32) {
       operand = (sample_q[num_cycles - 4].data << 24) + (sample_q[num_cycles - 3].data << 16) + (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
    } else if (instr->op->size == SIZE_16) {
-      if (instr->op->type == LOADOP || instr->op->type == STOREOP || instr->op->type == JSROP) {
+      if (instr->op->type == LOADOP || instr->op->type == STOREOP || instr->op->type == JSROP || (NM == 1)) {
          // No dead cycle at the end with LDD/LDS/LDU/LDX/LDY/STD/STS/STU/STX/STY/JSR
          operand = (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
       } else {
