@@ -29,7 +29,9 @@ static const char cpu_6309_state[] = "A=?? B=?? E=?? F=?? X=???? Y=???? U=???? S
 
 // TODO: What actually happens on the 6809 with these?
 
-#define XX 0
+#define XX -1
+
+#define MAX_VALID_POSTBYTE_CYCLES 8
 
 static int postbyte_cycles_6809[0x100] = {
 // x0  x1  x2  x3  x4  x5  x6  x7  x8  x9  xA  xB  xC  xD  xE  xF
@@ -50,7 +52,6 @@ static int postbyte_cycles_6809[0x100] = {
    2,  3,  2,  3,  0,  1,  1, XX,  1,  4, XX,  4,  1,  5, XX, XX,  // Ex
   XX,  6, XX,  6,  3,  4,  4, XX,  4,  7, XX,  8,  4,  8, XX, XX   // Fx
 };
-
 
 // From Addendum to The 6309 Book
 // Indexed Addressing Mode Post Bytes
@@ -91,52 +92,13 @@ static int postbyte_cycles_6309_nat[0x100] = {
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 6x
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 7x
    1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  0,  // 8x
-   3,  5, 19,  5,  3,  4,  4,  4,  4,  7,  4,  5,  4,  6,  4,  5,  // 9x
+   3,  5, 19,  5,  3,  4,  4,  4,  4,  7,  4,  5,  4,  6,  4,  4,  // 9x
    1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  2,  // Ax
    5,  5, 19,  5,  3,  4,  4,  4,  4,  7,  4,  5,  4,  6,  4, 19,  // Bx
    1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  1,  // Cx
    4,  5, 19,  5,  3,  4,  4,  4,  4,  7,  4,  5,  4,  6,  4, 19,  // Dx
    1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  1,  // Ex
    4,  5, 19,  5,  3,  4,  4,  4,  4,  7,  4,  5,  4,  6,  4, 19   // Fx
-};
-
-// When there is an indirect indexed access, an additional memory access
-// is required to determine the effictive address. For each indexed
-// addressing mode, it helps to know where how many cycles to skip
-// before type access occurs.
-//
-// Cycle numbers from http://atjs.mbnet.fi/mc6809/Information/6809cyc.txt
-// and cross-checked with Figure 17 in the 6809E datasheet.
-//
-// TODO
-//
-// - A seperate version of this is needed for 6309 in native mode, as
-//   there are fewer dead cycles.
-//
-// - It needs to account for tht asymmetry caused by the 8 W based
-//   indirect modes (postbytes 0x90, 0xb0, 0xd0, 0xf0)
-//
-// - It may be possible to eliminate this table entirely, as the data in
-//   looks identical to the above tables, e.g.
-//   XX,  6, XX,  6,  3,  4,  4, XX,  4,  7, XX,  8,  4,  8, XX,  5,  // 9x
-
-static const int indirect_offset[] = {
-   0, //  0 : [,R+]       illegal
-   6, //  1 : [,R++]
-   0, //  2 : [,-R]       illegal
-   6, //  3 : [,--R]
-   3, //  4 : [,R]
-   4, //  5 : [B,R]
-   4, //  6 : [A,R]
-   0, //  7 :             undefined
-   4, //  8 : [n7,R]
-   7, //  9 : [n15,R]
-   0, // 10 :             undefined
-   7, // 11 : [D,R]
-   4, // 12 : [n7,PCR]
-   8, // 13 : [n15,PCR]
-   0, // 14 :             undefined
-   5  // 15 : [n]
 };
 
 // In PSHS/PSHU/PULS/PULU, the postbyte controls which registers are pulled
@@ -795,15 +757,21 @@ static int get_num_cycles(sample_t *sample_q) {
       // are the minimum the instruction will execute in
       int postindex = (b0 == 0x10 || b0 == 0x11) ? 2 : 1;
       int postbyte = sample_q[postindex].data;
+      int postbyte_cycles;
       if (cpu6309) {
          if (NM == 1) {
-            cycle_count += postbyte_cycles_6309_nat[postbyte];
+            postbyte_cycles = postbyte_cycles_6309_nat[postbyte];
          } else {
-            cycle_count += postbyte_cycles_6309_emu[postbyte];
+            postbyte_cycles = postbyte_cycles_6309_emu[postbyte];
          }
       } else {
-         cycle_count += postbyte_cycles_6809[postbyte];
+         postbyte_cycles = postbyte_cycles_6809[postbyte];
       }
+      // Negative indicates an illegal index mode
+      if (postbyte_cycles < 0) {
+         postbyte_cycles = 0;
+      }
+      cycle_count += postbyte_cycles;
    }
    return cycle_count;
 }
@@ -1356,9 +1324,25 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                break;
             }
             if (pb & 0x10) {
+               // TODO: This isn't right yet for the 6309 W modes
                // In this mode there is a further level of indirection to find the ea
-               int offset = oi + indirect_offset[pb & 0x0F];
-               if (offset) {
+               // The postbyte_cycles tables contain the number of extra cycles for this indexed mode
+               int offset = 0;
+               if (cpu6309) {
+                  if (NM == 1) {
+                     offset += postbyte_cycles_6309_nat[pb];
+                  } else {
+                     offset += postbyte_cycles_6309_emu[pb];
+                  }
+               } else {
+                  offset += postbyte_cycles_6809[pb];
+               }
+               if (offset >= 0 && offset <= MAX_VALID_POSTBYTE_CYCLES) {
+                  // In long form: offset = oi + 2 + postbyte_cycles - 2;
+                  // - the oi skips the prefix
+                  // - the first 2 skips the opcode and postbyte
+                  // - the final 2 steps back to the effective address read
+                  offset += oi;
                   if (ea >= 0) {
                      memory_read(sample_q[offset    ].data, ea,     MEM_POINTER);
                      memory_read(sample_q[offset + 1].data, ea + 1, MEM_POINTER);
