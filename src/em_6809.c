@@ -809,12 +809,13 @@ static int get_num_cycles(sample_t *sample_q) {
 }
 
 static int count_cycles_with_lic(sample_t *sample_q) {
-   for (int i = 0; i < LONGEST_INSTRUCTION; i++) {
+   int offset = (NM == 1) ? 1 : 0;
+   for (int i = offset; i < LONGEST_INSTRUCTION; i++) {
       if (sample_q[i].type == LAST) {
          return 0;
       }
       if (sample_q[i].lic == 1) {
-         i++;
+         i += (1 - offset);
          // Validate the num_cycles passed in
          if (show_cycle_errors) {
             int expected = get_num_cycles(sample_q);
