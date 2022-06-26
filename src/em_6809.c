@@ -631,7 +631,7 @@ static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
    //    m +  9   addr=X ba=0 bs=0
    //    m + 10   <Start of first instruction>
    //
-   if (sample_q[fast_o].ba == 0 && sample_q[fast_o].bs == 1 && sample_q[fast_o].addr == 0x6) {
+   if (sample_q[fast_o].ba < 1 && sample_q[fast_o].bs == 1 && sample_q[fast_o].addr == 0x6) {
       return fast_o + 3;
    }
    // IRQ:
@@ -640,7 +640,7 @@ static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
    //    m + 18    addr=X ba=0 bs=0
    //    m + 19    <Start of first instruction>
    //
-   if (sample_q[full_o].ba == 0 && sample_q[full_o].bs == 1 && sample_q[full_o].addr == 0x8) {
+   if (sample_q[full_o].ba < 1 && sample_q[full_o].bs == 1 && sample_q[full_o].addr == 0x8) {
       return full_o + 3;;
    }
    // NMI:
@@ -649,7 +649,7 @@ static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
    //    m + 18    addr=X ba=0 bs=0
    //    m + 19    <Start of first instruction>
    //
-   if (sample_q[full_o].ba == 0 && sample_q[full_o].bs == 1 && sample_q[full_o].addr == 0xC) {
+   if (sample_q[full_o].ba < 1 && sample_q[full_o].bs == 1 && sample_q[full_o].addr == 0xC) {
       return full_o + 3;
    }
    return 0;
@@ -661,7 +661,7 @@ static int em_6809_match_reset(sample_t *sample_q, int num_samples) {
    // i + 2    addr=X ba=0 bs=0
    // <Start of first instruction>
    for (int i = 0; i < num_samples - 3; i++) {
-      if (sample_q[i].ba == 0 && sample_q[i].bs == 1 && sample_q[i].addr == 0x0E) {
+      if (sample_q[i].ba < 1 && sample_q[i].bs == 1 && sample_q[i].addr == 0x0E) {
          return i + 3;
       }
    }

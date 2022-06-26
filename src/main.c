@@ -425,8 +425,8 @@ static void dump_samples(sample_t *sample_q, int n) {
          putchar(' ');
          putchar(sample->lic >= 0 ? '0' + sample->lic : '?');
          putchar(' ');
-         putchar(sample->ba >= 0 ? '0' + sample->ba : '?');
          putchar(sample->bs >= 0 ? '0' + sample->bs : '?');
+         putchar(sample->ba >= 0 ? '0' + sample->ba : '?');
          putchar(' ');
          putchar(sample->addr >= 0 ? sample->addr + (sample->addr < 10 ? '0' : 'A' - 10) : '?');
          putchar('\n');
