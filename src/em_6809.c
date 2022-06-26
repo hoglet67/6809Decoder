@@ -703,7 +703,7 @@ static int get_num_cycles(sample_t *sample_q) {
    uint8_t b0 = sample_q[0].data;
    uint8_t b1 = sample_q[1].data;
    opcode_t *instr = get_instruction(instr_table, b0, b1);
-   int cycle_count = instr->cycles;
+   int cycle_count = (NM == 1) ? instr->cycles_native : instr->cycles;
    // Long Branch, one additional cycle if branch taken
    if (b0 == 0x10) {
       switch (b1) {
