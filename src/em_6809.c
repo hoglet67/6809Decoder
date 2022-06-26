@@ -620,14 +620,19 @@ static void em_6809_init(arguments_t *args) {
 }
 
 static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
+   // Calculate expected offset to vector fetch taking account of
+   // native mode on the 6309 pushing two extra bytes (ACCE/ACCF)
+   // (and one pipeline stall cycle ??)
+   int fast_o = (NM == 1) ? 10 :  7;
+   int full_o = (NM == 1) ? 19 : 16;
    // FIQ:
    //    m +  7   addr=6 ba=0 bs=1
    //    m +  8   addr=7 ba=0 bs=1
    //    m +  9   addr=X ba=0 bs=0
    //    m + 10   <Start of first instruction>
    //
-   if (sample_q[7].ba == 0 && sample_q[7].bs == 1 && sample_q[7].addr == 0x6) {
-      return 10;
+   if (sample_q[fast_o].ba == 0 && sample_q[fast_o].bs == 1 && sample_q[fast_o].addr == 0x6) {
+      return fast_o + 3;
    }
    // IRQ:
    //    m + 16    addr=8 ba=0 bs=1
@@ -635,17 +640,17 @@ static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
    //    m + 18    addr=X ba=0 bs=0
    //    m + 19    <Start of first instruction>
    //
-   if (sample_q[16].ba == 0 && sample_q[16].bs == 1 && sample_q[16].addr == 0x8) {
-      return 19;
+   if (sample_q[full_o].ba == 0 && sample_q[full_o].bs == 1 && sample_q[full_o].addr == 0x8) {
+      return full_o + 3;;
    }
    // NMI:
-   //    m + 16    addr=C ba=0 bs=1
+   //    m + full_o    addr=C ba=0 bs=1
    //    m + 17    addr=D ba=0 bs=1
    //    m + 18    addr=X ba=0 bs=0
    //    m + 19    <Start of first instruction>
    //
-   if (sample_q[16].ba == 0 && sample_q[16].bs == 1 && sample_q[16].addr == 0xC) {
-      return 19;
+   if (sample_q[full_o].ba == 0 && sample_q[full_o].bs == 1 && sample_q[full_o].addr == 0xC) {
+      return full_o + 3;
    }
    return 0;
 }
@@ -1018,16 +1023,22 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
    return pc;
 }
 
-// TODO: Update for 6309
 static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
-   if (num_cycles == 10) {
-      instruction->pc = interrupt_helper(sample_q, 3, 0, 0xfff6);
-   } else if (num_cycles == 19 && sample_q[16].addr == 0x8) {
+   // Calculate expected number of cycles in the interrupt dispatch,
+   // taking account native mode on the 6309 pushing two extra bytes
+   // (ACCE/ACCF)
+   // (and one pipeline stall cycle ??)
+   int fast_c = (NM == 1) ? 13 : 10;
+   int full_c = (NM == 1) ? 22 : 19;
+   int offset = (NM == 1) ?  4 :  3;
+   if (num_cycles == fast_c) {
+      instruction->pc = interrupt_helper(sample_q, offset, 0, 0xfff6);
+   } else if (num_cycles == full_c && sample_q[full_c - 3].addr == 0x8) {
       // IRQ
-      instruction->pc = interrupt_helper(sample_q, 3, 1, 0xfff8);
-   } else if (num_cycles == 19 && sample_q[16].addr == 0xC) {
+      instruction->pc = interrupt_helper(sample_q, offset, 1, 0xfff8);
+   } else if (num_cycles == full_c && sample_q[full_c - 3].addr == 0xC) {
       // NMI
-      instruction->pc = interrupt_helper(sample_q, 3, 1, 0xfffC);
+      instruction->pc = interrupt_helper(sample_q, offset, 1, 0xfffC);
    } else {
       printf("*** could not determine interrupt type ***\n");
    }
