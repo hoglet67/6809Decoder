@@ -3220,7 +3220,7 @@ static int get_r0(int pb) {
       // dst is 16 bits
       switch(src) {
          // src is 16 bits
-      case  0: ret = pack(ACCB, ACCB);            break;
+      case  0: ret = pack(ACCA, ACCB);            break;
       case  1: ret = X;                           break;
       case  2: ret = Y;                           break;
       case  3: ret = U;                           break;
@@ -3229,8 +3229,8 @@ static int get_r0(int pb) {
       case  6: ret = pack(ACCE, ACCF);            break;
       case  7: ret = TV;                          break;
          // src is 8 bits, promote to 16 bits
-      case  8: ret = pack(ACCB, ACCB);            break;
-      case  9: ret = pack(ACCB, ACCB);            break;
+      case  8: ret = pack(ACCA, ACCB);            break;
+      case  9: ret = pack(ACCA, ACCB);            break;
       case 10: ret = get_FLAGS();                 break;
       case 11: ret = (DP < 0) ? -1 : (DP << 8);   break;
       case 14: ret = pack(ACCE, ACCF);            break;
@@ -3247,7 +3247,7 @@ static int get_r1(int pb) {
    int ret;
    int dst = pb & 0xf;
    switch(dst) {
-   case  0: ret = pack(ACCB, ACCB);            break;
+   case  0: ret = pack(ACCA, ACCB);            break;
    case  1: ret = X;                           break;
    case  2: ret = Y;                           break;
    case  3: ret = U;                           break;
