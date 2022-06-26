@@ -126,6 +126,8 @@ enum {
    KEY_REG_S,
    KEY_REG_U,
    KEY_REG_PC,
+   KEY_REG_NM,
+   KEY_REG_FM,
    KEY_SKIP,
    KEY_DATA,
    KEY_RNW,
@@ -176,6 +178,8 @@ static struct argp_option options[] = {
    { "reg_s",        KEY_REG_S,     "HEX", OPTION_ARG_OPTIONAL, "Initial value of the S register",                   GROUP_REGISTER},
    { "reg_u",        KEY_REG_U,     "HEX", OPTION_ARG_OPTIONAL, "Initial value of the U register",                   GROUP_REGISTER},
    { "reg_pc",      KEY_REG_PC,     "HEX", OPTION_ARG_OPTIONAL, "Initial value of the PC register",                  GROUP_REGISTER},
+   { "reg_nm",      KEY_REG_NM,     "HEX", OPTION_ARG_OPTIONAL, "Initial value of the NM flag (6309)",               GROUP_REGISTER},
+   { "reg_fm",      KEY_REG_FM,     "HEX", OPTION_ARG_OPTIONAL, "Initial value of the FM flag (6309)",               GROUP_REGISTER},
 
    { 0, 0, 0, 0, "Output options:", GROUP_OUTPUT},
 
@@ -282,6 +286,20 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
          arguments->reg_pc = strtol(arg, (char **)NULL, 16);
       } else {
          arguments->reg_pc = UNDEFINED;
+      }
+      break;
+   case KEY_REG_NM:
+      if (arg && strlen(arg) > 0) {
+         arguments->reg_nm = strtol(arg, (char **)NULL, 16);
+      } else {
+         arguments->reg_nm = UNDEFINED;
+      }
+      break;
+   case KEY_REG_FM:
+      if (arg && strlen(arg) > 0) {
+         arguments->reg_fm = strtol(arg, (char **)NULL, 16);
+      } else {
+         arguments->reg_fm = UNDEFINED;
       }
       break;
    case KEY_CPU:
@@ -837,6 +855,8 @@ int main(int argc, char *argv[]) {
    arguments.reg_s            = UNSPECIFIED;
    arguments.reg_u            = UNSPECIFIED;
    arguments.reg_pc           = UNSPECIFIED;
+   arguments.reg_nm           = UNSPECIFIED;
+   arguments.reg_fm           = UNSPECIFIED;
 
    // Output options
    arguments.show_address     = 1;
@@ -921,6 +941,18 @@ int main(int argc, char *argv[]) {
          return 1;
       }
    }
+
+   if (arguments.cpu_type != CPU_6309 && arguments.cpu_type != CPU_6309E) {
+      if (arguments.reg_nm != UNSPECIFIED) {
+         fprintf(stderr, "--reg_nm= can only be used when the CPU is a 6309/6309E\n");
+         return 1;
+      }
+      if (arguments.reg_fm != UNSPECIFIED) {
+         fprintf(stderr, "--reg_fm= can only be used when the CPU is a 6309/6309E\n");
+         return 1;
+      }
+   }
+
 
    // Initialize memory modelling
    // (em->init actually mallocs the memory)
