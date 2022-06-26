@@ -1473,12 +1473,12 @@ static char *em_6809_get_state(char *buffer) {
       write_hex4(bp, Y);
    }
    bp += 7;
-   if (S >= 0) {
-      write_hex4(bp, S);
-   }
-   bp += 7;
    if (U >= 0) {
       write_hex4(bp, U);
+   }
+   bp += 7;
+   if (S >= 0) {
+      write_hex4(bp, S);
    }
    bp += 8; // One extra as DP is a two-character name
    if (DP >= 0) {
