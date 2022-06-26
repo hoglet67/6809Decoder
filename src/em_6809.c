@@ -3376,11 +3376,10 @@ static void set_q_nz_unknown() {
 
 static void pushw_helper(sample_t *sample_q, int system) {
    void (*push8)(int) = system ? push8s : push8u;
-   // TODO: Confirm cycles
    int e = sample_q[5].data;
-   int f = sample_q[3].data;
+   int f = sample_q[4].data;
    push8(f);
-   if (ACCF >= 0 && ACCE != f) {
+   if (ACCF >= 0 && ACCF != f) {
       failflag |= FAIL_ACCF;
    }
    ACCF = f;
@@ -3393,8 +3392,7 @@ static void pushw_helper(sample_t *sample_q, int system) {
 
 static void pullw_helper(sample_t *sample_q, int system) {
    void (*pop8)(int) = system ? pop8s : pop8u;
-   // TODO: Confirm cycles
-   int e = sample_q[3].data;
+   int e = sample_q[4].data;
    int f = sample_q[5].data;
    pop8(e);
    ACCE = e;
