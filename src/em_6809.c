@@ -674,8 +674,8 @@ static int get_num_cycles(sample_t *sample_q) {
    uint8_t b1 = sample_q[1].data;
    opcode_t *instr = get_instruction(instr_table, b0, b1);
    int cycle_count = (NM == 1) ? instr->cycles_native : instr->cycles;
-   // Long Branch, one additional cycle if branch taken
-   if (b0 == 0x10) {
+   // Long Branch, one additional cycle if branch taken (unless in native mode)
+   if (NM !=1 && b0 == 0x10) {
       switch (b1) {
       case 0x21: /* LBRN */
          cycle_count++;
@@ -754,8 +754,8 @@ static int get_num_cycles(sample_t *sample_q) {
    }
 
    if (b0 == 0x3B && E == 1) {
-      // RTI takes 9 addition cycles if E = 1
-      cycle_count += 9;
+      // RTI takes 9 addition cycles if E = 1 (and two more if in native mode)
+      cycle_count += (NM == 1) ? 11 : 9;
    } else if (b0 >= 0x34 && b0 <= 0x37) {
       // PSHS/PULS/PSHU/PULU
       cycle_count += count_ones_in_nibble[b1 & 0x0f];            // bits 0..3 are 8 bit registers
