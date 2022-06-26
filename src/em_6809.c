@@ -1058,8 +1058,16 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       failflag |= FAIL_UNDOC;
    }
 
+   // Sanity check the LS 4 bits of the PC Address
+   // (not reliable for reasons I don't understand)
+   //if (PC >= 0 && sample_q[0].addr >= 0) {
+   //   if ((PC & 0x000F) != sample_q[0].addr) {
+   //      failflag |= FAIL_PC;
+   //   }
+   //}
+
    // Memory modelling of the opcode and the prefic
-   if (PC > 0) {
+   if (PC >= 0) {
       memory_read(b0, PC + index, MEM_INSTR);
    }
    index++;
@@ -5265,7 +5273,7 @@ static opcode_t instr_table_6309[] = {
    /* 17 */    { &op_LBSR, RELATIVE_16  , 0, 9, 7 },
    /* 18 */    { &op_TRAP, ILLEGAL      , 1,19,21 },
    /* 19 */    { &op_DAA , INHERENT     , 0, 2, 1 },
-   /* 1A */    { &op_ORCC, REGISTER     , 0, 3, 2 },
+   /* 1A */    { &op_ORCC, REGISTER     , 0, 3, 3 },
    /* 1B */    { &op_TRAP, ILLEGAL      , 1,19,21 },
    /* 1C */    { &op_ANDC, REGISTER     , 0, 3, 3 },
    /* 1D */    { &op_SEX , INHERENT     , 0, 2, 1 },
