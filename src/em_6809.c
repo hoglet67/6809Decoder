@@ -579,6 +579,9 @@ static void em_6809_init(arguments_t *args) {
    if (args->reg_pc >= 0) {
       PC = args->reg_pc;
    }
+   if (args->reg_dp >= 0) {
+      DP = args->reg_dp;
+   }
    if (args->reg_nm >= 0) {
       NM = (args->reg_nm > 0);
    }

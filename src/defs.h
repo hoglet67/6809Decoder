@@ -81,6 +81,7 @@ typedef struct {
    int reg_s;
    int reg_u;
    int reg_pc;
+   int reg_dp;
    int reg_nm;
    int reg_fm;
    int byte;
