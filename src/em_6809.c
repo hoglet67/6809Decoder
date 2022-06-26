@@ -1934,7 +1934,7 @@ static void push_helper(sample_t *sample_q, int system) {
    //  1 postbyte
    //  2 ---
    //  3 ---
-   //  4 ---
+   //  4 ---    skipped in 6309 native mode
    //  5 PCL    skipped if bit 7=0
    //  6 PCH    skipped if bit 7=0
    //  7 UL/SL  skipped if bit 6=0
@@ -1965,7 +1965,7 @@ static void push_helper(sample_t *sample_q, int system) {
 
    int pb = sample_q[1].data;
    int tmp;
-   int i = 5;
+   int i = (NM == 1) ? 4 : 5;
    if (pb & 0x80) {
       tmp = (sample_q[i + 1].data << 8) + sample_q[i].data;
       i += 2;
@@ -2038,7 +2038,7 @@ static void pull_helper(sample_t *sample_q, int system) {
    //  0 opcode
    //  1 postbyte
    //  2 ---
-   //  3 ---
+   //  3 ---    skipped in 6309 native mode
    //  4 Flags  skipped if bit 0=0
    //  5 A      skipped if bit 1=0
    //  6 B      skipped if bit 2=0
@@ -2068,7 +2068,7 @@ static void pull_helper(sample_t *sample_q, int system) {
 
    int pb = sample_q[1].data;
    int tmp;
-   int i = 4;
+   int i = (NM == 1) ? 3 : 4;
    if (pb & 0x01) {
       tmp = sample_q[i++].data;
       pop8(tmp);
