@@ -617,7 +617,7 @@ static void em_6809_init(arguments_t *args) {
    if (args->reg_pc >= 0) {
       PC = args->reg_pc;
    }
-   cpu6309 = args->cpu_type == CPU_6309 || args->cpu_type == CPU_6309;
+   cpu6309 = args->cpu_type == CPU_6309 || args->cpu_type == CPU_6309E;
 
    if (cpu6309) {
       cpu_state = cpu_6309_state;
