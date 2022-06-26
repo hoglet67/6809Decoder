@@ -1664,8 +1664,9 @@ static int and16_helper(int val, operand_t operand) {
 static int asl_helper(int val) {
    if (val >= 0) {
       C = (val >> 7) & 1;
+      // V is the xor of bits 7,6 of val
+      V = ((val >> 6) & 1) ^ C;
       val = (val << 1) & 0xff;
-      V = (val >> 7) & C & 1;
       set_NZ(val);
    } else {
       set_NZVC_unknown();
@@ -1679,8 +1680,9 @@ static int asl_helper(int val) {
 static int asl16_helper(int val) {
    if (val >= 0) {
       C = (val >> 15) & 1;
+      // V is the xor of bits 15,14 of val
+      V = ((val >> 14) & 1) ^ C;
       val = (val << 1) & 0xffff;
-      V = (val >> 15) & C & 1;
       set_NZ(val);
    } else {
       set_NZVC_unknown();
@@ -2128,7 +2130,7 @@ static int rol_helper(int val) {
       // C is bit 7 of val
       C = (val >> 7) & 1;
       // V is the xor of bits 7,6 of val
-      V = ((tmp ^ val) >> 7) & 1;
+      V = ((val >> 6) & 1) ^ C;
       // truncate to 8 bits
       val = tmp & 0xff;
       set_NZ(val);
@@ -2145,7 +2147,7 @@ static int rol16_helper(int val) {
       // C is bit 15 of val
       C = (val >> 15) & 1;
       // V is the xor of bits 15,14 of val
-      V = ((tmp ^ val) >> 16) & 1;
+      V = ((val >> 14) & 1) ^ C;
       // truncate to 8 bits
       val = tmp & 0xffff;
       set_NZ(val);
