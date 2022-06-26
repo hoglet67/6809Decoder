@@ -135,7 +135,8 @@ enum {
    KEY_LIC,
    KEY_BS,
    KEY_BA,
-   KEY_ADDR
+   KEY_ADDR,
+   KEY_CLKE
 };
 
 
@@ -201,6 +202,7 @@ static struct argp_option options[] = {
    { "bs",              KEY_BS, "BITNUM", OPTION_ARG_OPTIONAL, "Bit number for bs   (default 10)",                   GROUP_SIGDEFS},
    { "ba",              KEY_BA, "BITNUM", OPTION_ARG_OPTIONAL, "Bit number for ba   (default 11)",                   GROUP_SIGDEFS},
    { "addr",          KEY_ADDR, "BITNUM", OPTION_ARG_OPTIONAL, "Bit number for addr (default 12)",                   GROUP_SIGDEFS},
+   { "clke",          KEY_CLKE, "BITNUM", OPTION_ARG_OPTIONAL, "Bit number for clke (no default)",                   GROUP_SIGDEFS},
 
    { 0 }
 };
@@ -246,6 +248,13 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
          arguments->idx_addr = atoi(arg);
       } else {
          arguments->idx_addr = UNDEFINED;
+      }
+      break;
+   case KEY_CLKE:
+      if (arg && strlen(arg) > 0) {
+         arguments->idx_clke = atoi(arg);
+      } else {
+         arguments->idx_clke = UNDEFINED;
       }
       break;
    case KEY_VECRST:
@@ -720,6 +729,7 @@ void decode(FILE *stream) {
    int idx_bs    = arguments.idx_bs;
    int idx_ba    = arguments.idx_ba;
    int idx_addr  = arguments.idx_addr;
+   int idx_clke  = arguments.idx_clke;
 
    // Default Pin values
    int bus_data  =  0;
@@ -728,11 +738,16 @@ void decode(FILE *stream) {
    int pin_bs    =  0;
    int pin_ba    =  0;
    int pin_addr  =  0;
+   int pin_clke  =  0;
 
    int num;
 
    // The previous sample of the 16-bit capture (async sampling only)
    uint16_t sample       = -1;
+   uint16_t last_sample  = -1;
+
+   // The previous sample of clke (async sampling only)
+   int last_clke = -1;
 
    sample_t s;
 
@@ -771,7 +786,8 @@ void decode(FILE *stream) {
 
          while (num-- > 0) {
 
-            // The current 16-bit capture sample, and the previous two
+            // The current 16-bit capture sample, and the previous one
+            last_sample  = sample;
             sample       = *sampleptr++;
 
             // TODO: fix the hard coded values!!!
@@ -780,26 +796,63 @@ void decode(FILE *stream) {
             //}
             sample_count++;
 
-            // Phi2 is optional
+            // CLKE is optional
             // - if asynchronous capture is used, it must be connected
             // - if synchronous capture is used, it must not connected
 
-            // If Phi2 is not present, use the pins directly
-            bus_data = (sample >> idx_data) & 255;
-            if (idx_rnw >= 0) {
-               pin_rnw = (sample >> idx_rnw ) & 1;
-            }
-            if (idx_lic >= 0) {
-               pin_lic = (sample >> idx_lic) & 1;
-            }
-            if (idx_bs >= 0) {
-               pin_bs = (sample >> idx_bs) & 1;
-            }
-            if (idx_ba >= 0) {
-               pin_ba = (sample >> idx_ba) & 1;
-            }
-            if (idx_addr >= 0) {
-               pin_addr = (sample >> idx_addr) & 15;
+            if (idx_clke < 0) {
+
+               // If CLK_E is not present, use the pins directly
+               bus_data = (sample >> idx_data) & 255;
+               if (idx_rnw >= 0) {
+                  pin_rnw = (sample >> idx_rnw ) & 1;
+               }
+               if (idx_lic >= 0) {
+                  pin_lic = (sample >> idx_lic) & 1;
+               }
+               if (idx_bs >= 0) {
+                  pin_bs = (sample >> idx_bs) & 1;
+               }
+               if (idx_ba >= 0) {
+                  pin_ba = (sample >> idx_ba) & 1;
+               }
+               if (idx_addr >= 0) {
+                  pin_addr = (sample >> idx_addr) & 15;
+               }
+
+            } else {
+
+               // If CLKE is present, look for an edge
+               pin_clke = (sample >> idx_clke) & 1;
+               if (pin_clke == last_clke) {
+                  // continue for more samples
+                  continue;
+               }
+               last_clke = pin_clke;
+
+               if (pin_clke) {
+                  // sample control signals just after rising edge of CLKE
+                  if (idx_rnw >= 0) {
+                     pin_rnw = (sample >> idx_rnw ) & 1;
+                  }
+                  if (idx_lic >= 0) {
+                     pin_lic = (sample >> idx_lic) & 1;
+                  }
+                  if (idx_bs >= 0) {
+                     pin_bs = (sample >> idx_bs) & 1;
+                  }
+                  if (idx_ba >= 0) {
+                     pin_ba = (sample >> idx_ba) & 1;
+                  }
+                  if (idx_addr >= 0) {
+                     pin_addr = (sample >> idx_addr) & 15;
+                  }
+                  // continue for the falling edge
+                  continue;
+               } else {
+                  // sample data just before falling edge of CLKE
+                  bus_data = (last_sample >> idx_data) & 255;
+               }
             }
 
             // Build the sample

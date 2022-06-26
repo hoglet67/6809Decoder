@@ -70,6 +70,7 @@ typedef struct {
    int idx_ba;
    int idx_bs;
    int idx_addr;
+   int idx_clke;
    int vec_rst;
    int show_address;
    int show_hex;
