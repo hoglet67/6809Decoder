@@ -866,12 +866,12 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
    //  2
    //  3 PCL
    //  4 PCH
-   //  5 USL
-   //  6 USH
-   //  7 IYL
-   //  8 IYH
-   //  9 IXL
-   // 10 IXH
+   //  5 UL
+   //  6 UH
+   //  7 YL
+   //  8 YH
+   //  9 XL
+   // 10 XH
    // 11 DP
    //           <<< ACCF then ACCE in native mode
    // 12 ACCB
@@ -2864,37 +2864,45 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_t *sample_q) {
    //   2 flags
    //   3 A
    //   4 B
+   //           <<< ACCE then ACCF in native mode
    //   5 DP
-   //   6 XHI
-   //   7 XLO
-   //   8 YHI
-   //   9 YLO
-   //  10 UHI
-   //  11 HLO
+   //   6 XH
+   //   7 XL
+   //   8 YH
+   //   9 YL
+   //  10 UH
+   //  11 UL
    //  12 PCH
    //  13 PCL
    //  14 ---
 
+   int i = 2;
+
    // Do the flags first, as the stacked E indicates how much to restore
-   set_FLAGS(sample_q[2].data);
+   set_FLAGS(sample_q[i++].data);
 
    // Update the register state
    if (E == 1) {
-      ACCA  = sample_q[3].data;
-      ACCB  = sample_q[4].data;
-      DP = sample_q[5].data;
-      X  = (sample_q[6].data << 8) + sample_q[7].data;
-      Y  = (sample_q[8].data << 8) + sample_q[9].data;
-      U  = (sample_q[10].data << 8) + sample_q[11].data;
-      PC = (sample_q[12].data << 8) + sample_q[13].data;
-   } else {
-      PC = (sample_q[3].data << 8) + sample_q[4].data;
+      ACCA = sample_q[i++].data;
+      ACCB = sample_q[i++].data;
+      if (NM == 1) {
+         ACCE = sample_q[i++].data;
+         ACCF = sample_q[i++].data;
+      }
+      DP = sample_q[i++].data;
+      X  = sample_q[i++].data << 8;
+      X |= sample_q[i++].data;
+      Y  = sample_q[i++].data << 8;
+      Y |= sample_q[i++].data;
+      U  = sample_q[i++].data << 8;
+      U |= sample_q[i++].data;
    }
+   PC  = sample_q[i++].data << 8;
+   PC |= sample_q[i++].data;
 
    // Memory modelling
-   int n = (E == 1) ? 12 : 3;
-   for (int i = 2; i < 2 + n; i++) {
-      pop8s(sample_q[i].data);
+   for (int j = 2; j < i; j++) {
+      pop8s(sample_q[j].data);
    }
 
    return -1;
