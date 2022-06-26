@@ -905,6 +905,7 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
    //  9 IXL
    // 10 IXH
    // 11 DP
+   //           <<< ACCF then ACCE in native mode
    // 12 ACCB
    // 13 ACCA
    // 14 Flags
@@ -958,15 +959,15 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
       }
       DP = dp;
 
-      if (cpu6309 && (NM == 1)) {
+      if (NM == 1) {
 
          int f  = sample_q[i++].data;
          push8s(f);
          if (ACCF >= 0 && f != ACCF) {
             failflag |= FAIL_ACCF;
          }
-
          ACCF = f;
+
          int e  = sample_q[i++].data;
          push8s(e);
          if (ACCE >= 0 && e != ACCE) {
@@ -1176,7 +1177,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       // There are two dead cycles at the end of TST
       operand = sample_q[num_cycles - 3].data;
    } else if (instr->mode == REGISTER) {
-      operand = sample_q[1].data; // This is the postbyte
+      operand = sample_q[oi + 1].data; // This is the postbyte
    } else if (instr->op->type == RMWOP) {
       // Read-modify-write instruction (always 8-bit)
       operand = sample_q[num_cycles - 3].data;
