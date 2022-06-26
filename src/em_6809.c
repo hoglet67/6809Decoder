@@ -3439,9 +3439,9 @@ static int op_fn_ADCR(operand_t operand, ea_t ea, sample_t *sample_q) {
    int r1 = get_r1(operand);
    int result;
    if ((operand & 0x0f) < 8) {
-      result = add16_helper(r0, C, r1);
+      result = add16_helper(r1, C, r0);
    } else {
-      result = add_helper(r0, C, r1);
+      result = add_helper(r1, C, r0);
    }
    set_r1(operand, result);
    return -1;
@@ -3463,9 +3463,9 @@ static int op_fn_ADDR(operand_t operand, ea_t ea, sample_t *sample_q) {
    int r1 = get_r1(operand);
    int result;
    if ((operand & 0x0f) < 8) {
-      result = add16_helper(r0, 0, r1);
+      result = add16_helper(r1, 0, r0);
    } else {
-      result = add_helper(r0, 0, r1);
+      result = add_helper(r1, 0, r0);
    }
    set_r1(operand, result);
    return -1;
@@ -3495,9 +3495,9 @@ static int op_fn_ANDR(operand_t operand, ea_t ea, sample_t *sample_q) {
    int r1 = get_r1(operand);
    int result;
    if ((operand & 0x0f) < 8) {
-      result = and16_helper(r0, r1);
+      result = and16_helper(r1, r0);
    } else {
-      result = and_helper(r0, r1);
+      result = and_helper(r1, r0);
    }
    set_r1(operand, result);
    return -1;
@@ -3609,9 +3609,9 @@ static int op_fn_CMPR(operand_t operand, ea_t ea, sample_t *sample_q) {
    int r0 = get_r0(operand);
    int r1 = get_r1(operand);
    if ((operand & 0x0f) < 8) {
-      cmp16_helper(r0, r1);
+      cmp16_helper(r1, r0);
    } else {
-      cmp_helper(r0, r1);
+      cmp_helper(r1, r0);
    }
    return -1;
 }
@@ -3758,9 +3758,9 @@ static int op_fn_EORR(operand_t operand, ea_t ea, sample_t *sample_q) {
    int r1 = get_r1(operand);
    int result;
    if ((operand & 0x0f) < 8) {
-      result = eor16_helper(r0, r1);
+      result = eor16_helper(r1, r0);
    } else {
-      result = eor_helper(r0, r1);
+      result = eor_helper(r1, r0);
    }
    set_r1(operand, result);
    return -1;
@@ -3874,9 +3874,9 @@ static int op_fn_ORR(operand_t operand, ea_t ea, sample_t *sample_q) {
    int r1 = get_r1(operand);
    int result;
    if ((operand & 0x0f) < 8) {
-      result = or16_helper(r0, r1);
+      result = or16_helper(r1, r0);
    } else {
-      result = or_helper(r0, r1);
+      result = or_helper(r1, r0);
    }
    set_r1(operand, result);
    return -1;
@@ -3943,9 +3943,9 @@ static int op_fn_SBCR(operand_t operand, ea_t ea, sample_t *sample_q) {
    int r1 = get_r1(operand);
    int result;
    if ((operand & 0x0f) < 8) {
-      result = sub16_helper(r0, C, r1);
+      result = sub16_helper(r1, C, r0);
    } else {
-      result = sub_helper(r0, C, r1);
+      result = sub_helper(r1, C, r0);
    }
    set_r1(operand, result);
    return -1;
@@ -4067,9 +4067,9 @@ static int op_fn_SUBR(operand_t operand, ea_t ea, sample_t *sample_q) {
    int r1 = get_r1(operand);
    int result;
    if ((operand & 0x0f) < 8) {
-      result = sub16_helper(r0, 0, r1);
+      result = sub16_helper(r1, 0, r0);
    } else {
-      result = sub_helper(r0, 0, r1);
+      result = sub_helper(r1, 0, r0);
    }
    set_r1(operand, result);
    return -1;
