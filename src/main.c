@@ -936,6 +936,7 @@ int main(int argc, char *argv[]) {
    arguments.idx_bs           = UNSPECIFIED;
    arguments.idx_ba           = UNSPECIFIED;
    arguments.idx_addr         = UNSPECIFIED;
+   arguments.idx_clke         = UNSPECIFIED;
 
    argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
@@ -1052,6 +1053,75 @@ int main(int argc, char *argv[]) {
       arguments.idx_addr = 12;
    }
 
+   // Check for conflicting signal assignments
+   int conflicts = 0;
+   for (int i = 0; i < 16; i++) {
+      int count = 0;
+      for (int pass = 0; pass < 2; pass++) {
+         // Count the number of things assigned to this bit i
+         if (i >= arguments.idx_data && i <= arguments.idx_data + 7) {
+            if (pass == 0) {
+               count++;
+            } else if (count > 1) {
+               fprintf(stderr, " data%d", i - arguments.idx_data);
+            }
+         }
+         if (arguments.idx_rnw == i) {
+            if (pass == 0) {
+               count++;
+            } else if (count > 1) {
+               fprintf(stderr, " rnw");
+            }
+         }
+         if (arguments.idx_lic == i) {
+            if (pass == 0) {
+               count++;
+            } else if (count > 1) {
+               fprintf(stderr, " lic");
+            }
+         }
+         if (arguments.idx_bs == i) {
+            if (pass == 0) {
+               count++;
+            } else if (count > 1) {
+               fprintf(stderr, " bs");
+            }
+         }
+         if (arguments.idx_ba == i) {
+            if (pass == 0) {
+               count++;
+            } else if (count > 1) {
+               fprintf(stderr, " ba");
+            }
+         }
+         if (i >= arguments.idx_addr && i <= arguments.idx_addr + 3) {
+            if (pass == 0) {
+               count++;
+            } else if (count > 1) {
+               fprintf(stderr, " addr%d", i - arguments.idx_addr);
+            }
+         }
+         if (arguments.idx_clke == i) {
+            if (pass == 0) {
+               count++;
+            } else if (count > 1) {
+               fprintf(stderr, " clke");
+            }
+         }
+         if (count > 1) {
+            if (pass == 0) {
+               fprintf(stderr, "Conflicting assignments to bit %d:", i);
+            } else {
+               fprintf(stderr, "\n");
+            }
+            conflicts = 1;
+         }
+      }
+   }
+   if (conflicts) {
+      return 1;
+   }
+
    em = &em_6809;
 
    em->init(&arguments);
@@ -1066,8 +1136,6 @@ int main(int argc, char *argv[]) {
          return 2;
       }
    }
-
-
 
    decode(stream);
    fclose(stream);
