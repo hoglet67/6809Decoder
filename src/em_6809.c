@@ -662,6 +662,23 @@ static int em_6809_match_reset(sample_t *sample_q, int num_samples) {
    return 0;
 }
 
+// TODO: Cycle predition cases we don't yet handle correctly
+//
+// Instructions that OPTIONALLY trap
+//   Indexed addressing with an illegal postbyte (92 b2 bf d2 df f2 ff)
+//   EXN/TFR/xxxR writing back to the zero register (12/13) which may trap
+//   DIRECTBIT addressing with an illegal register (3)
+//   TFM with an illegal register (>4)
+//   DIVD division by zero
+//   DIVQ division by zero
+//
+// Long running instructions:
+//   TFM
+//
+// Indefinte running instructions:
+//   SYNC
+//   CWAIT
+
 static int get_num_cycles(sample_t *sample_q) {
    uint8_t b0 = sample_q[0].data;
    uint8_t b1 = sample_q[1].data;
@@ -960,6 +977,20 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
    // Skip a dead cycle becfore the vector
    i++;
 
+   // Is it the illegal instruction vector?
+   if ((vector & 0xfffe) == 0xfff0) {
+      if (vector & 1) {
+         // DZ Trap
+         DZ = 1;
+      } else {
+         // IL Trap
+         IL = 1;
+      }
+   }
+
+   // The vector must be even!
+   vector &= 0xfffe;
+
    // Read the vector and compare against what's expected
    int vechi = sample_q[i].data;
    memory_read(vechi, vector, MEM_POINTER);
@@ -1205,6 +1236,15 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    case INDEXED:
       {
          int *reg = get_regi((pb >> 5) & 0x03);
+
+         // In 6309 mode, the 7 illegal postbytes cause illegal instruction traps
+         // 92 b2 d2 f2   1xx10010
+         //    bf df ff   1xx11111
+         if (cpu6309 && (pb != 0x9f) && (((pb & 0x9f) == 0x92) || (pb & 0x9f) == 0x9f)) {
+            interrupt_helper(sample_q, oi + 2, 1, 0xfff0);
+            return;
+         }
+
          if (!(pb & 0x80)) {       /* n4,R */
             if (*reg >= 0) {
                if (pb & 0x10) {
@@ -3641,8 +3681,8 @@ static int op_fn_DECW(operand_t operand, ea_t ea, sample_t *sample_q) {
 
 static int op_fn_DIVD(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (operand == 0) {
-      // TODO: how to determine the length?
-      interrupt_helper(sample_q, 3, 1, 0xfff0);
+      // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
+      interrupt_helper(sample_q, 3, 1, 0xfff1);
    } else if (ACCA < 0 || ACCB < 0) {
       ACCA = -1;
       ACCB = -1;
@@ -3675,8 +3715,8 @@ static int op_fn_DIVD(operand_t operand, ea_t ea, sample_t *sample_q) {
 
 static int op_fn_DIVQ(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (operand == 0) {
-      // TODO: how to determine the length?
-      interrupt_helper(sample_q, 3, 1, 0xfff0);
+      // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
+      interrupt_helper(sample_q, 3, 1, 0xfff1);
    } else if (ACCA < 0 || ACCB < 0 || ACCE < 0 || ACCF < 0) {
       ACCA = -1;
       ACCB = -1;
