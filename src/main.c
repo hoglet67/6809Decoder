@@ -843,9 +843,21 @@ void decode(FILE *stream) {
 
       // A small circular buffer for skewing the sampling of the data bus
       uint16_t skew_buffer  [SKEW_BUFFER_SIZE];
-      int wr_index         = SKEW_BUFFER_SIZE / 2;
-      int rd_index         = 0;
-      int data_rd_index    = arguments.skew & (SKEW_BUFFER_SIZE - 1);
+      int wr_index;
+      int rd_index;
+      int data_rd_index;
+      // Minimize the amount of buffering to avoid unnecessary garbage
+      if (arguments.skew < 0) {
+         // Data sample taken before clock edge
+         wr_index = -arguments.skew;
+         rd_index = -arguments.skew;
+         data_rd_index = 0;
+      } else {
+         // Data sample taken after clock edge
+         wr_index = arguments.skew;
+         rd_index = 0;
+         data_rd_index = arguments.skew;
+      }
 
       // Clear the buffer, so the first few samples are ignored
       for (int i = 0; i < SKEW_BUFFER_SIZE; i++) {
