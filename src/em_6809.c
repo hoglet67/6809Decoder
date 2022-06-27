@@ -2658,6 +2658,14 @@ static int op_fn_EORB(operand_t operand, ea_t ea, sample_t *sample_q) {
 static int op_fn_EXG(operand_t operand, ea_t ea, sample_t *sample_q) {
    int reg1 = (operand >> 4) & 15;
    int reg2 = operand  & 15;
+   // According to Atkinson, page 66, there is a 6809 corner case where:
+   //   EXC A,D
+   // should behave as:
+   //   EXC A,B
+   // i.e. do A<==>B
+   if (!cpu6309 && reg1 == 8 && reg2 == 0) {
+      reg2 = 9;
+   }
    int tmp1 = get_regp(reg1);
    int tmp2 = get_regp(reg2);
    set_regp(reg1, tmp2);
