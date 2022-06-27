@@ -24,8 +24,6 @@
 // to a value of undefined (?).
 #define UNDEFINED -1
 
-int sample_count = 0;
-
 #define BUFSIZE 8192
 
 uint8_t buffer8[BUFSIZE];
@@ -434,10 +432,9 @@ static struct argp argp = { options, parse_opt, args_doc, doc, 0, 0, 0 };
 
 
 static void dump_samples(sample_t *sample_q, int n) {
-      static int ctr = 0;
       for (int i = 0; i < n; i++) {
          sample_t *sample = sample_q + i;
-         printf("%8d %2d %02x ", ctr, i, sample->data);
+         printf("%8x %2d %02x ", sample->sample_count, i, sample->data);
          putchar(' ');
          putchar(sample->rnw >= 0 ? '0' + sample->rnw : '?');
          putchar(' ');
@@ -448,9 +445,7 @@ static void dump_samples(sample_t *sample_q, int n) {
          putchar(' ');
          putchar(sample->addr >= 0 ? sample->addr + (sample->addr < 10 ? '0' : 'A' - 10) : '?');
          putchar('\n');
-         ctr++;
       }
-
 }
 
 void write_hex1(char *buffer, int value) {
@@ -699,14 +694,7 @@ void queue_sample(sample_t *sample) {
    static sample_t sample_q[DEPTH];
    static int index = 0;
 
-   // This helped when clock noise affected Arlet's core
-   // (a better fix was to add 100pF cap to the clock)
-   //
-   // if (index > 0 && sample_q[index - 1].type == OPCODE && sample->type == OPCODE) {
-   //    printf("Skipping duplicate SYNC\n");
-   //    return;
-   // }
-
+   // Make a copy of the sample structure
    sample_q[index++] = *sample;
 
    if (sample->type == LAST) {
