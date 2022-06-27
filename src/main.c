@@ -748,31 +748,6 @@ void decode(FILE *stream) {
    int idx_addr  = arguments.idx_addr;
    int idx_clke  = arguments.idx_clke;
 
-   // Default Pin values
-   int bus_data  =  0;
-   int pin_rnw   =  1;
-   int pin_lic   =  0;
-   int pin_bs    =  0;
-   int pin_ba    =  0;
-   int pin_addr  =  0;
-   int pin_clke  =  0;
-
-   int num;
-
-   // A small circular buffer for skewing the sampling of the data bus
-   uint16_t skew_buffer[SKEW_BUFFER_SIZE];
-   int wr_index         = SKEW_BUFFER_SIZE / 2;
-   int rd_index         = 0;
-   int data_rd_index    = arguments.skew & (SKEW_BUFFER_SIZE - 1);
-   uint16_t sample      = 0;
-   uint16_t data_sample = 0;
-   for (int i = 0; i < SKEW_BUFFER_SIZE; i++) {
-      skew_buffer[i] = 0;
-   }
-
-   // The previous sample of clke (async sampling only)
-   int last_clke = -1;
-
    // The structured bus sample we will pass on to the next level of processing
    sample_t s;
 
@@ -781,141 +756,144 @@ void decode(FILE *stream) {
       fseek(stream, arguments.skip * (arguments.byte ? 1 : 2), SEEK_SET);
    }
 
+   // Common to all sampling modes
+   s.type = NORMAL;
+   s.sample_count = 0;
+   s.rnw  = -1;
+   s.lic  = -1;
+   s.bs   = -1;
+   s.ba   = -1;
+   s.addr = -1;
+
    if (arguments.byte) {
-      s.rnw = -1;
-      s.lic = -1;
-      s.bs = -1;
-      s.ba = -1;
-      s.addr = -1;
+
+      // ------------------------------------------------------------
+      // Synchronous byte sampling mode
+      // ------------------------------------------------------------
 
       // In byte mode we have only data bus samples, nothing else so we must
-      // use the sync-less decoder. The values of pin_rnw and pin_rst are set
-      // to 1, but the decoder should never actually use them.
+      // use the lic-less decoder. All the control signals should be marked
+      // as disconnected, by being set to -1.
 
+      // Read the capture file, and queue structured sampled for the decoder
+      int num;
       while ((num = fread(buffer8, sizeof(uint8_t), BUFSIZE, stream)) > 0) {
          uint8_t *sampleptr = &buffer8[0];
          while (num-- > 0) {
             s.data = *sampleptr++;
             queue_sample(&s);
+            s.sample_count++;
+         }
+      }
+
+   } else if (idx_clke < 0 ) {
+
+      // ------------------------------------------------------------
+      // Synchronous word sampling mode
+      // ------------------------------------------------------------
+
+      // In word sampling mode we have data bus samples, plus
+      // optionally rnw, lic, bs, ba and addr.
+
+      // In synchronous word sampling mode clke is not connected, and
+      // it's assumed that each sample represents a seperate bus
+      // cycle.
+
+      // Read the capture file, and queue structured sampled for the decoder
+      int num;
+      while ((num = fread(buffer, sizeof(uint16_t), BUFSIZE, stream)) > 0) {
+         uint16_t *sampleptr = &buffer[0];
+         while (num-- > 0) {
+            uint16_t sample = *sampleptr++;
+            if (idx_rnw >= 0) {
+               s.rnw = (sample >> idx_rnw ) & 1;
+            }
+            if (idx_lic >= 0) {
+               s.lic = (sample >> idx_lic) & 1;
+            }
+            if (idx_bs >= 0) {
+               s.bs = (sample >> idx_bs) & 1;
+            }
+            if (idx_ba >= 0) {
+               s.ba = (sample >> idx_ba) & 1;
+            }
+            if (idx_addr >= 0) {
+               s.addr = (sample >> idx_addr) & 15;
+            }
+            s.data = (sample >> idx_data) & 255;
+            queue_sample(&s);
+            s.sample_count++;
          }
       }
 
    } else {
 
-      // In word mode (the default) we have data bus samples, plus optionally
-      // rnw, sync, rdy, phy2 and rst.
+      // ------------------------------------------------------------
+      // Asynchronous word sampling mode
+      // ------------------------------------------------------------
 
+      // In word sampling mode we have data bus samples, plus
+      // optionally rnw, lic, bs, ba and addr.
+
+      // In asynchronous word sampling mode clke is connected, and
+      // the capture file contans multple samples per bus cycle.
+
+      // The previous value of clke, to detect the rising/falling edge
+      int last_clke = -1;
+
+      // A small circular buffer for skewing the sampling of the data bus
+      uint16_t skew_buffer  [SKEW_BUFFER_SIZE];
+      int wr_index         = SKEW_BUFFER_SIZE / 2;
+      int rd_index         = 0;
+      int data_rd_index    = arguments.skew & (SKEW_BUFFER_SIZE - 1);
+
+      // Clear the buffer, so the first few samples are ignored
+      for (int i = 0; i < SKEW_BUFFER_SIZE; i++) {
+         skew_buffer[i] = 0;
+      }
+
+      // Read the capture file, and queue structured sampled for the decoder
+      int num;
       while ((num = fread(buffer, sizeof(uint16_t), BUFSIZE, stream)) > 0) {
-
          uint16_t *sampleptr = &buffer[0];
-
          while (num-- > 0) {
 
-            // The a small circular buffer for the samples
             skew_buffer[wr_index] = *sampleptr++;
-            sample                = skew_buffer[rd_index];
-            data_sample           = skew_buffer[data_rd_index];
+            uint16_t sample       = skew_buffer[rd_index];
+            uint16_t data_sample  = skew_buffer[data_rd_index];
 
-            // Increment the circular buffer pointers in lock-step
+            // Only act on edges of clke
+            int pin_clke = (sample >> idx_clke) & 1;
+            if (pin_clke != last_clke) {
+               last_clke = pin_clke;
+               if (pin_clke) {
+                  // Sample control signals after rising edge of CLKE
+                  if (idx_rnw >= 0) {
+                     s.rnw = (sample >> idx_rnw ) & 1;
+                  }
+                  if (idx_lic >= 0) {
+                     s.lic = (sample >> idx_lic) & 1;
+                  }
+                  if (idx_bs >= 0) {
+                     s.bs = (sample >> idx_bs) & 1;
+                  }
+                  if (idx_ba >= 0) {
+                     s.ba = (sample >> idx_ba) & 1;
+                  }
+                  if (idx_addr >= 0) {
+                     s.addr = (sample >> idx_addr) & 15;
+                  }
+               } else {
+                  // Sample the data skewed (--skew=) relative to the falling edge of CLKE
+                  s.data = (data_sample >> idx_data) & 255;
+                  queue_sample(&s);
+                  s.sample_count++;
+               }
+            }
+            // Increment the circular buffer pointers in lock-step to keey the skew constant
             wr_index      = (wr_index      + 1) & (SKEW_BUFFER_SIZE - 1);
             rd_index      = (rd_index      + 1) & (SKEW_BUFFER_SIZE - 1);
             data_rd_index = (data_rd_index + 1) & (SKEW_BUFFER_SIZE - 1);
-
-            // TODO: fix the hard coded values!!!
-            //if (arguments.debug & 4) {
-            //   printf("%d %02x %x %x %x %x\n", sample_count, sample&255, (sample >> 8)&1,  (sample >> 9)&1,  (sample >> 10)&1,  (sample >> 11)&1  );
-            //}
-            sample_count++;
-
-            // CLKE is optional
-            // - if asynchronous capture is used, it must be connected
-            // - if synchronous capture is used, it must not connected
-
-            if (idx_clke < 0) {
-
-               // If CLK_E is not present, use the pins directly
-               bus_data = (sample >> idx_data) & 255;
-               if (idx_rnw >= 0) {
-                  pin_rnw = (sample >> idx_rnw ) & 1;
-               }
-               if (idx_lic >= 0) {
-                  pin_lic = (sample >> idx_lic) & 1;
-               }
-               if (idx_bs >= 0) {
-                  pin_bs = (sample >> idx_bs) & 1;
-               }
-               if (idx_ba >= 0) {
-                  pin_ba = (sample >> idx_ba) & 1;
-               }
-               if (idx_addr >= 0) {
-                  pin_addr = (sample >> idx_addr) & 15;
-               }
-
-            } else {
-
-               // If CLKE is present, look for an edge
-               pin_clke = (sample >> idx_clke) & 1;
-               if (pin_clke == last_clke) {
-                  // continue for more samples
-                  continue;
-               }
-               last_clke = pin_clke;
-
-               if (pin_clke) {
-                  // sample control signals just after rising edge of CLKE
-                  if (idx_rnw >= 0) {
-                     pin_rnw = (sample >> idx_rnw ) & 1;
-                  }
-                  if (idx_lic >= 0) {
-                     pin_lic = (sample >> idx_lic) & 1;
-                  }
-                  if (idx_bs >= 0) {
-                     pin_bs = (sample >> idx_bs) & 1;
-                  }
-                  if (idx_ba >= 0) {
-                     pin_ba = (sample >> idx_ba) & 1;
-                  }
-                  if (idx_addr >= 0) {
-                     pin_addr = (sample >> idx_addr) & 15;
-                  }
-                  // continue for the falling edge
-                  continue;
-               } else {
-                  // the data sample can be skewed, using the --skew= parameter
-                  bus_data = (data_sample >> idx_data) & 255;
-               }
-            }
-
-            // Build the sample
-            s.type = NORMAL;
-            s.sample_count = sample_count;
-            s.data = bus_data;
-            if (idx_rnw < 0) {
-               s.rnw = -1;
-            } else {
-               s.rnw = pin_rnw;
-            }
-            if (idx_lic < 0) {
-               s.lic = -1;
-            } else {
-               s.lic = pin_lic;
-            }
-            if (idx_bs < 0) {
-               s.bs = -1;
-            } else {
-               s.bs = pin_bs;
-            }
-            if (idx_ba < 0) {
-               s.ba = -1;
-            } else {
-               s.ba = pin_ba;
-            }
-            if (idx_addr < 0) {
-               s.addr = -1;
-            } else {
-               s.addr = pin_addr;
-            }
-            queue_sample(&s);
          }
       }
    }
