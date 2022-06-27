@@ -819,25 +819,11 @@ static int em_6809_count_cycles(sample_t *sample_q) {
 
 static void em_6809_reset(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
    instruction->pc = -1;
-   ACCA = -1;
-   ACCB = -1;
-   X = -1;
-   Y = -1;
-   S = -1;
-   U = -1;
+   // All other registers are unchanged on reset
    DP = 0;
-   E = -1;
-   F = 1;
-   H = -1;
-   I = 1;
-   Z = -1;
-   N = -1;
-   V = -1;
-   C = -1;
+   F  = 1;
+   I  = 1;
    if (cpu6309) {
-      ACCE = -1;
-      ACCF = -1;
-      TV = -1;
       NM = 0;
       FM = 0;
       IL = 0;
