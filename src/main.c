@@ -618,8 +618,7 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
 
       // Pad if there is more to come
       if (fail || arguments.show_cycles || arguments.show_state) {
-         // Pad opcode to 14 characters, to match python
-         while (numchars++ < 14) {
+         while (numchars++ < 20) {
             *bp++ = ' ';
          }
       }
