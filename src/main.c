@@ -39,7 +39,7 @@ const char *machine_names[] = {
 };
 
 
-static char disbuf[256];
+static char disbuf[1024];
 
 static cpu_emulator_t *em;
 
