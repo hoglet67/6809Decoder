@@ -88,6 +88,7 @@ typedef struct {
    int byte;
    int debug;
    int skip;
+   int skew;
    int mem_model;
    int trigger_start;
    int trigger_stop;

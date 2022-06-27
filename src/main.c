@@ -9,6 +9,12 @@
 #include "em_6809.h"
 #include "memory.h"
 
+// Small skew buffer to allow the data bus samples to be taken early or late
+
+#define SKEW_BUFFER_SIZE  32 // Must be a power of 2
+
+#define MAX_SKEW_VALUE ((SKEW_BUFFER_SIZE / 2) - 1)
+
 // Value use to indicate a pin (or register) has not been assigned by
 // the user, so should take the default value.
 #define UNSPECIFIED -2
@@ -130,6 +136,7 @@ enum {
    KEY_REG_NM,
    KEY_REG_FM,
    KEY_SKIP,
+   KEY_SKEW,
    KEY_DATA,
    KEY_RNW,
    KEY_LIC,
@@ -166,7 +173,7 @@ static cpu_name_t cpu_names[] = {
 static struct argp_option options[] = {
    { 0, 0, 0, 0, "General options:", GROUP_GENERAL},
 
-   { "vecrst",      KEY_VECRST,    "HEX",  OPTION_ARG_OPTIONAL, "Reset vector, optionally preceeded by the first opcode (e.g. A9D9CD)",
+   { "vecrst",      KEY_VECRST,     "HEX", OPTION_ARG_OPTIONAL, "Reset vector, optionally preceeded by the first opcode (e.g. A9D9CD)",
                                                                                                                      GROUP_GENERAL},
    { "cpu",            KEY_CPU,     "CPU",                   0, "Sets CPU type (6809, 6809e)",                       GROUP_GENERAL},
    { "machine",    KEY_MACHINE, "MACHINE",                   0, "Enable machine (beeb,elk,master) defaults",         GROUP_GENERAL},
@@ -175,6 +182,7 @@ static struct argp_option options[] = {
    { "trigger",    KEY_TRIGGER, "ADDRESS",                   0, "Trigger on address",                                GROUP_GENERAL},
    { "mem",            KEY_MEM,     "HEX", OPTION_ARG_OPTIONAL, "Memory modelling (see above)",                      GROUP_GENERAL},
    { "skip",          KEY_SKIP,     "HEX", OPTION_ARG_OPTIONAL, "Skip the first n samples",                          GROUP_GENERAL},
+   { "skew",          KEY_SKEW,    "SKEW", OPTION_ARG_OPTIONAL, "Skew the data bus by +/- n samples",                GROUP_GENERAL},
 
    { 0, 0, 0, 0, "Register options:", GROUP_REGISTER},
    { "reg_s",        KEY_REG_S,     "HEX", OPTION_ARG_OPTIONAL, "Initial value of the S register",                   GROUP_REGISTER},
@@ -269,6 +277,16 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
          arguments->skip = strtol(arg, (char **)NULL, 16);
       } else {
          arguments->skip = 0;
+      }
+      break;
+   case KEY_SKEW:
+      if (arg && strlen(arg) > 0) {
+         arguments->skew = strtol(arg, (char **)NULL, 10);
+         if (arguments->skew < -MAX_SKEW_VALUE || arguments->skew > MAX_SKEW_VALUE) {
+            argp_error(state, "specified skew exceeds skew buffer size");
+         }
+      } else {
+         arguments->skew = 0;
       }
       break;
    case KEY_MEM:
@@ -741,13 +759,21 @@ void decode(FILE *stream) {
 
    int num;
 
-   // The previous sample of the 16-bit capture (async sampling only)
-   uint16_t sample       = -1;
-   uint16_t last_sample  = -1;
+   // A small circular buffer for skewing the sampling of the data bus
+   uint16_t skew_buffer[SKEW_BUFFER_SIZE];
+   int wr_index         = SKEW_BUFFER_SIZE / 2;
+   int rd_index         = 0;
+   int data_rd_index    = arguments.skew & (SKEW_BUFFER_SIZE - 1);
+   uint16_t sample      = 0;
+   uint16_t data_sample = 0;
+   for (int i = 0; i < SKEW_BUFFER_SIZE; i++) {
+      skew_buffer[i] = 0;
+   }
 
    // The previous sample of clke (async sampling only)
    int last_clke = -1;
 
+   // The structured bus sample we will pass on to the next level of processing
    sample_t s;
 
    // Skip the start of the file, if required
@@ -785,9 +811,15 @@ void decode(FILE *stream) {
 
          while (num-- > 0) {
 
-            // The current 16-bit capture sample, and the previous one
-            last_sample  = sample;
-            sample       = *sampleptr++;
+            // The a small circular buffer for the samples
+            skew_buffer[wr_index] = *sampleptr++;
+            sample                = skew_buffer[rd_index];
+            data_sample           = skew_buffer[data_rd_index];
+
+            // Increment the circular buffer pointers in lock-step
+            wr_index      = (wr_index      + 1) & (SKEW_BUFFER_SIZE - 1);
+            rd_index      = (rd_index      + 1) & (SKEW_BUFFER_SIZE - 1);
+            data_rd_index = (data_rd_index + 1) & (SKEW_BUFFER_SIZE - 1);
 
             // TODO: fix the hard coded values!!!
             //if (arguments.debug & 4) {
@@ -849,8 +881,8 @@ void decode(FILE *stream) {
                   // continue for the falling edge
                   continue;
                } else {
-                  // sample data just before falling edge of CLKE
-                  bus_data = (last_sample >> idx_data) & 255;
+                  // the data sample can be skewed, using the --skew= parameter
+                  bus_data = (data_sample >> idx_data) & 255;
                }
             }
 
@@ -907,6 +939,7 @@ int main(int argc, char *argv[]) {
    arguments.debug            = 0;
    arguments.mem_model        = 0;
    arguments.skip             = 0;
+   arguments.skew             = 0;
    arguments.trigger_start    = UNSPECIFIED;
    arguments.trigger_stop     = UNSPECIFIED;
    arguments.trigger_skipint  = 0;
