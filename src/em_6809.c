@@ -1912,7 +1912,7 @@ static int lsr_helper(int val) {
 
 static int neg_helper(int val) {
    V = (val == 0x80);
-   C = (val == 0x00);
+   C = (val != 0x00);
    val = (-val) & 0xff;
    set_NZ(val);
    // The datasheet says the half-carry flag is undefined, but in practice
@@ -1923,7 +1923,7 @@ static int neg_helper(int val) {
 
 static int neg16_helper(int val) {
    V = (val == 0x8000);
-   C = (val == 0x0000);
+   C = (val != 0x0000);
    val = (-val) & 0xffff;
    set_NZ16(val);
    return val;
