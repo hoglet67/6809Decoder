@@ -5387,7 +5387,7 @@ static opcode_t instr_table_6309[] = {
    /* 79 */    { &op_ROL  , EXTENDED     , 0, 7, 6 },
    /* 7A */    { &op_DEC  , EXTENDED     , 0, 7, 6 },
    /* 7B */    { &op_TIM  , EXTENDED     , 0, 7, 7 },
-   /* 7C */    { &op_INC  , EXTENDED     , 0, 7, 7 },
+   /* 7C */    { &op_INC  , EXTENDED     , 0, 7, 6 },
    /* 7D */    { &op_TST  , EXTENDED     , 0, 7, 5 },
    /* 7E */    { &op_JMP  , EXTENDED     , 0, 4, 3 },
    /* 7F */    { &op_CLR  , EXTENDED     , 0, 7, 6 },
