@@ -1696,7 +1696,7 @@ static int asl16_helper(int val) {
       // V is the xor of bits 15,14 of val
       V = ((val >> 14) & 1) ^ C;
       val = (val << 1) & 0xffff;
-      set_NZ(val);
+      set_NZ16(val);
    } else {
       set_NZVC_unknown();
    }
@@ -1721,7 +1721,7 @@ static int asr16_helper(int val) {
    if (val >= 0) {
       C = val & 1;
       val = (val & 0x8000) | (val >> 1);
-      set_NZ(val);
+      set_NZ16(val);
    } else {
       set_NZC_unknown();
    }
@@ -1873,7 +1873,7 @@ static int inc_helper(int val) {
 static int inc16_helper(int val) {
    if (val >= 0) {
       val = (val + 1) & 0xffff;
-      set_NZ(val);
+      set_NZ16(val);
       // V indicates signed overflow, which only happens when going from 127->128
       V = (val == 0x8000);
    } else {
@@ -2163,7 +2163,7 @@ static int rol16_helper(int val) {
       V = ((val >> 14) & 1) ^ C;
       // truncate to 8 bits
       val = tmp & 0xffff;
-      set_NZ(val);
+      set_NZ16(val);
    } else {
       val = -1;
       set_NZVC_unknown();
@@ -2178,7 +2178,7 @@ static int ror_helper(int val) {
       C = val & 1;
       // truncate to 8 bits
       val = tmp & 0xff;
-      set_NZ16(val);
+      set_NZ(val);
    } else {
       val = -1;
       set_NZC_unknown();
