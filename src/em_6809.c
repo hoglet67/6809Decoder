@@ -756,7 +756,7 @@ static int get_num_cycles(sample_t *sample_q) {
          }
          break;
       case 0x2F: /* LBLE */
-         if (Z == 0 || (N == 1 && V == 0) || (N == 0 && V == 1))  {
+         if (Z == 1 || (N == 1 && V == 0) || (N == 0 && V == 1))  {
             cycle_count++;
          }
          break;
