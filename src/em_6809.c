@@ -2432,7 +2432,7 @@ static int op_fn_BITB(operand_t operand, ea_t ea, sample_t *sample_q) {
 static int op_fn_BLE(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (Z < 0 || N < 0 || V < 0) {
       PC = -1;
-   } else if (Z == 0 || N != V) {
+   } else if (Z == 1 || N != V) {
       PC = ea;
    }
    return -1;
