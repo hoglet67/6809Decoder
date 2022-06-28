@@ -1457,6 +1457,10 @@ static int em_6809_get_PC() {
    return PC;
 }
 
+static int em_6809_get_NM() {
+   return NM;
+}
+
 static int em_6809_read_memory(int address) {
    return memory_read_raw(address);
 }
@@ -1601,6 +1605,7 @@ cpu_emulator_t em_6809 = {
    .emulate = em_6809_emulate,
    .disassemble = dis_6809_disassemble,
    .get_PC = em_6809_get_PC,
+   .get_NM = em_6809_get_NM,
    .read_memory = em_6809_read_memory,
    .get_state = em_6809_get_state,
    .get_and_clear_fail = em_6809_get_and_clear_fail,

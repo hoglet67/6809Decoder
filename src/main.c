@@ -693,6 +693,25 @@ int decode_instruction(sample_t *sample_q, int num_samples) {
 void queue_sample(sample_t *sample) {
    static sample_t sample_q[DEPTH];
    static int index = 0;
+   static int synced = 0;
+
+   // Try to synchronize to the instructions stream using LIC
+   if (!synced) {
+      if (sample->lic < 0) {
+         // No LIC, so mark as in-sync and falled through to process the sample
+         synced = 1;
+      } else if (sample->lic) {
+         // LIC is one, so mark as in-sync
+         synced = 1;
+         if (em->get_NM() != 1) {
+            // In emulation mode, LIC really is on the last intruction cycle, so drop this sample
+            return;
+         }
+      } else {
+         // LIC is zero, so drop the sample as we are not key in sync
+         return;
+      }
+   }
 
    // Make a copy of the sample structure
    sample_q[index++] = *sample;
