@@ -3351,7 +3351,7 @@ static void set_r1(int pb, int val) {
    }
 }
 
-static void singlebit_helper(operand_t operand, sample_t *sample_q) {
+static void directbit_helper(operand_t operand, sample_t *sample_q) {
    // Pickout the opcode and the postbyte from the samples
    int opcode = sample_q[1].data;
    int postbyte = sample_q[2].data;
@@ -3580,27 +3580,27 @@ static int op_fn_ASRD(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_BAND(operand_t operand, ea_t ea, sample_t *sample_q) {
-   singlebit_helper(operand, sample_q);
+   directbit_helper(operand, sample_q);
    return -1;
 }
 
 static int op_fn_BEOR(operand_t operand, ea_t ea, sample_t *sample_q) {
-   singlebit_helper(operand, sample_q);
+   directbit_helper(operand, sample_q);
    return -1;
 }
 
 static int op_fn_BIAND(operand_t operand, ea_t ea, sample_t *sample_q) {
-   singlebit_helper(operand, sample_q);
+   directbit_helper(operand, sample_q);
    return -1;
 }
 
 static int op_fn_BIEOR(operand_t operand, ea_t ea, sample_t *sample_q) {
-   singlebit_helper(operand, sample_q);
+   directbit_helper(operand, sample_q);
    return -1;
 }
 
 static int op_fn_BIOR(operand_t operand, ea_t ea, sample_t *sample_q) {
-   singlebit_helper(operand, sample_q);
+   directbit_helper(operand, sample_q);
    return -1;
 }
 
@@ -3632,7 +3632,7 @@ static int op_fn_BITMD(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_BOR(operand_t operand, ea_t ea, sample_t *sample_q) {
-   singlebit_helper(operand, sample_q);
+   directbit_helper(operand, sample_q);
    return -1;
 }
 
@@ -3853,7 +3853,7 @@ static int op_fn_INCW(operand_t operand, ea_t ea, sample_t *sample_q) {
 }
 
 static int op_fn_LDBT(operand_t operand, ea_t ea, sample_t *sample_q) {
-   singlebit_helper(operand, sample_q);
+   directbit_helper(operand, sample_q);
    return -1;
 }
 
