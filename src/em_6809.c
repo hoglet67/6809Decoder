@@ -1102,6 +1102,8 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       index++;
       // Decrement the mode to get back to the base addressing mode
       mode--;
+      // Increment opcode index (oi), which allows the rest of the code to ignore the immediate byte
+      oi++;
    }
 
    // If there is a post byte, skip past it
