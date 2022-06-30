@@ -1292,114 +1292,116 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                   ea = (*reg + (pb & 0x0f)) & 0xffff;
                }
             }
-         } else if (cpu6309 && ((pb & 0x1f) == 0x0f || (pb & 0x1f) == 0x10)) {
-
-            // Extra 6309 W indexed modes
-            int W = pack(ACCE, ACCF);
-            if (W >= 0) {
-               switch ((pb >> 5) & 3) {
-               case 0:           /* ,W */
-                  ea = W;
-                  break;
-               case 1:           /* n15,W */
-                  ea = (W + (sample_q[oi + 2].data << 8) + sample_q[oi + 3].data) & 0xffff;
-                  break;
-               case 2:           /* ,W++ */
-                  ea = W;
-                  W = (W + 2) & 0xffff;
-                  break;
-               case 3:           /* ,--W */
-                  W = (W - 2) & 0xffff;
-                  ea = W;
-                  break;
-               }
-            }
-
          } else {
+            if (cpu6309 && ((pb & 0x1f) == 0x0f || (pb & 0x1f) == 0x10)) {
 
-            switch (pb & 0x0f) {
-            case 0:                 /* ,R+ */
-               if (*reg >= 0) {
-                  ea = *reg;
-                  *reg = (*reg + 1) & 0xffff;
+               // Extra 6309 W indexed modes
+               int W = pack(ACCE, ACCF);
+               if (W >= 0) {
+                  switch ((pb >> 5) & 3) {
+                  case 0:           /* ,W */
+                     ea = W;
+                     break;
+                  case 1:           /* n15,W */
+                     ea = (W + (sample_q[oi + 2].data << 8) + sample_q[oi + 3].data) & 0xffff;
+                     break;
+                  case 2:           /* ,W++ */
+                     ea = W;
+                     W = (W + 2) & 0xffff;
+                     break;
+                  case 3:           /* ,--W */
+                     W = (W - 2) & 0xffff;
+                     ea = W;
+                     break;
+                  }
                }
-               break;
-            case 1:                 /* ,R++ */
-               if (*reg >= 0) {
-                  ea = *reg;
-                  *reg = (*reg + 2) & 0xffff;
+
+            } else {
+
+               switch (pb & 0x0f) {
+               case 0:                 /* ,R+ */
+                  if (*reg >= 0) {
+                     ea = *reg;
+                     *reg = (*reg + 1) & 0xffff;
+                  }
+                  break;
+               case 1:                 /* ,R++ */
+                  if (*reg >= 0) {
+                     ea = *reg;
+                     *reg = (*reg + 2) & 0xffff;
+                  }
+                  break;
+               case 2:                 /* ,-R */
+                  if (*reg >= 0) {
+                     *reg = (*reg - 1) & 0xffff;
+                     ea = *reg;
+                  }
+                  break;
+               case 3:                 /* ,--R */
+                  if (*reg >= 0) {
+                     *reg = (*reg - 2) & 0xffff;
+                     ea = *reg;
+                  }
+                  break;
+               case 4:                 /* ,R */
+                  if (*reg >= 0) {
+                     ea = *reg;
+                  }
+                  break;
+               case 5:                 /* B,R */
+                  if (*reg >= 0 && ACCB >= 0) {
+                     ea = (*reg + ACCB) & 0xffff;
+                  }
+                  break;
+               case 6:                 /* A,R */
+                  if (*reg >= 0 && ACCA >= 0) {
+                     ea = (*reg + ACCA) & 0xffff;
+                  }
+                  break;
+               case 7:                 /* E,R */
+                  if (cpu6309 && *reg >= 0 && ACCE >= 0) {
+                     ea = (*reg + ACCE) & 0xffff;
+                  }
+                  break;
+               case 8:                 /* n7,R */
+                  if (*reg >= 0) {
+                     ea = (*reg + (int8_t)(sample_q[oi + 2].data)) & 0xffff;
+                  }
+                  break;
+               case 9:                 /* n15,R */
+                  if (*reg >= 0) {
+                     ea = (*reg + (int16_t)((sample_q[oi + 2].data << 8) + sample_q[oi + 3].data)) & 0xffff;
+                  }
+                  break;
+               case 10:                /* F,R */
+                  if (cpu6309 && *reg >= 0 && ACCF >= 0) {
+                     ea = (*reg + ACCF) & 0xffff;
+                  }
+                  break;
+               case 11:                /* D,R */
+                  if (*reg >= 0 && ACCA >= 0 && ACCB >= 0) {
+                     ea = (*reg + (ACCA << 8) + ACCB) & 0xffff;
+                  }
+                  break;
+               case 12:                /* n7,PCR */
+                  if (PC >= 0) {
+                     ea = (PC + (int8_t)(sample_q[oi + 2].data)) & 0xffff;
+                  }
+                  break;
+               case 13:                /* n15,PCR */
+                  if (PC >= 0) {
+                     ea = (PC + (int16_t)((sample_q[oi + 2].data << 8) + sample_q[oi + 3].data)) & 0xffff;
+                  }
+                  break;
+               case 14:                /* W,R */
+                  if (cpu6309 && *reg >= 0 && ACCE >= 0 && ACCF >= 0) {
+                     ea = (*reg + (ACCE << 8) + ACCF) & 0xffff;
+                  }
+                  break;
+               case 15:                /* [n] */
+                  ea = ((sample_q[oi + 2].data << 8) + sample_q[oi + 3].data) & 0xffff;
+                  break;
                }
-               break;
-            case 2:                 /* ,-R */
-               if (*reg >= 0) {
-                  *reg = (*reg - 1) & 0xffff;
-                  ea = *reg;
-               }
-               break;
-            case 3:                 /* ,--R */
-               if (*reg >= 0) {
-                  *reg = (*reg - 2) & 0xffff;
-                  ea = *reg;
-               }
-               break;
-            case 4:                 /* ,R */
-               if (*reg >= 0) {
-                  ea = *reg;
-               }
-               break;
-            case 5:                 /* B,R */
-               if (*reg >= 0 && ACCB >= 0) {
-                  ea = (*reg + ACCB) & 0xffff;
-               }
-               break;
-            case 6:                 /* A,R */
-               if (*reg >= 0 && ACCA >= 0) {
-                  ea = (*reg + ACCA) & 0xffff;
-               }
-               break;
-            case 7:                 /* E,R */
-               if (cpu6309 && *reg >= 0 && ACCE >= 0) {
-                  ea = (*reg + ACCE) & 0xffff;
-               }
-               break;
-            case 8:                 /* n7,R */
-               if (*reg >= 0) {
-                  ea = (*reg + (int8_t)(sample_q[oi + 2].data)) & 0xffff;
-               }
-               break;
-            case 9:                 /* n15,R */
-               if (*reg >= 0) {
-                  ea = (*reg + (int16_t)((sample_q[oi + 2].data << 8) + sample_q[oi + 3].data)) & 0xffff;
-               }
-               break;
-            case 10:                /* F,R */
-               if (cpu6309 && *reg >= 0 && ACCF >= 0) {
-                  ea = (*reg + ACCF) & 0xffff;
-               }
-               break;
-            case 11:                /* D,R */
-               if (*reg >= 0 && ACCA >= 0 && ACCB >= 0) {
-                  ea = (*reg + (ACCA << 8) + ACCB) & 0xffff;
-               }
-               break;
-            case 12:                /* n7,PCR */
-               if (PC >= 0) {
-                  ea = (PC + (int8_t)(sample_q[oi + 2].data)) & 0xffff;
-               }
-               break;
-            case 13:                /* n15,PCR */
-               if (PC >= 0) {
-                  ea = (PC + (int16_t)((sample_q[oi + 2].data << 8) + sample_q[oi + 3].data)) & 0xffff;
-               }
-               break;
-            case 14:                /* W,R */
-               if (cpu6309 && *reg >= 0 && ACCE >= 0 && ACCF >= 0) {
-                  ea = (*reg + (ACCE << 8) + ACCF) & 0xffff;
-               }
-               break;
-            case 15:                /* [n] */
-               ea = ((sample_q[oi + 2].data << 8) + sample_q[oi + 3].data) & 0xffff;
-               break;
             }
             if (pb & 0x10) {
                // In this mode there is a further level of indirection to find the ea
