@@ -303,7 +303,6 @@ int dis_6809_disassemble(char *buffer, instruction_t *instruction) {
                case 0:           /* ,W */
                   *ptr++ = ',';
                   *ptr++ = 'W';
-                  *ptr++ = '+';
                   break;
                case 1:           /* n15,W */
                   write_hex4(ptr, op16);
