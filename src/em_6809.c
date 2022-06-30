@@ -774,7 +774,7 @@ static int get_num_cycles(sample_t *sample_q) {
    } else if (instr->mode == INDEXED || instr->mode == INDEXEDIM) {
       // For INDEXED address, the instruction table cycles
       // are the minimum the instruction will execute in
-      int postindex = (b0 == 0x10 || b0 == 0x11) ? 2 : 1;
+      int postindex = ((b0 == 0x10 || b0 == 0x11) ? 2 : 1) + (instr->mode == INDEXEDIM);
       int postbyte = sample_q[postindex].data;
       int postbyte_cycles;
       if (cpu6309) {
@@ -5395,7 +5395,7 @@ static opcode_t instr_table_6309[] = {
    /* 68 */    { &op_ASL  , INDEXED      , 0, 6, 6 },
    /* 69 */    { &op_ROL  , INDEXED      , 0, 6, 6 },
    /* 6A */    { &op_DEC  , INDEXED      , 0, 6, 6 },
-   /* 6B */    { &op_TIM  , INDEXEDIM    , 0, 6, 6 },
+   /* 6B */    { &op_TIM  , INDEXEDIM    , 0, 5, 5 },
    /* 6C */    { &op_INC  , INDEXED      , 0, 6, 6 },
    /* 6D */    { &op_TST  , INDEXED      , 0, 6, 5 },
    /* 6E */    { &op_JMP  , INDEXED      , 0, 3, 3 },
