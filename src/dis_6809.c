@@ -55,26 +55,7 @@ int dis_6809_disassemble(char *buffer, instruction_t *instruction) {
    int b1 = instruction->instr[1];
    int pb = 0;
    opcode_t *instr = get_instruction(instr_table, b0, b1);
-
-   // Work out where in the instruction the operand is
-   // [Prefix] Opcode [ Postbyte] Op1 Op2
-   int oi;
-   int opcode;
-   // Extract the prefix/opcode
-   if (b0 == 0x10 || b0 == 0x11) {
-      opcode = (b0 << 8) | b1;
-      oi = 2;
-   } else {
-      opcode = b0;
-      oi = 1;
-   }
-   if (instr->mode == INDEXED || instr->mode == DIRECTBIT || instr->mode == REGISTER) {
-      // Skip over the post byte
-      pb = instruction->instr[oi];
-      oi++;
-   }
-   int op8 = instruction->instr[oi];
-   int op16 = (instruction->instr[oi] << 8) + instruction->instr[oi + 1];
+   int mode = instr->mode;
 
    /// Output the mnemonic
    char *ptr = buffer;
@@ -85,8 +66,38 @@ int dis_6809_disassemble(char *buffer, instruction_t *instruction) {
       *ptr++ = ' ';
    }
 
+   // Work out where in the instruction the operand is
+   // [Prefix] Opcode [Imbyte] [ Postbyte] Op1 Op2
+   int oi;
+   int opcode;
+   // Extract the prefix/opcode
+   if (b0 == 0x10 || b0 == 0x11) {
+      opcode = (b0 << 8) | b1;
+      oi = 2;
+   } else {
+      opcode = b0;
+      oi = 1;
+   }
+   // Handle the immediate operand AIM/EIM/OIM/TIM in as simple way as possible
+   if (mode == DIRECTIM || mode == EXTENDEDIM || mode == INDEXEDIM) {
+      *ptr++ = '#';
+      *ptr++ = '$';
+      write_hex2(ptr, instruction->instr[oi++]);
+      ptr += 2;
+      *ptr++ = ' ';
+      // The changed the mode back to the base mode
+      mode--;
+   }
+
+   if (mode == INDEXED || mode == DIRECTBIT || mode == REGISTER) {
+      // Skip over the post byte
+      pb = instruction->instr[oi++];
+   }
+   int op8 = instruction->instr[oi];
+   int op16 = (instruction->instr[oi] << 8) + instruction->instr[oi + 1];
+
    // Output the operand
-   switch (instr->mode) {
+   switch (mode) {
    case INHERENT:
       break;
    case REGISTER:
@@ -209,7 +220,7 @@ int dis_6809_disassemble(char *buffer, instruction_t *instruction) {
    case RELATIVE_16:
       {
          int16_t offset;
-         if (instr->mode == RELATIVE_8) {
+         if (mode == RELATIVE_8) {
             offset = (int16_t)((int8_t)op8);
          } else {
             offset = (int16_t)(op16);

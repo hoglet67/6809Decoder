@@ -13,10 +13,13 @@ typedef enum {
    IMMEDIATE_32,
    RELATIVE_8,
    RELATIVE_16,
-   DIRECT,
    DIRECTBIT,
+   DIRECT,
+   DIRECTIM,   // Must follow DIRECT
    EXTENDED,
+   EXTENDEDIM, // Must follow EXTENDED
    INDEXED,
+   INDEXEDIM,  // Must follow INDEXED
    ILLEGAL
 } addr_mode_t ;
 

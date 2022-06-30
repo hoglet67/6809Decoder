@@ -770,7 +770,7 @@ static int get_num_cycles(sample_t *sample_q) {
       // PSHS/PULS/PSHU/PULU
       cycle_count += count_ones_in_nibble[b1 & 0x0f];            // bits 0..3 are 8 bit registers
       cycle_count += count_ones_in_nibble[(b1 >> 4) & 0x0f] * 2; // bits 4..7 are 16 bit registers
-   } else if (instr->mode == INDEXED) {
+   } else if (instr->mode == INDEXED || instr->mode == INDEXEDIM) {
       // For INDEXED address, the instruction table cycles
       // are the minimum the instruction will execute in
       int postindex = (b0 == 0x10 || b0 == 0x11) ? 2 : 1;
@@ -1060,6 +1060,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    int pb = 0;
    int index = 0;
    opcode_t *instr = get_instruction(instr_table, b0, b1);
+   int mode = instr->mode;
 
    // Flag that an instruction marked as undocumented has been encoutered
    if (instr->undocumented) {
@@ -1090,8 +1091,20 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       oi++;
    }
 
+   // If there is an immediate byte (AIM/EIM/OIM/TIM only), skip past it
+   if (mode == DIRECTIM || mode == EXTENDEDIM || mode == INDEXEDIM) {
+      int imm = sample_q[index].data;
+      // The byte doesn't need to be saved, because it's always read from sample_q[1]
+      if (PC >= 0) {
+         memory_read(imm, PC + index, MEM_INSTR);
+      }
+      index++;
+      // Decrement the mode to get back to the base addressing mode
+      mode--;
+   }
+
    // If there is a post byte, skip past it
-   if (instr->mode == REGISTER || instr->mode == INDEXED || instr->mode == DIRECTBIT) {
+   if (mode == REGISTER || mode == INDEXED || mode == DIRECTBIT) {
       pb = sample_q[index].data;
       if (PC >= 0) {
          memory_read(pb, PC + index, MEM_INSTR);
@@ -1100,7 +1113,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    }
 
    // Process any additional operand bytes
-   switch (instr->mode) {
+   switch (mode) {
    case INDEXED:
       // In some indexed addressing modes there is also a displacement
       if (pb & 0x80) {
@@ -1174,7 +1187,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    if (instr->op == &op_TST && (NM != 1)) {
       // There are two dead cycles at the end of TST
       operand = sample_q[num_cycles - 3].data;
-   } else if (instr->mode == REGISTER) {
+   } else if (mode == REGISTER) {
       operand = sample_q[oi + 1].data; // This is the postbyte
    } else if (instr->op->type == RMWOP) {
       // Read-modify-write instruction (always 8-bit)
@@ -1208,7 +1221,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    // Calculate the effective address (for additional memory reads)
    // Note: oi is the opcode index (0 = no prefix, 1 = prefix)
    ea_t ea = -1;
-   switch (instr->mode) {
+   switch (mode) {
    case RELATIVE_8:
       if (PC >= 0) {
          ea = (PC + (int8_t)sample_q[oi + 1].data) & 0xffff;
@@ -5269,17 +5282,17 @@ static opcode_t instr_table_6809[] = {
 
 static opcode_t instr_table_6309[] = {
    /* 00 */    { &op_NEG  , DIRECT       , 0, 6, 5 },
-   /* 01 */    { &op_OIM  , IMMEDIATE_8  , 0, 6, 6 },
-   /* 02 */    { &op_AIM  , IMMEDIATE_8  , 0, 6, 6 },
+   /* 01 */    { &op_OIM  , DIRECTIM     , 0, 6, 6 },
+   /* 02 */    { &op_AIM  , DIRECTIM     , 0, 6, 6 },
    /* 03 */    { &op_COM  , DIRECT       , 0, 6, 5 },
    /* 04 */    { &op_LSR  , DIRECT       , 0, 6, 5 },
-   /* 05 */    { &op_EIM  , IMMEDIATE_8  , 0, 6, 6 },
+   /* 05 */    { &op_EIM  , DIRECTIM     , 0, 6, 6 },
    /* 06 */    { &op_ROR  , DIRECT       , 0, 6, 5 },
    /* 07 */    { &op_ASR  , DIRECT       , 0, 6, 5 },
    /* 08 */    { &op_ASL  , DIRECT       , 0, 6, 5 },
    /* 09 */    { &op_ROL  , DIRECT       , 0, 6, 5 },
    /* 0A */    { &op_DEC  , DIRECT       , 0, 6, 5 },
-   /* 0B */    { &op_TIM  , IMMEDIATE_8  , 0, 6, 6 },
+   /* 0B */    { &op_TIM  , DIRECTIM     , 0, 6, 6 },
    /* 0C */    { &op_INC  , DIRECT       , 0, 6, 5 },
    /* 0D */    { &op_TST  , DIRECT       , 0, 6, 4 },
    /* 0E */    { &op_JMP  , DIRECT       , 0, 3, 2 },
@@ -5365,33 +5378,33 @@ static opcode_t instr_table_6309[] = {
    /* 5E */    { &op_TRAP , ILLEGAL      , 1,19,21 },
    /* 5F */    { &op_CLRB , INHERENT     , 0, 2, 1 },
    /* 60 */    { &op_NEG  , INDEXED      , 0, 6, 6 },
-   /* 61 */    { &op_OIM  , INDEXED      , 0, 6, 6 },
-   /* 62 */    { &op_AIM  , INDEXED      , 0, 6, 6 },
+   /* 61 */    { &op_OIM  , INDEXEDIM    , 0, 6, 6 },
+   /* 62 */    { &op_AIM  , INDEXEDIM    , 0, 6, 6 },
    /* 63 */    { &op_COM  , INDEXED      , 0, 6, 6 },
    /* 64 */    { &op_LSR  , INDEXED      , 0, 6, 6 },
-   /* 65 */    { &op_EIM  , INDEXED      , 0, 6, 6 },
+   /* 65 */    { &op_EIM  , INDEXEDIM    , 0, 6, 6 },
    /* 66 */    { &op_ROR  , INDEXED      , 0, 6, 6 },
    /* 67 */    { &op_ASR  , INDEXED      , 0, 6, 6 },
    /* 68 */    { &op_ASL  , INDEXED      , 0, 6, 6 },
    /* 69 */    { &op_ROL  , INDEXED      , 0, 6, 6 },
    /* 6A */    { &op_DEC  , INDEXED      , 0, 6, 6 },
-   /* 6B */    { &op_TIM  , INDEXED      , 0, 6, 6 },
+   /* 6B */    { &op_TIM  , INDEXEDIM    , 0, 6, 6 },
    /* 6C */    { &op_INC  , INDEXED      , 0, 6, 6 },
    /* 6D */    { &op_TST  , INDEXED      , 0, 6, 5 },
    /* 6E */    { &op_JMP  , INDEXED      , 0, 3, 3 },
    /* 6F */    { &op_CLR  , INDEXED      , 0, 6, 6 },
    /* 70 */    { &op_NEG  , EXTENDED     , 0, 7, 6 },
-   /* 71 */    { &op_OIM  , EXTENDED     , 0, 7, 7 },
-   /* 72 */    { &op_AIM  , EXTENDED     , 0, 7, 7 },
+   /* 71 */    { &op_OIM  , EXTENDEDIM   , 0, 7, 7 },
+   /* 72 */    { &op_AIM  , EXTENDEDIM   , 0, 7, 7 },
    /* 73 */    { &op_COM  , EXTENDED     , 0, 7, 6 },
    /* 74 */    { &op_LSR  , EXTENDED     , 0, 7, 6 },
-   /* 75 */    { &op_EIM  , EXTENDED     , 0, 7, 7 },
+   /* 75 */    { &op_EIM  , EXTENDEDIM   , 0, 7, 7 },
    /* 76 */    { &op_ROR  , EXTENDED     , 0, 7, 6 },
    /* 77 */    { &op_ASR  , EXTENDED     , 0, 7, 6 },
    /* 78 */    { &op_ASL  , EXTENDED     , 0, 7, 6 },
    /* 79 */    { &op_ROL  , EXTENDED     , 0, 7, 6 },
    /* 7A */    { &op_DEC  , EXTENDED     , 0, 7, 6 },
-   /* 7B */    { &op_TIM  , EXTENDED     , 0, 7, 7 },
+   /* 7B */    { &op_TIM  , EXTENDEDIM   , 0, 7, 7 },
    /* 7C */    { &op_INC  , EXTENDED     , 0, 7, 6 },
    /* 7D */    { &op_TST  , EXTENDED     , 0, 7, 5 },
    /* 7E */    { &op_JMP  , EXTENDED     , 0, 4, 3 },
