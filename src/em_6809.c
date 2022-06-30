@@ -3025,8 +3025,7 @@ static int op_fn_SEX(operand_t operand, ea_t ea, sample_t *sample_q) {
       ACCA = -1;
       set_NZ_unknown();
    }
-   // TODO: Confirm V is cleared, documentation is inconsistent
-   V = 0;
+   // Tests show V is not cleared (contrary to some documentation)
    return -1;
 }
 
