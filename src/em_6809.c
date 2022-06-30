@@ -225,6 +225,7 @@ static const char * fail_hints[32] = {
 static opcode_t instr_table_6809[];
 static opcode_t instr_table_6309[];
 
+static operation_t op_MULD ;
 static operation_t op_TST  ;
 static operation_t op_XSTX ;
 static operation_t op_XSTU ;
@@ -1184,7 +1185,11 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
 
    // Pick out the operand (Fig 17 in datasheet, esp sheet 5)
    operand_t operand;
-   if (instr->op == &op_TST && (NM != 1)) {
+   if (instr->op == &op_MULD) {
+      // There are many dead cycles at the end of MULD
+      // TODO - Maybe we should add a dead-cycles column to the op data structure
+      operand = (sample_q[num_cycles - 26].data << 8) + sample_q[num_cycles - 25].data;
+   } else if (instr->op == &op_TST && (NM != 1)) {
       // There are two dead cycles at the end of TST
       operand = sample_q[num_cycles - 3].data;
    } else if (mode == REGISTER) {
