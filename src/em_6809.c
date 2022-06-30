@@ -154,6 +154,21 @@ static int DZ   = -1; // Divide by zero trap
 // Misc
 static int show_cycle_errors = 0;
 
+// Vector base (which might change on a machine-by-machine basis)
+static int vector_base = 0xfff0;
+
+enum {
+   VEC_IL   = 0x00,
+   VEC_DZ   = 0x01, // the LSB ends up being masked off
+   VEC_SWI3 = 0x02,
+   VEC_SWI2 = 0x04,
+   VEC_FIQ  = 0x06,
+   VEC_IRQ  = 0x08,
+   VEC_SWI  = 0x0A,
+   VEC_NMI  = 0x0C,
+   VEC_RST  = 0x0E
+};
+
 // ====================================================================
 // Fail flags
 // ====================================================================
@@ -583,6 +598,9 @@ static void em_6809_init(arguments_t *args) {
    if (args->reg_fm >= 0) {
       FM = (args->reg_fm > 0);
    }
+   if (args->machine == MACHINE_BEEB) {
+      vector_base = 0xf7f0; // A11 is inverted in vector pull
+   }
    cpu6309 = args->cpu_type == CPU_6309 || args->cpu_type == CPU_6309E;
 
    if (cpu6309) {
@@ -981,30 +999,28 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
    // Skip a dead cycle becfore the vector
    i++;
 
-   // Is it the illegal instruction vector?
-   if ((vector & 0xfffe) == 0xfff0) {
-      if (vector & 1) {
-         // DZ Trap
-         DZ = 1;
-      } else {
-         // IL Trap
-         IL = 1;
-      }
+   // Is an illegal instruction trap?
+   if (vector == VEC_IL) {
+      IL = 1;
    }
 
-   // The vector must be even!
-   vector &= 0xfffe;
+   // Is it a division by zero trap?
+   if (vector == VEC_DZ) {
+      DZ = 1;
+      // Shares the illegal instruction vector
+      vector = VEC_IL;
+   }
 
    // Read the vector and compare against what's expected
    int vechi = sample_q[i].data;
-   memory_read(vechi, vector, MEM_POINTER);
-   if (sample_q[i].addr >= 0 && (sample_q[i].addr != (vector & 0x000F))) {
+   memory_read(vechi, vector_base + vector, MEM_POINTER);
+   if (sample_q[i].addr >= 0 && (sample_q[i].addr != vector)) {
       failflag |= FAIL_VECTOR;
    }
    i++;
    int veclo = sample_q[i].data;
-   memory_read(veclo, vector + 1, MEM_POINTER);
-   if (sample_q[i].addr >= 0 && (sample_q[i].addr != ((vector + 1) & 0x000F))) {
+   memory_read(veclo, vector_base + vector + 1, MEM_POINTER);
+   if (sample_q[i].addr >= 0 && (sample_q[i].addr != vector + 1)) {
       failflag  |= FAIL_VECTOR;
    }
    PC = (vechi << 8) + veclo;
@@ -1019,13 +1035,13 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
    // FFFE : Reset    : I = 1; F = 1
 
    switch (vector) {
-   case 0xfff8: // IRQ
+   case VEC_IRQ:
       I = 1;
       break;
-   case 0xfff6: // FIQ
-   case 0xfffa: // SWI
-   case 0xfffc: // NMI
-   case 0xfffe: // Reset
+   case VEC_FIQ:
+   case VEC_SWI:
+   case VEC_NMI:
+   case VEC_RST:
       I = 1;
       F = 1;
       break;
@@ -1044,13 +1060,13 @@ static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t 
    int full_c = (NM == 1) ? 22 : 19;
    int offset = (NM == 1) ?  4 :  3;
    if (num_cycles == fast_c) {
-      instruction->pc = interrupt_helper(sample_q, offset, 0, 0xfff6);
-   } else if (num_cycles == full_c && sample_q[full_c - 3].addr == 0x8) {
+      instruction->pc = interrupt_helper(sample_q, offset, 0, VEC_FIQ);
+   } else if (num_cycles == full_c && sample_q[full_c - 3].addr == VEC_IRQ) {
       // IRQ
-      instruction->pc = interrupt_helper(sample_q, offset, 1, 0xfff8);
-   } else if (num_cycles == full_c && sample_q[full_c - 3].addr == 0xC) {
+      instruction->pc = interrupt_helper(sample_q, offset, 1, VEC_IRQ);
+   } else if (num_cycles == full_c && sample_q[full_c - 3].addr == VEC_NMI) {
       // NMI
-      instruction->pc = interrupt_helper(sample_q, offset, 1, 0xfffC);
+      instruction->pc = interrupt_helper(sample_q, offset, 1, VEC_NMI);
    } else {
       printf("*** could not determine interrupt type ***\n");
    }
@@ -1264,7 +1280,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
          // 92 b2 d2 f2   1xx10010
          //    bf df ff   1xx11111
          if (cpu6309 && (pb != 0x9f) && (((pb & 0x9f) == 0x92) || (pb & 0x9f) == 0x9f)) {
-            interrupt_helper(sample_q, oi + 2, 1, 0xfff0);
+            interrupt_helper(sample_q, oi + 2, 1, VEC_IL);
             return;
          }
 
@@ -3070,17 +3086,17 @@ static int op_fn_SUBD(operand_t operand, ea_t ea, sample_t *sample_q) {
 
 
 static int op_fn_SWI(operand_t operand, ea_t ea, sample_t *sample_q) {
-   interrupt_helper(sample_q, 3, 1, 0xfffa);
+   interrupt_helper(sample_q, 3, 1, VEC_SWI);
    return -1;
 }
 
 static int op_fn_SWI2(operand_t operand, ea_t ea, sample_t *sample_q) {
-   interrupt_helper(sample_q, 4, 1, 0xfff4);
+   interrupt_helper(sample_q, 4, 1, VEC_SWI2);
    return -1;
 }
 
 static int op_fn_SWI3(operand_t operand, ea_t ea, sample_t *sample_q) {
-   interrupt_helper(sample_q, 4, 1, 0xfff2);
+   interrupt_helper(sample_q, 4, 1, VEC_SWI3);
    return -1;
 }
 
@@ -3200,7 +3216,7 @@ static int op_fn_X8C7(operand_t operand, ea_t ea, sample_t *sample_q) {
 // as SWI (15).
 
 static int op_fn_XRES(operand_t operand, ea_t ea, sample_t *sample_q) {
-   interrupt_helper(sample_q, 3, 1, 0xfffe);
+   interrupt_helper(sample_q, 3, 1, VEC_RST);
    return -1;
 }
 
@@ -3718,7 +3734,7 @@ static int op_fn_DECW(operand_t operand, ea_t ea, sample_t *sample_q) {
 static int op_fn_DIVD(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (operand == 0) {
       // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
-      interrupt_helper(sample_q, 3, 1, 0xfff1);
+      interrupt_helper(sample_q, 3, 1, VEC_DZ);
    } else if (ACCA < 0 || ACCB < 0) {
       ACCA = -1;
       ACCB = -1;
@@ -3752,7 +3768,7 @@ static int op_fn_DIVD(operand_t operand, ea_t ea, sample_t *sample_q) {
 static int op_fn_DIVQ(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (operand == 0) {
       // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
-      interrupt_helper(sample_q, 3, 1, 0xfff1);
+      interrupt_helper(sample_q, 3, 1, VEC_DZ);
    } else if (ACCA < 0 || ACCB < 0 || ACCE < 0 || ACCF < 0) {
       ACCA = -1;
       ACCB = -1;
@@ -4146,7 +4162,7 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (r0 > 4 || r1 > 4) {
 
       // TODO: confirm offset of the start of the trap
-      interrupt_helper(sample_q, 4, 1, 0xfff0);
+      interrupt_helper(sample_q, 4, 1, VEC_IL);
 
    } else {
 
@@ -4239,9 +4255,9 @@ static int op_fn_TIM(operand_t operand, ea_t ea, sample_t *sample_q) {
 
 static int op_fn_TRAP(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (sample_q[0].data == 0x10 || sample_q[0].data == 0x11) {
-      interrupt_helper(sample_q, 5, 1, 0xfff0);
+      interrupt_helper(sample_q, 5, 1, VEC_IL);
    } else {
-      interrupt_helper(sample_q, 4, 1, 0xfff0);
+      interrupt_helper(sample_q, 4, 1, VEC_IL);
    }
    return -1;
 }
