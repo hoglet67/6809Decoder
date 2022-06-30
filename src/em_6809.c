@@ -764,9 +764,12 @@ static int get_num_cycles(sample_t *sample_q) {
       }
    }
 
-   if (b0 == 0x3B && E == 1) {
-      // RTI takes 9 addition cycles if E = 1 (and two more if in native mode)
-      cycle_count += (NM == 1) ? 11 : 9;
+   if (b0 == 0x3B) {
+      int stacked_E = sample_q[2].data & 0x80;
+      if (stacked_E) {
+         // RTI takes 9 additional cycles if E = 1 (and two more if in native mode)
+         cycle_count += (NM == 1) ? 11 : 9;
+      }
    } else if (b0 >= 0x34 && b0 <= 0x37) {
       // PSHS/PULS/PSHU/PULU
       cycle_count += count_ones_in_nibble[b1 & 0x0f];            // bits 0..3 are 8 bit registers
