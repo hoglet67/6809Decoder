@@ -23,11 +23,11 @@ typedef enum {
    CPU_6309E,
 } cpu_t;
 
-// SWI2/3 are the longest instructions, at 22 cycles
-#define LONGEST_INSTRUCTION 22
+// DIVQ is the longest instructions, at 34 cycles
+#define LONGEST_INSTRUCTION 34
 
 // Sample Queue Depth - needs to fit the longest instruction
-#define DEPTH 32
+#define DEPTH 40
 
 // Sample_type_t is an abstraction of both the 6502 SYNC and the 65816 VDA/VPA
 
