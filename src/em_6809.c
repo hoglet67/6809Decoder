@@ -1280,7 +1280,8 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
          // 92 b2 d2 f2   1xx10010
          //    bf df ff   1xx11111
          if (cpu6309 && (pb != 0x9f) && (((pb & 0x9f) == 0x92) || (pb & 0x9f) == 0x9f)) {
-            interrupt_helper(sample_q, oi + 2, 1, VEC_IL);
+            failflag |= FAIL_UNDOC;
+            interrupt_helper(sample_q, oi + 5, 1, VEC_IL);
             return;
          }
 
