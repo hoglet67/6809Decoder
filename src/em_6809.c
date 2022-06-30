@@ -1075,7 +1075,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       }
    }
 
-   // Memory modelling of the opcode and the prefic
+   // Memory modelling of the opcode and the prefix
    if (PC >= 0) {
       memory_read(b0, PC + index, MEM_INSTR);
    }
@@ -1084,7 +1084,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    // If there is a prefix, skip past it and read the opcode
    if (b0 == 0x10 || b0 == 0x11) {
       if (PC >= 0) {
-         memory_read(b0, PC + index, MEM_INSTR);
+         memory_read(b1, PC + index, MEM_INSTR);
       }
       index++;
       // Increment opcode index (oi), which allows the rest of the code to ignore the prefix
