@@ -3357,6 +3357,12 @@ static void directbit_helper(operand_t operand, sample_t *sample_q) {
 
    // Parse the post byte
    int reg_num    = (postbyte >> 6) & 3; // Bits 7..6
+
+   // A destination regnum of 3 is (as far as we know) a NOP
+   if (reg_num == 3) {
+      return;
+   }
+
    int mem_bitnum = (postbyte >> 3) & 7; // Bits 5..3
    int reg_bitnum = (postbyte     ) & 7; // Bits 2..0
 
@@ -3369,7 +3375,6 @@ static void directbit_helper(operand_t operand, sample_t *sample_q) {
    case 0: reg_bit = get_FLAG(reg_bitnum);                       break;
    case 1: reg_bit = (ACCA < 0) ? -1 : (ACCA >> reg_bitnum) & 1; break;
    case 2: reg_bit = (ACCB < 0) ? -1 : (ACCB >> reg_bitnum) & 1; break;
-   default:  return; // TODO Illegal Instruction Trap ?
    }
 
    // Compute the bit operation, allowing for reg_bit to be unknown
