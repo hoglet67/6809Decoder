@@ -457,7 +457,7 @@ static void unpack(int result, int *hi_byte, int *lo_byte) {
    }
 }
 
-static int *get_regi(int i) {
+static int *get_index_reg(int i) {
    i &= 3;
    switch(i) {
    case 0: return &X;
@@ -1273,7 +1273,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       break;
    case INDEXED:
       {
-         int *reg = get_regi((pb >> 5) & 0x03);
+         int *reg = get_index_reg((pb >> 5) & 0x03);
 
          // In 6309 mode, the 7 illegal postbytes cause illegal instruction traps
          // 92 b2 d2 f2   1xx10010
@@ -1308,10 +1308,12 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                   case 2:           /* ,W++ */
                      ea = W;
                      W = (W + 2) & 0xffff;
+                     unpack(W, &ACCE, &ACCF);
                      break;
                   case 3:           /* ,--W */
                      W = (W - 2) & 0xffff;
                      ea = W;
+                     unpack(W, &ACCE, &ACCF);
                      break;
                   }
                }
