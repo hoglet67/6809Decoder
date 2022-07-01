@@ -23,14 +23,9 @@ static const char cpu_6309_state[] = "A=?? B=?? E=?? F=?? X=???? Y=???? U=???? S
 // address that cannot be included in the opcode table, as they depend on the
 // indexing mode in the post byte.
 
-// On the 6809 there are 15 undefined postbytes, marked as XX below
-// On the 6309 8 of these are used for the W based modes, leaving 7 as traps
-
-// TODO: What actually happens on the 6809 with these?
-
-#define XX -1
-
-#define MAX_VALID_POSTBYTE_CYCLES 8
+// Negative values indicate undefined postbytes
+//  -- On the 6809 there are 39
+//  -- On the 6309 there are  7
 
 static int postbyte_cycles_6809[0x100] = {
 // x0  x1  x2  x3  x4  x5  x6  x7  x8  x9  xA  xB  xC  xD  xE  xF
@@ -42,14 +37,14 @@ static int postbyte_cycles_6809[0x100] = {
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 5x
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 6x
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 7x
-   2,  3,  2,  3,  0,  1,  1, XX,  1,  4, XX,  4,  1,  5, XX, XX,  // 8x
-  XX,  6, XX,  6,  3,  4,  4, XX,  4,  7, XX,  8,  4,  8, XX,  5,  // 9x
-   2,  3,  2,  3,  0,  1,  1, XX,  1,  4, XX,  4,  1,  5, XX, XX,  // Ax
-  XX,  6, XX,  6,  3,  4,  4, XX,  4,  7, XX,  8,  4,  8, XX, XX,  // Bx
-   2,  3,  2,  3,  0,  1,  1, XX,  1,  4, XX,  4,  1,  5, XX, XX,  // Cx
-  XX,  6, XX,  6,  3,  4,  4, XX,  4,  7, XX,  8,  4,  8, XX, XX,  // Dx
-   2,  3,  2,  3,  0,  1,  1, XX,  1,  4, XX,  4,  1,  5, XX, XX,  // Ex
-  XX,  6, XX,  6,  3,  4,  4, XX,  4,  7, XX,  8,  4,  8, XX, XX   // Fx
+   2,  3,  2,  3,  0,  1,  1, -1,  1,  4, -4,  4,  1,  5, -5, -2,  // 8x
+  -5,  6, -5,  6,  3,  4,  4, -4,  4,  7, -7,  7,  4,  8, -8,  5,  // 9x
+   2,  3,  2,  3,  0,  1,  1, -1,  1,  4, -4,  4,  1,  5, -5, -2,  // Ax
+  -5,  6, -5,  6,  3,  4,  4, -4,  4,  7, -7,  7,  4,  8, -8, -5,  // Bx
+   2,  3,  2,  3,  0,  1,  1, -1,  1,  4, -4,  4,  1,  5, -5, -2,  // Cx
+  -5,  6, -5,  6,  3,  4,  4, -4,  4,  7, -7,  7,  4,  8, -8, -5,  // Dx
+   2,  3,  2,  3,  0,  1,  1, -1,  1,  4, -4,  4,  1,  5, -5, -2,  // Ex
+  -5,  6, -5,  6,  3,  4,  4, -4,  4,  7, -7,  7,  4,  8, -8, -5   // Fx
 };
 
 // From Addendum to The 6309 Book
@@ -67,13 +62,13 @@ static int postbyte_cycles_6309_emu[0x100] = {
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 6x
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 7x
    2,  3,  2,  3,  0,  1,  1,  1,  1,  4,  1,  4,  1,  5,  1,  0,  // 8x
-   3,  6, 17,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4,  5,  // 9x
+   3,  6,-17,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4,  5,  // 9x
    2,  3,  2,  3,  0,  1,  1,  1,  1,  4,  1,  4,  1,  5,  1,  2,  // Ax
-   5,  6, 17,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4, 17,  // Bx
+   5,  6,-17,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4,-17,  // Bx
    2,  3,  2,  3,  0,  1,  1,  1,  1,  4,  1,  4,  1,  5,  1,  1,  // Cx
-   4,  6, 17,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4, 17,  // Dx
+   4,  6,-17,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4,-17,  // Dx
    2,  3,  2,  3,  0,  1,  1,  1,  1,  4,  1,  4,  1,  5,  1,  1,  // Ex
-   4,  6, 17,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4, 17   // Fx
+   4,  6,-17,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4,-17   // Fx
 };
 
 // From Addendum to The 6309 Book
@@ -91,13 +86,13 @@ static int postbyte_cycles_6309_nat[0x100] = {
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 6x
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 7x
    1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  0,  // 8x
-   3,  5, 19,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4,  4,  // 9x
+   3,  5,-19,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4,  4,  // 9x
    1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  2,  // Ax
-   5,  5, 19,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4, 19,  // Bx
+   5,  5,-19,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4,-19,  // Bx
    1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  1,  // Cx
-   4,  5, 19,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4, 19,  // Dx
+   4,  5,-19,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4,-19,  // Dx
    1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  1,  // Ex
-   4,  5, 19,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4, 19   // Fx
+   4,  5,-19,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4,-19   // Fx
 };
 
 // In PSHS/PSHU/PULS/PULU, the postbyte controls which registers are pulled
@@ -809,7 +804,7 @@ static int get_num_cycles(sample_t *sample_q) {
       }
       // Negative indicates an illegal index mode
       if (postbyte_cycles < 0) {
-         postbyte_cycles = 0;
+         postbyte_cycles = -postbyte_cycles;
       }
       cycle_count += postbyte_cycles;
    }
@@ -1273,17 +1268,25 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       break;
    case INDEXED:
       {
-         int *reg = get_index_reg((pb >> 5) & 0x03);
-
-         // In 6309 mode, the 7 illegal postbytes cause illegal instruction traps
-         // 92 b2 d2 f2   1xx10010
-         //    bf df ff   1xx11111
-         if (cpu6309 && (pb != 0x9f) && (((pb & 0x9f) == 0x92) || (pb & 0x9f) == 0x9f)) {
-            failflag |= FAIL_UNDOC;
-            interrupt_helper(sample_q, oi + 5, 1, VEC_IL);
-            return;
+         int postbyte_cycles;
+         if (cpu6309) {
+            if (NM == 1) {
+               postbyte_cycles = postbyte_cycles_6309_nat[pb];
+            } else {
+               postbyte_cycles = postbyte_cycles_6309_emu[pb];
+            }
+         } else {
+            postbyte_cycles = postbyte_cycles_6809[pb];
          }
-
+         if (postbyte_cycles < 0) {
+            postbyte_cycles = -postbyte_cycles;
+            failflag |= FAIL_BADM;
+            if (cpu6309) {
+               interrupt_helper(sample_q, oi + 5, 1, VEC_IL);
+               return;
+            }
+         }
+         int *reg = get_index_reg((pb >> 5) & 0x03);
          if (!(pb & 0x80)) {       /* n4,R */
             if (*reg >= 0) {
                if (pb & 0x10) {
@@ -1408,30 +1411,17 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
             if (pb & 0x10) {
                // In this mode there is a further level of indirection to find the ea
                // The postbyte_cycles tables contain the number of extra cycles for this indexed mode
-               int offset = 0;
-               if (cpu6309) {
-                  if (NM == 1) {
-                     offset += postbyte_cycles_6309_nat[pb];
-                  } else {
-                     offset += postbyte_cycles_6309_emu[pb];
-                  }
-               } else {
-                  offset += postbyte_cycles_6809[pb];
+               int offset = postbyte_cycles;
+               // In long form: offset = oi + 2 + postbyte_cycles - 2;
+               // - the oi skips the prefix
+               // - the first 2 skips the opcode and postbyte
+               // - the final 2 steps back to the effective address read
+               offset += oi;
+               if (ea >= 0) {
+                  memory_read(sample_q[offset    ].data, ea,     MEM_POINTER);
+                  memory_read(sample_q[offset + 1].data, ea + 1, MEM_POINTER);
                }
-               if (offset >= 0 && offset <= MAX_VALID_POSTBYTE_CYCLES) {
-                  // In long form: offset = oi + 2 + postbyte_cycles - 2;
-                  // - the oi skips the prefix
-                  // - the first 2 skips the opcode and postbyte
-                  // - the final 2 steps back to the effective address read
-                  offset += oi;
-                  if (ea >= 0) {
-                     memory_read(sample_q[offset    ].data, ea,     MEM_POINTER);
-                     memory_read(sample_q[offset + 1].data, ea + 1, MEM_POINTER);
-                  }
-                  ea = ((sample_q[offset].data << 8) + sample_q[offset + 1].data) & 0xffff;
-               } else {
-                  failflag |= FAIL_BADM;
-               }
+               ea = ((sample_q[offset].data << 8) + sample_q[offset + 1].data) & 0xffff;
             }
          }
       }
