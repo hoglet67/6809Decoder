@@ -20,7 +20,7 @@ static int rom_latch      = 0;
 static char buffer[256];
 
 // Machine specific memory rd/wr handlers
-static int (*memory_read_fn)(int data, int ea);
+static void (*memory_read_fn)(int data, int ea);
 static int (*memory_write_fn)(int data, int ea);
 
 // Machine specific address display handler (to allow SW Rom bank on the Beeb to be shown)
@@ -72,14 +72,12 @@ static int addr_display_default(char *bp, int ea) {
    return 4;
 }
 
-static int memory_read_default(int data, int ea) {
-   int fail = 0;
+static void memory_read_default(int data, int ea) {
    if (memory[ea] >= 0 && memory[ea] != data) {
-      fail = memory[ea] ^ data;
+      log_memory_fail(ea, memory[ea], data);
       failflag |= FAIL_MEMORY;
    }
    memory[ea] = data;
-   return fail;
 }
 
 static int memory_write_default(int data, int ea) {
@@ -97,14 +95,12 @@ static void init_default() {
 // Dragon Memory Handlers
 // ==================================================
 
-static int memory_read_dragon(int data, int ea) {
-   int fail = 0;
+static void memory_read_dragon(int data, int ea) {
    if (memory[ea] >= 0 && memory[ea] != data && (ea < 0xff00 || ea >= 0xfff0)) {
-      fail = memory[ea] ^ data;
+      log_memory_fail(ea, memory[ea], data);
       failflag |= FAIL_MEMORY;
    }
    memory[ea] = data;
-   return fail;
 }
 
 static void init_dragon() {
@@ -148,17 +144,15 @@ static inline int *get_memptr_beeb(int ea) {
    }
 }
 
-static int memory_read_beeb(int data, int ea) {
-   int fail = 0;
+static void memory_read_beeb(int data, int ea) {
    if (ea < 0xfc00 || ea >= 0xff00) {
       int *memptr = get_memptr_beeb(ea);
       if (*memptr >= 0 && *memptr != data) {
-         fail = *memptr ^ data;
+         log_memory_fail(ea, *memptr, data);
          failflag |= FAIL_MEMORY;
       }
       memory[ea] = data;
    }
-   return fail;
 }
 
 static int memory_write_beeb(int data, int ea) {
@@ -219,19 +213,15 @@ void memory_set_wr_logging(int bitmask) {
 }
 
 void memory_read(int data, int ea, mem_access_t type) {
-   int fail = 0;
    assert(ea >= 0);
    assert(data >= 0);
-   // Delegate memory read to machine specific handler
-   if (mem_model & (1 << type)) {
-      fail = (*memory_read_fn)(data, ea);
-   }
    // Log memory read
    if (mem_rd_logging & (1 << type)) {
       log_memory_access("Rd: ", data, ea, 0);
-      if (fail) {
-         log_memory_fail(ea, data ^ fail, data);
-      }
+   }
+   // Delegate memory read to machine specific handler
+   if (mem_model & (1 << type)) {
+      (*memory_read_fn)(data, ea);
    }
 }
 
