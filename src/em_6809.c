@@ -1427,8 +1427,9 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                // - the final 2 steps back to the effective address read
                offset += oi;
                if (ea >= 0) {
-                  memory_read(sample_q[offset    ].data, ea,     MEM_POINTER);
-                  memory_read(sample_q[offset + 1].data, ea + 1, MEM_POINTER);
+                  memory_read(sample_q[offset    ].data, ea, MEM_POINTER);
+                  ea = (ea + 1 ) & 0xffff;
+                  memory_read(sample_q[offset + 1].data, ea, MEM_POINTER);
                }
                ea = ((sample_q[offset].data << 8) + sample_q[offset + 1].data) & 0xffff;
             }
