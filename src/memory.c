@@ -11,21 +11,25 @@ static int mem_model      = 0;
 static int mem_rd_logging = 0;
 static int mem_wr_logging = 0;
 
+// Standard sideways ROM (upto 16 banks)
+#define SWROM_SIZE          0x4000
+#define SWROM_NUM_BANKS     16
+static int *swrom         = NULL;
+static int rom_latch      = 0;
+
 static char buffer[256];
 
 // Machine specific memory rd/wr handlers
 static int (*memory_read_fn)(int data, int ea);
 static int (*memory_write_fn)(int data, int ea);
 
-static inline int write_addr(char *bp, int ea) {
-   write_hex4(bp, ea);
-   return 4;
-}
+// Machine specific address display handler (to allow SW Rom bank on the Beeb to be shown)
+static int (*addr_display_fn)(char *bp, int ea);
 
 static inline void log_memory_access(char *msg, int data, int ea, int ignored) {
    char *bp = buffer;
    bp += write_s(bp, msg);
-   bp += write_addr(bp, ea);
+   bp += addr_display_fn(bp, ea);
    bp += write_s(bp, " = ");
    write_hex2(bp, data);
    bp += 2;
@@ -40,7 +44,7 @@ static inline void log_memory_access(char *msg, int data, int ea, int ignored) {
 static inline void log_memory_fail(int ea, int expected, int actual) {
    char *bp = buffer;
    bp += write_s(bp, "memory modelling failed at ");
-   bp += write_addr(bp, ea);
+   bp += addr_display_fn(bp, ea);
    bp += write_s(bp, ": expected ");
    write_hex2(bp, expected);
    bp += 2;
@@ -63,6 +67,11 @@ static int *init_ram(int size) {
 // Default Memory Handlers
 // ==================================================
 
+static int addr_display_default(char *bp, int ea) {
+   write_hex4(bp, ea);
+   return 4;
+}
+
 static int memory_read_default(int data, int ea) {
    int fail = 0;
    if (memory[ea] >= 0 && memory[ea] != data) {
@@ -81,6 +90,7 @@ static int memory_write_default(int data, int ea) {
 static void init_default() {
    memory_read_fn  = memory_read_default;
    memory_write_fn = memory_write_default;
+   addr_display_fn = addr_display_default;
 }
 
 // ==================================================
@@ -100,25 +110,71 @@ static int memory_read_dragon(int data, int ea) {
 static void init_dragon() {
    memory_read_fn  = memory_read_dragon;
    memory_write_fn = memory_write_default;
+   addr_display_fn = addr_display_default;
 }
 
 // ==================================================
 // Beeb Memory Handlers
 // ==================================================
 
+#define TO_HEX(value) ((value) + ((value) < 10 ? '0' : 'A' - 10))
+
+
+static int addr_display_beeb(char *bp, int ea) {
+   if (ea >= 0x8000 && ea < 0xc000) {
+      *bp++ = TO_HEX(rom_latch);
+      *bp++ = ':';
+   } else {
+      *bp++ = ' ';
+      *bp++ = ' ';
+   }
+   write_hex4(bp, ea);
+   return 6;
+}
+
+static inline void set_rom_latch(int data) {
+   rom_latch = data;
+}
+
+static inline int *get_memptr_beeb(int ea) {
+   if (ea < 0) {
+      fprintf(stderr, "EA should never be undefined; exiting\n");
+      exit(1);
+   }
+   if (ea >= 0x8000 && ea < 0xC000) {
+      return swrom + (rom_latch << 14) + (ea & 0x3FFF);
+   } else {
+      return memory + ea;
+   }
+}
+
 static int memory_read_beeb(int data, int ea) {
    int fail = 0;
-   if (memory[ea] >= 0 && memory[ea] != data && (ea < 0xfc00 || ea >= 0xff00)) {
-      fail = memory[ea] ^ data;
-      failflag |= FAIL_MEMORY;
+   if (ea < 0xfc00 || ea >= 0xff00) {
+      int *memptr = get_memptr_beeb(ea);
+      if (*memptr >= 0 && *memptr != data) {
+         fail = *memptr ^ data;
+         failflag |= FAIL_MEMORY;
+      }
+      memory[ea] = data;
    }
-   memory[ea] = data;
    return fail;
 }
 
+static int memory_write_beeb(int data, int ea) {
+   if (ea == 0xfe30) {
+      set_rom_latch(data & 0xf);
+   }
+   int *memptr = get_memptr_beeb(ea);
+   *memptr = data;
+   return 0;
+}
+
 static void init_beeb() {
+   swrom = init_ram(SWROM_NUM_BANKS * SWROM_SIZE);
    memory_read_fn  = memory_read_beeb;
-   memory_write_fn = memory_write_default;
+   memory_write_fn = memory_write_beeb;
+   addr_display_fn = addr_display_beeb;
 }
 
 // ==================================================
@@ -142,6 +198,9 @@ void memory_init(int size, machine_t machine) {
 }
 
 void memory_destroy() {
+   if (swrom) {
+      free(swrom);
+   }
    if (memory) {
       free(memory);
    }
