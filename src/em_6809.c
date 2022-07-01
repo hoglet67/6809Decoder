@@ -1134,18 +1134,27 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       // In some indexed addressing modes there is also a displacement
       if (pb & 0x80) {
          int type = pb & 0x0f;
-         if (type == 8 || type == 9 || type == 12 || type == 13 || pb == 0x9f || pb == 0xaf || pb == 0xb0) {
-            if (PC >= 0) {
-               memory_read(sample_q[index].data, PC + index, MEM_INSTR);
+         int disp_bytes = 0;
+         if (cpu6309) {
+            if (type == 9 || type == 13 || pb == 0x9f || pb == 0xaf || pb == 0xb0) {
+               disp_bytes = 2;
+            } else if (type == 8 || type == 12) {
+               disp_bytes = 1;
             }
-            index++;
-         }
-         if (type == 9 || type == 13 || pb == 0x9f || pb == 0xaf || pb == 0xb0) {
-            if (PC >= 0) {
-               memory_read(sample_q[index].data, PC + index, MEM_INSTR);
+         } else {
+            if (type == 9 || type == 13 || type == 15) {
+               disp_bytes = 2;
+            } else if (type == 8 || type == 12) {
+               disp_bytes = 1;
             }
-            index++;
          }
+         // Memory modelling of the displacement bytes
+         if (PC >= 0) {
+            for (int i = 0; i < disp_bytes; i++) {
+               memory_read(sample_q[index + i].data, PC + index + i, MEM_INSTR);
+            }
+         }
+         index += disp_bytes;
       }
       break;
    case DIRECTBIT:
