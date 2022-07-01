@@ -1088,9 +1088,8 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
    }
 
    // Sanity check the LS 4 bits of the PC Address
-   // TODO: A3 not reliable for reasons I don't understand
    if (PC >= 0 && sample_q[0].addr >= 0) {
-      if ((PC & 7) != (sample_q[0].addr & 7)) {
+      if ((PC & 15) != sample_q[0].addr) {
          failflag |= FAIL_PC;
       }
    }
