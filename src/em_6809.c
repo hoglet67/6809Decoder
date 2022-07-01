@@ -1258,7 +1258,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
       break;
    case RELATIVE_16:
       if (PC >= 0) {
-         ea = (PC + (int16_t)((sample_q[oi + 1].data << 8) + sample_q[oi + 2].data)) & 0xffff;
+         ea = (PC + (sample_q[oi + 1].data << 8) + sample_q[oi + 2].data) & 0xffff;
       }
       break;
    case DIRECT:
@@ -1364,17 +1364,32 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                   break;
                case 5:                 /* B,R */
                   if (*reg >= 0 && ACCB >= 0) {
-                     ea = (*reg + ACCB) & 0xffff;
+                     // The accumulator is treated as a 8-bit signed offset (!!!)
+                     int offset = ACCB;
+                     if (offset & 0x80) {
+                        offset -= 0x100;
+                     }
+                     ea = (*reg + offset) & 0xffff;
                   }
                   break;
                case 6:                 /* A,R */
                   if (*reg >= 0 && ACCA >= 0) {
-                     ea = (*reg + ACCA) & 0xffff;
+                     // The accumulator is treated as a 8-bit signed offset (!!!)
+                     int offset = ACCA;
+                     if (offset & 0x80) {
+                        offset -= 0x100;
+                     }
+                     ea = (*reg + offset) & 0xffff;
                   }
                   break;
                case 7:                 /* E,R */
                   if (cpu6309 && *reg >= 0 && ACCE >= 0) {
-                     ea = (*reg + ACCE) & 0xffff;
+                     // The accumulator is treated as a 8-bit signed offset (!!!)
+                     int offset = ACCE;
+                     if (offset & 0x80) {
+                        offset -= 0x100;
+                     }
+                     ea = (*reg + offset) & 0xffff;
                   }
                   break;
                case 8:                 /* n7,R */
@@ -1384,12 +1399,17 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                   break;
                case 9:                 /* n15,R */
                   if (*reg >= 0) {
-                     ea = (*reg + (int16_t)((sample_q[oi + 2].data << 8) + sample_q[oi + 3].data)) & 0xffff;
+                     ea = (*reg + (sample_q[oi + 2].data << 8) + sample_q[oi + 3].data) & 0xffff;
                   }
                   break;
                case 10:                /* F,R */
                   if (cpu6309 && *reg >= 0 && ACCF >= 0) {
-                     ea = (*reg + ACCF) & 0xffff;
+                     // The accumulator is treated as a 8-bit signed offset (!!!)
+                     int offset = ACCF;
+                     if (offset & 0x80) {
+                        offset -= 0x100;
+                     }
+                     ea = (*reg + offset) & 0xffff;
                   }
                   break;
                case 11:                /* D,R */
@@ -1404,7 +1424,7 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
                   break;
                case 13:                /* n15,PCR */
                   if (PC >= 0) {
-                     ea = (PC + (int16_t)((sample_q[oi + 2].data << 8) + sample_q[oi + 3].data)) & 0xffff;
+                     ea = (PC + (sample_q[oi + 2].data << 8) + sample_q[oi + 3].data) & 0xffff;
                   }
                   break;
                case 14:                /* W,R */
@@ -2322,6 +2342,7 @@ static int sub16_helper(int val, int cin, operand_t operand) {
 static int op_fn_ABX(operand_t operand, ea_t ea, sample_t *sample_q) {
    // X = X + B
    if (X >= 0 && ACCB >= 0) {
+      // Here ABBC is treated as an 8-bit unsigned value
       X = (X + ACCB) & 0xffff;
    } else {
       X = -1;
