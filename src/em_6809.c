@@ -533,6 +533,7 @@ static int get_regp_6309(int i) {
 // Used in EXN/TRV on the 6309
 static void set_regp_6309(int i, int val) {
    i &= 15;
+   // cases 12 and 13 (writing back to the 0 register) are NOPs (they don't trap)
    switch(i) {
    case  0: unpack(val, &ACCA, &ACCB); break;
    case  1: X  = val;                  break;
@@ -679,10 +680,6 @@ static int em_6809_match_reset(sample_t *sample_q, int num_samples) {
 // TODO: Cycle predition cases we don't yet handle correctly
 //
 // Instructions that OPTIONALLY trap
-//   Indexed addressing with an illegal postbyte (92 b2 bf d2 df f2 ff)
-//   EXN/TFR/xxxR writing back to the zero register (12/13) which may trap
-//   DIRECTBIT addressing with an illegal register (3)
-//   TFM with an illegal register (>4)
 //   DIVD division by zero
 //   DIVQ division by zero
 //
@@ -807,6 +804,16 @@ static int get_num_cycles(sample_t *sample_q) {
          postbyte_cycles = -postbyte_cycles;
       }
       cycle_count += postbyte_cycles;
+   } else if (cpu6309 && b0 == 0x11) {
+      // TFM
+      if ((b1 & 0xFC) == 0x38) {
+         int pb = sample_q[2].data;
+         if (((pb & 0xf0) > 0x40) || ((pb & 0x0f) > 0x04)) {
+            // Illegal index register
+            cycle_count = (NM == 1) ? 25 : 23;
+         }
+      }
+
    }
    return cycle_count;
 }
@@ -4189,9 +4196,9 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_t *sample_q) {
 
    // Only D, X, Y, U, S are legal, anything else causes an illegal instruction trap
    if (r0 > 4 || r1 > 4) {
-
-      // TODO: confirm offset of the start of the trap
-      interrupt_helper(sample_q, 4, 1, VEC_IL);
+      failflag |= FAIL_BADM;
+      interrupt_helper(sample_q, 7, 1, VEC_IL);
+      return -1;
 
    } else {
 

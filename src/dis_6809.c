@@ -190,6 +190,7 @@ int dis_6809_disassemble(char *buffer, instruction_t *instruction) {
          case 0x113b: // TFM r0 , r1+
             *ptr++ = tfmreg[(pb >> 4) & 0xf];
             *ptr++ = tfmr0inc[opcode & 3];
+            *ptr++ = ',';
             *ptr++ = tfmreg[pb & 0xf];
             *ptr++ = tfmr1inc[opcode & 3];
             break;
