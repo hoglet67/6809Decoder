@@ -2674,15 +2674,88 @@ static int op_fn_CWAI(operand_t operand, ea_t ea, sample_t *sample_q) {
 static int op_fn_DAA(operand_t operand, ea_t ea, sample_t *sample_q) {
    if (ACCA >= 0 && H >= 0 && C >= 0) {
       int correction = 0x00;
-      if (H == 1 && (ACCA & 0x0F) > 0x09) {
+      if (H == 1 || (ACCA & 0x0f) > 0x09) {
          correction |= 0x06;
       }
-      if (C == 1 || (ACCA & 0xF0) > 0x90 || ((ACCA & 0xF0) > 0x80 && (ACCA & 0x0F) > 0x09)) {
+      if (C == 1 || (ACCA & 0xf0) > 0x90 || ((ACCA & 0xf0) > 0x80 && (ACCA & 0x0f) > 0x09)) {
          correction |= 0x60;
+      }
+      if (cpu6309 && C == 1 && ACCA >= 0x80 && ACCA <= 0x99) {
+
+         // This difference from the 6809 is not widely known
+
+         // C=1 H=0 A=80 => DAA => 6809:A=E0  6309:A=00
+         // C=1 H=0 A=81 => DAA => 6809:A=E1  6309:A=01
+         // C=1 H=0 A=82 => DAA => 6809:A=E2  6309:A=02
+         // C=1 H=0 A=83 => DAA => 6809:A=E3  6309:A=03
+         // C=1 H=0 A=84 => DAA => 6809:A=E4  6309:A=04
+         // C=1 H=0 A=85 => DAA => 6809:A=E5  6309:A=05
+         // C=1 H=0 A=86 => DAA => 6809:A=E6  6309:A=06
+         // C=1 H=0 A=87 => DAA => 6809:A=E7  6309:A=07
+         // C=1 H=0 A=88 => DAA => 6809:A=E8  6309:A=08
+         // C=1 H=0 A=89 => DAA => 6809:A=E9  6309:A=09
+         // C=1 H=0 A=8A => DAA => 6809:A=F0  6309:A=10
+         // C=1 H=0 A=8B => DAA => 6809:A=F1  6309:A=11
+         // C=1 H=0 A=8C => DAA => 6809:A=F2  6309:A=12
+         // C=1 H=0 A=8D => DAA => 6809:A=F3  6309:A=13
+         // C=1 H=0 A=8E => DAA => 6809:A=F4  6309:A=14
+         // C=1 H=0 A=8F => DAA => 6809:A=F5  6309:A=15
+         // C=1 H=0 A=90 => DAA => 6809:A=F0  6309:A=00
+         // C=1 H=0 A=91 => DAA => 6809:A=F1  6309:A=01
+         // C=1 H=0 A=92 => DAA => 6809:A=F2  6309:A=02
+         // C=1 H=0 A=93 => DAA => 6809:A=F3  6309:A=03
+         // C=1 H=0 A=94 => DAA => 6809:A=F4  6309:A=04
+         // C=1 H=0 A=95 => DAA => 6809:A=F5  6309:A=05
+         // C=1 H=0 A=96 => DAA => 6809:A=F6  6309:A=06
+         // C=1 H=0 A=97 => DAA => 6809:A=F7  6309:A=07
+         // C=1 H=0 A=98 => DAA => 6809:A=F8  6309:A=00
+         // C=1 H=0 A=99 => DAA => 6809:A=F9  6309:A=01
+
+         // C=1 H=1 A=80 => DAA => 6809:A=E6  6309:A=06
+         // C=1 H=1 A=81 => DAA => 6809:A=E7  6309:A=07
+         // C=1 H=1 A=82 => DAA => 6809:A=E8  6309:A=08
+         // C=1 H=1 A=83 => DAA => 6809:A=E9  6309:A=09
+         // C=1 H=1 A=84 => DAA => 6809:A=EA  6309:A=0A
+         // C=1 H=1 A=85 => DAA => 6809:A=EB  6309:A=0B
+         // C=1 H=1 A=86 => DAA => 6809:A=EC  6309:A=0C
+         // C=1 H=1 A=87 => DAA => 6809:A=ED  6309:A=0D
+         // C=1 H=1 A=88 => DAA => 6809:A=EE  6309:A=0E
+         // C=1 H=1 A=89 => DAA => 6809:A=EF  6309:A=0F
+         // C=1 H=1 A=8A => DAA => 6809:A=F0  6309:A=10
+         // C=1 H=1 A=8B => DAA => 6809:A=F1  6309:A=11
+         // C=1 H=1 A=8C => DAA => 6809:A=F2  6309:A=12
+         // C=1 H=1 A=8D => DAA => 6809:A=F3  6309:A=13
+         // C=1 H=1 A=8E => DAA => 6809:A=F4  6309:A=14
+         // C=1 H=1 A=8F => DAA => 6809:A=F5  6309:A=15
+         // C=1 H=1 A=90 => DAA => 6809:A=F6  6309:A=06
+         // C=1 H=1 A=91 => DAA => 6809:A=F7  6309:A=07
+         // C=1 H=1 A=92 => DAA => 6809:A=F8  6309:A=08
+         // C=1 H=1 A=93 => DAA => 6809:A=F9  6309:A=09
+         // C=1 H=1 A=94 => DAA => 6809:A=FA  6309:A=0A
+         // C=1 H=1 A=95 => DAA => 6809:A=FB  6309:A=0B
+         // C=1 H=1 A=96 => DAA => 6809:A=FC  6309:A=0C
+         // C=1 H=1 A=97 => DAA => 6809:A=FD  6309:A=0D
+         // C=1 H=1 A=98 => DAA => 6809:A=FE  6309:A=00
+         // C=1 H=1 A=99 => DAA => 6809:A=FF  6309:A=00
+
+         // I haven't worked out a pattern here, but this logic is correct on an exhaustive test
+
+                                    // 6809 correction  6309 correction
+         if (ACCA == 0x99) {
+            correction = 0x68 - H;  // 0x60/0x66   ->   0x68/0x67
+         } else if (ACCA == 0x98) {
+            correction = 0x68;      // 0x60/0x66   ->   0x68/0x68
+         } else if (ACCA >= 0x90) {
+            correction += 0x10;     // 0x60/0x66   ->   0x70/0x76
+         } else {
+            correction += 0x20;     // 0x60/0x66   ->   0x80/0x86
+         }
       }
       int tmp = ACCA + correction;
       // C is apparently only ever set by DAA, never cleared
       C |= (tmp >> 8) & 1;
+      // V is is calculated as follows on both the 6809 and the 6309
+      V = ((tmp >> 7) & 1) ^ C;
       tmp &= 0xff;
       set_NZ(tmp);
       ACCA = tmp;
@@ -2702,7 +2775,8 @@ static int op_fn_DAA(operand_t operand, ea_t ea, sample_t *sample_q) {
    // ORing that with the pre Decimal Adjust Carry input resulting in
    // something approximating what you find on an EF68A09P.
 
-   V = 0;
+   // John's description of V above doesn't yeild the correct results
+
    return -1;
 }
 
