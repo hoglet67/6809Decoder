@@ -1760,8 +1760,7 @@ static int asl_helper(int val) {
       set_NZVC_unknown();
    }
    // The datasheet says the half-carry flag is undefined, but in practice
-   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
-   // H = -1;
+   // it seems to be unchanged (i.e. no errors). Verified on 6309.
    return val;
 }
 
@@ -1787,8 +1786,7 @@ static int asr_helper(int val) {
       set_NZC_unknown();
    }
    // The datasheet says the half-carry flag is undefined, but in practice
-   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
-   // H = -1;
+   // it seems to be unchanged (i.e. no errors). Verified on 6309.
    return val;
 }
 
@@ -1842,8 +1840,7 @@ static void cmp_helper(int val, operand_t operand) {
       set_NZVC_unknown();
    }
    // The datasheet says the half-carry flag is undefined, but in practice
-   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
-   // H = -1;
+   // it seems to be unchanged (i.e. no errors). Verified on 6309.
 }
 
 static void cmp16_helper(int val, operand_t operand) {
@@ -1991,8 +1988,7 @@ static int neg_helper(int val) {
    val = (-val) & 0xff;
    set_NZ(val);
    // The datasheet says the half-carry flag is undefined, but in practice
-   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
-   // H = -1;
+   // it seems to be unchanged (i.e. no errors). Verified on 6309.
    return val;
 }
 
@@ -2316,8 +2312,7 @@ static int sub_helper(int val, int cin, operand_t operand) {
       return -1;
    }
    // The datasheet says the half-carry flag is undefined, but in practice
-   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
-   // H = -1;
+   // it seems to be unchanged (i.e. no errors). Verified on 6309.
 }
 
 static int sub16_helper(int val, int cin, operand_t operand) {
@@ -2338,8 +2333,7 @@ static int sub16_helper(int val, int cin, operand_t operand) {
       return -1;
    }
    // The datasheet says the half-carry flag is undefined, but in practice
-   // it seems to be unchanged (i.e. no errors). TODO: needs further testing
-   // H = -1;
+   // it seems to be unchanged (i.e. no errors). Verified on 6309.
 }
 
 // ====================================================================
