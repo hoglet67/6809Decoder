@@ -26,9 +26,6 @@ typedef enum {
 // DIVQ is the longest instructions, at 34 cycles
 #define LONGEST_INSTRUCTION 34
 
-// Sample Queue Depth - needs to fit the longest instruction
-#define DEPTH 40
-
 // Sample_type_t is an abstraction of both the 6502 SYNC and the 65816 VDA/VPA
 
 typedef enum {
@@ -101,7 +98,7 @@ typedef struct {
    void (*init)(arguments_t *args);
    int (*match_reset)(sample_t *sample_q, int num_samples);
    int (*match_interrupt)(sample_t *sample_q, int num_samples);
-   int (*count_cycles)(sample_t *sample_q);
+   int (*count_cycles)(sample_t *sample_q, int num_samples);
    void (*reset)(sample_t *sample_q, int num_cycles, instruction_t *instruction);
    void (*interrupt)(sample_t *sample_q, int num_cycles, instruction_t *instruction);
    void (*emulate)(sample_t *sample_q, int num_cycles, instruction_t *instruction);

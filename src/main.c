@@ -498,22 +498,24 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
    static int interrupt_depth = 0;
    static int skipping_interrupted = 0;
 
-   int num_cycles = 0;
+   int window = LONGEST_INSTRUCTION;
+
+   int num_cycles;
    int intr_seen = 0;
-   int rst_seen = em->match_reset(sample_q, num_samples);
+   int rst_seen = em->match_reset(sample_q, window);
    if (rst_seen) {
       num_cycles = rst_seen;
    } else {
-      intr_seen = em->match_interrupt(sample_q, num_samples);
+      intr_seen = em->match_interrupt(sample_q, window);
       if (intr_seen) {
          num_cycles = intr_seen;
       } else {
-         num_cycles = em->count_cycles(sample_q);
+         num_cycles = em->count_cycles(sample_q, num_samples);
       }
    }
 
    // Deal with partial final instruction
-   if (num_samples <= num_cycles || num_cycles == 0) {
+   if (num_samples < num_cycles || num_cycles == 0) {
       return num_samples;
    }
 
@@ -639,9 +641,7 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
       if (arguments.show_cycles) {
          *bp++ = ' ';
          *bp++ = ':';
-         *bp++ = ' ';
-         *bp++ = (num_cycles < 10) ? ' ' : ('0' + num_cycles / 10);
-         *bp++ = '0' + (num_cycles % 10);
+         bp += sprintf(bp, "%4d", num_cycles);
       }
       // Show register state
       if (fail || arguments.show_state) {
@@ -690,10 +690,18 @@ int decode_instruction(sample_t *sample_q, int num_samples) {
 // Queue a small number of samples so the decoders can lookahead
 // ====================================================================
 
+// BLOCK is guaranteed to be larger than the longest running instuction
+// TODO: apart from SYNC or CWAI
+
+#define BLOCK (256*1024)
+
+// Queue three blocks
+static sample_t sample_q[BLOCK * 3];
+
 void queue_sample(sample_t *sample) {
-   static sample_t sample_q[DEPTH];
-   static int index = 0;
    static int synced = 0;
+   static sample_t *sample_wr = sample_q;
+   static sample_t *sample_rd = sample_q;
 
    // Try to synchronize to the instructions stream using LIC
    if (!synced) {
@@ -714,29 +722,35 @@ void queue_sample(sample_t *sample) {
    }
 
    // Make a copy of the sample structure
-   sample_q[index++] = *sample;
+   *sample_wr++ = *sample;
 
+   // At the end of the stream, allow the buffered samples to drain
    if (sample->type == LAST) {
-      // To prevent edge condition, don't advertise the LAST marker
-      index--;
       // Drain the queue when the LAST marker is seen
-      while (index > 1) {
-         int consumed = decode_instruction(sample_q, index);
-         for (int i = 0; i < DEPTH - consumed; i++) {
-            sample_q[i] = sample_q[i + consumed];
-         }
-         index -= consumed;
+      while (sample_rd < sample_wr) {
+         sample_rd += decode_instruction(sample_rd, sample_wr - sample_rd);
       }
-   } else {
-      // Else queue the samples
-      // If the queue is full, then pass on to the decoder
-      if (index == DEPTH) {
-         int consumed = decode_instruction(sample_q, index);
-         for (int i = 0; i < DEPTH - consumed; i++) {
-            sample_q[i] = sample_q[i + consumed];
-         }
-         index -= consumed;
+      return;
+   }
+
+   // Sample_q is NOT a circular buffer!
+   //
+   // When we have two full blocks, we can start to consume the first. Once the first is
+   // consumed, we can move everything back in the block.
+   if (sample_wr > sample_q + 2 * BLOCK) {
+      while (sample_rd < sample_q + BLOCK) {
+         sample_rd += decode_instruction(sample_rd, sample_wr - sample_rd);
       }
+      // The first block has been processed, so move everything down a block
+      //printf("Block processed\n");
+      //printf("  sample_wr = %ld\n", sample_wr - sample_q);
+      //printf("  sample_rd = %ld\n", sample_rd - sample_q);
+      memmove(sample_q, sample_q + BLOCK, sizeof(sample_t) * (sample_wr - sample_q - BLOCK));
+      sample_rd -= BLOCK;
+      sample_wr -= BLOCK;
+      //printf("Block consumed\n");
+      //printf("  sample_wr = %ld\n", sample_wr - sample_q);
+      //printf("  sample_rd = %ld\n", sample_rd - sample_q);
    }
 }
 

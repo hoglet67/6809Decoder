@@ -236,6 +236,7 @@ static opcode_t instr_table_6809[];
 static opcode_t instr_table_6309[];
 
 static operation_t op_MULD ;
+static operation_t op_TFM  ;
 static operation_t op_TST  ;
 static operation_t op_XSTX ;
 static operation_t op_XSTU ;
@@ -683,8 +684,7 @@ static int em_6809_match_reset(sample_t *sample_q, int num_samples) {
 //   DIVD division by zero
 //   DIVQ division by zero
 //
-// Long running instructions:
-//   TFM
+// TFM that is interrupted
 //
 // Indefinte running instructions:
 //   SYNC
@@ -811,16 +811,22 @@ static int get_num_cycles(sample_t *sample_q) {
          if (((pb & 0xf0) > 0x40) || ((pb & 0x0f) > 0x04)) {
             // Illegal index register
             cycle_count = (NM == 1) ? 25 : 23;
+         } else {
+            int W = pack(ACCE, ACCF);
+            if (W >= 0) {
+               cycle_count = 6 + 3 * W;
+            } else {
+               cycle_count = -1; // Can't determine this
+            }
          }
       }
-
    }
    return cycle_count;
 }
 
-static int count_cycles_with_lic(sample_t *sample_q) {
+static int count_cycles_with_lic(sample_t *sample_q, int num_samples) {
    int offset = (NM == 1) ? 1 : 0;
-   for (int i = offset; i < LONGEST_INSTRUCTION; i++) {
+   for (int i = offset; i < num_samples; i++) {
       if (sample_q[i].type == LAST) {
          return 0;
       }
@@ -841,7 +847,7 @@ static int count_cycles_with_lic(sample_t *sample_q) {
    return 1;
 }
 
-static int count_cycles_without_lic(sample_t *sample_q) {
+static int count_cycles_without_lic(sample_t *sample_q, int num_samples) {
    int num_cycles = get_num_cycles(sample_q);
    if (num_cycles >= 0) {
       return num_cycles;
@@ -850,11 +856,11 @@ static int count_cycles_without_lic(sample_t *sample_q) {
    return 1;
 }
 
-static int em_6809_count_cycles(sample_t *sample_q) {
+static int em_6809_count_cycles(sample_t *sample_q, int num_samples) {
    if (sample_q[0].lic < 0) {
-      return count_cycles_without_lic(sample_q);
+      return count_cycles_without_lic(sample_q, num_samples);
    } else {
-      return count_cycles_with_lic(sample_q);
+      return count_cycles_with_lic(sample_q, num_samples);
    }
 }
 
@@ -1061,16 +1067,21 @@ static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t 
    int fast_c = (NM == 1) ? 13 : 10;
    int full_c = (NM == 1) ? 22 : 19;
    int offset = (NM == 1) ?  4 :  3;
+   int pc;
    if (num_cycles == fast_c) {
-      instruction->pc = interrupt_helper(sample_q, offset, 0, VEC_FIQ);
+      pc = interrupt_helper(sample_q, offset, 0, VEC_FIQ);
    } else if (num_cycles == full_c && sample_q[full_c - 3].addr == VEC_IRQ) {
       // IRQ
-      instruction->pc = interrupt_helper(sample_q, offset, 1, VEC_IRQ);
+      pc = interrupt_helper(sample_q, offset, 1, VEC_IRQ);
    } else if (num_cycles == full_c && sample_q[full_c - 3].addr == VEC_NMI) {
       // NMI
-      instruction->pc = interrupt_helper(sample_q, offset, 1, VEC_NMI);
+      pc = interrupt_helper(sample_q, offset, 1, VEC_NMI);
    } else {
       printf("*** could not determine interrupt type ***\n");
+      pc = -1;
+   }
+   if (instruction) {
+      instruction->pc = pc;
    }
 }
 
@@ -1216,7 +1227,9 @@ static void em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *i
 
    // Pick out the operand (Fig 17 in datasheet, esp sheet 5)
    operand_t operand;
-   if (instr->op == &op_MULD) {
+   if (instr->op == &op_TFM) {
+      operand = num_cycles;
+   } else if (instr->op == &op_MULD) {
       // There are many dead cycles at the end of MULD
       // TODO - Maybe we should add a dead-cycles column to the op data structure
       operand = (sample_q[num_cycles - 26].data << 8) + sample_q[num_cycles - 25].data;
@@ -4248,10 +4261,6 @@ static int op_fn_SUBW(operand_t operand, ea_t ea, sample_t *sample_q) {
    return -1;
 }
 
-// TODO: TFM is interruptable (!!!) and can be upto ~192K cycles (!!!!)
-//
-// TODO: We need a pattern to cope with variable/very long instructions like CWAIT / SYNC / TFM
-
 static int op_fn_TFM(operand_t operand, ea_t ea, sample_t *sample_q) {
    // 1138 TFM r0+, r1+
    // 1139 TFM r0-, r1-
@@ -4290,22 +4299,45 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_t *sample_q) {
       default: reg1 = pack(ACCA, ACCB); break;
       }
 
-      // TODO: For now we skip the memory modelling, as we don't have many samples queued
-
-      // The number of bytes transferred is in W
+      // The number of bytes expected to be transferred
       int W = pack(ACCE, ACCF);
 
-      // Update final value of R0
+      // If there is a mismatch, then check for an interrupt
+      int interrupted = 0;
+
+      // The number of bytes actually transferred (TFR may have been interrupted)
+      int num_bytes = W;
+      int num_cycles = operand;
+      int int_cycles = (NM == 1) ? 22 : 20;
+      if (W >= 0 && num_cycles != W) {
+         interrupted = em_6809_match_interrupt(sample_q + num_cycles - int_cycles, int_cycles);
+         if (interrupted) {
+            num_bytes = (operand - int_cycles - 5) / 3;
+         } else {
+            num_bytes = (operand - 6) / 3;
+         }
+      }
+
+      // Update R0, and memory read modelling
       if (reg0 >= 0) {
+         sample_t *sample = sample_q + 6;
          if (opcode == 0x38 || opcode == 0x3a) {
-            if (W >= 0) {
-               reg0 = (reg0 + W) & 0xffff;
+            if (num_bytes >= 0) {
+               for (int i = 0; i < num_bytes; i++) {
+                  memory_read(sample->data, reg0, MEM_DATA);
+                  reg0 = (reg0 + 1) & 0xffff;
+                  sample += 3;
+               }
             } else {
                reg0 = -1;
             }
          } else if (opcode == 0x39) {
-            if (W >= 0) {
-               reg0 = (reg0 - W) & 0xffff;
+            if (num_bytes >= 0) {
+               for (int i = 0; i < num_bytes; i++) {
+                  memory_read(sample->data, reg0, MEM_DATA);
+                  reg0 = (reg0 - 1) & 0xffff;
+                  sample += 3;
+               }
             } else {
                reg0 = -1;
             }
@@ -4319,17 +4351,26 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_t *sample_q) {
          }
       }
 
-      // Update final value of R1
+      // Update R0, and memory write modelling
       if (reg1 >= 0) {
+         sample_t *sample = sample_q + 8;
          if (opcode == 0x38 || opcode == 0x3b) {
-            if (W >= 0) {
-               reg1 = (reg1 + W) & 0xffff;
+            if (num_bytes >= 0) {
+               for (int i = 0; i < num_bytes; i++) {
+                  memory_write(sample->data, reg1, MEM_DATA);
+                  reg1 = (reg1 + 1) & 0xffff;
+                  sample += 3;
+               }
             } else {
                reg1 = -1;
             }
          } else if (opcode == 0x39) {
-            if (W >= 0) {
-               reg1 = (reg1 - W) & 0xffff;
+            if (num_bytes >= 0) {
+               for (int i = 0; i < num_bytes; i++) {
+                  memory_write(sample->data, reg1, MEM_DATA);
+                  reg1 = (reg1 - 1) & 0xffff;
+                  sample += 3;
+               }
             } else {
                reg1 = -1;
             }
@@ -4343,9 +4384,15 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_t *sample_q) {
          }
       }
 
-      // Update the final value of W, which is always zero
-      ACCE = 0;
-      ACCF = 0;
+      // Update the final value of W
+      if (W >= 0 && num_bytes >= 0) {
+         W -= num_bytes;
+         unpack(W, &ACCE, &ACCF);
+      }
+
+      if (interrupted) {
+         em_6809_interrupt(sample_q + num_cycles - int_cycles, int_cycles, NULL);
+      }
    }
 
    return -1;
