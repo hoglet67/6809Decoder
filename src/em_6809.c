@@ -635,7 +635,7 @@ static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
    int fast_o = (NM == 1) ? 10 :  7;
    int full_o = (NM == 1) ? 19 : 16;
    // FIQ:
-   //    m +  7   addr=6 ba=0 bs=1
+   //    m +  7   addr=6 ba=0 bs=1 <<<<<< fast_o
    //    m +  8   addr=7 ba=0 bs=1
    //    m +  9   addr=X ba=0 bs=0
    //    m + 10   <Start of first instruction>
@@ -644,7 +644,7 @@ static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
       return fast_o + 3;
    }
    // IRQ:
-   //    m + 16    addr=8 ba=0 bs=1
+   //    m + 16    addr=8 ba=0 bs=1 <<<<<< full_o
    //    m + 17    addr=9 ba=0 bs=1
    //    m + 18    addr=X ba=0 bs=0
    //    m + 19    <Start of first instruction>
@@ -653,7 +653,7 @@ static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
       return full_o + 3;;
    }
    // NMI:
-   //    m + full_o    addr=C ba=0 bs=1
+   //    m + 16    addr=C ba=0 bs=1 <<<<<< full_o
    //    m + 17    addr=D ba=0 bs=1
    //    m + 18    addr=X ba=0 bs=0
    //    m + 19    <Start of first instruction>
@@ -682,14 +682,8 @@ static int em_6809_match_reset(sample_t *sample_q, int num_samples) {
 // Instructions that OPTIONALLY trap
 //   DIVD division by zero
 //   DIVQ division by zero
-//
-// TFM that is interrupted
-//
-// Indefinte running instructions:
-//   SYNC
-//   CWAIT
 
-static int get_num_cycles(sample_t *sample_q) {
+static int get_num_cycles(sample_t *sample_q, int num_samples) {
    uint8_t b0 = sample_q[0].data;
    uint8_t b1 = sample_q[1].data;
    opcode_t *instr = get_instruction(instr_table, b0, b1);
@@ -772,12 +766,34 @@ static int get_num_cycles(sample_t *sample_q) {
          break;
       }
    }
-
-   if (b0 == 0x3B) {
+   if (b0 == 0x13) {
+      // SYNC, look ahead for sync acknowledge
+      cycle_count = -1;
+      if (sample_q[0].ba >= 0) {
+         for (int i = 1; i < num_samples; i++) {
+            if (sample_q[i].ba == 1) {
+               cycle_count = i + 2;
+               break;
+            }
+         }
+      }
+   } else if (b0 == 0x3B) {
+      // RTI
       int stacked_E = sample_q[2].data & 0x80;
       if (stacked_E) {
          // RTI takes 9 additional cycles if E = 1 (and two more if in native mode)
          cycle_count += (NM == 1) ? 11 : 9;
+      }
+   } else if (b0 == 0x3c) {
+      // CWAIT, ahead for fector fetch
+      cycle_count = -1;
+      if (sample_q[0].bs >= 0) {
+         for (int i = 1; i < num_samples; i++) {
+            if (sample_q[i].bs == 1) {
+               cycle_count = i + 3;
+               break;
+            }
+         }
       }
    } else if (b0 >= 0x34 && b0 <= 0x37) {
       // PSHS/PULS/PSHU/PULU
@@ -824,7 +840,15 @@ static int get_num_cycles(sample_t *sample_q) {
 }
 
 static int count_cycles_with_lic(sample_t *sample_q, int num_samples) {
+   int expected = get_num_cycles(sample_q, num_samples);
+   // In the case of SYNC when NM=0 then LIC can be set mid-instruction, so is unreliable
+   if (sample_q[0].data == 0x13) {
+      return expected;
+   }
+   // If NM==0 then LIC set on the last cycle of the instruction
+   // If NM==1 then LIC set on the first cycle of the instruction
    int offset = (NM == 1) ? 1 : 0;
+   // Search for LIC
    for (int i = offset; i < num_samples; i++) {
       if (sample_q[i].type == LAST) {
          return 0;
@@ -833,7 +857,6 @@ static int count_cycles_with_lic(sample_t *sample_q, int num_samples) {
          i += (1 - offset);
          // Validate the num_cycles passed in
          if (show_cycle_errors) {
-            int expected = get_num_cycles(sample_q);
             if (expected >= 0) {
                if (i != expected) {
                   failflag |= FAIL_CYCLES;
@@ -847,7 +870,7 @@ static int count_cycles_with_lic(sample_t *sample_q, int num_samples) {
 }
 
 static int count_cycles_without_lic(sample_t *sample_q, int num_samples) {
-   int num_cycles = get_num_cycles(sample_q);
+   int num_cycles = get_num_cycles(sample_q, num_samples);
    if (num_cycles >= 0) {
       return num_cycles;
    }
@@ -879,13 +902,13 @@ static void em_6809_reset(sample_t *sample_q, int num_cycles, instruction_t *ins
 }
 
 // Returns the old PC value
-static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector) {
-
+static int interrupt_helper(sample_q_t *sample_q, int offset, int full, int vector) {
+   sample_t *sample = sample_q->sample;
    // FIQ
    //  0 Opcode
    //  1
    //  2
-   //  3 PCL
+   //  3 PCL   <===== offset
    //  4 PCH
    //  5 Flags
    //  6
@@ -897,7 +920,7 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
    //  0
    //  1
    //  2
-   //  3 PCL
+   //  3 PCL   <===== offset
    //  4 PCH
    //  5 UL
    //  6 UH
@@ -920,14 +943,14 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
    int i = offset;
 
    // The PC is pushed in all cases
-   int pc = (sample_q[i + 1].data << 8) + sample_q[i].data;
+   int pc = (sample[i + 1].data << 8) + sample[i].data;
    i += 2;
    push16s(pc);
 
    // The full state is pushed in IRQ/NMI/SWI/SWI2/SWI3
    if (full) {
 
-      int u  = (sample_q[i + 1].data << 8) + sample_q[i].data;
+      int u  = (sample[i + 1].data << 8) + sample[i].data;
       i += 2;
       push16s(u);
       if (U >= 0 && u != U) {
@@ -935,7 +958,7 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
       }
       U = u;
 
-      int y  = (sample_q[i + 1].data << 8) + sample_q[i].data;
+      int y  = (sample[i + 1].data << 8) + sample[i].data;
       i += 2;
       push16s(y);
       if (Y >= 0 && y != Y) {
@@ -943,7 +966,7 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
       }
       Y = y;
 
-      int x  = (sample_q[i + 1].data << 8) + sample_q[i].data;
+      int x  = (sample[i + 1].data << 8) + sample[i].data;
       i += 2;
       push16s(x);
       if (X >= 0 && x != X) {
@@ -951,7 +974,7 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
       }
       X = x;
 
-      int dp = sample_q[i++].data;
+      int dp = sample[i++].data;
       push8s(dp);
       if (DP >= 0 && dp != DP) {
          failflag |= FAIL_DP;
@@ -960,14 +983,14 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
 
       if (NM == 1) {
 
-         int f  = sample_q[i++].data;
+         int f  = sample[i++].data;
          push8s(f);
          if (ACCF >= 0 && f != ACCF) {
             failflag |= FAIL_ACCF;
          }
          ACCF = f;
 
-         int e  = sample_q[i++].data;
+         int e  = sample[i++].data;
          push8s(e);
          if (ACCE >= 0 && e != ACCE) {
             failflag |= FAIL_ACCE;
@@ -976,14 +999,14 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
 
       }
 
-      int b  = sample_q[i++].data;
+      int b  = sample[i++].data;
       push8s(b);
       if (ACCB >= 0 && b != ACCB) {
          failflag |= FAIL_ACCB;
       }
       ACCB = b;
 
-      int a  = sample_q[i++].data;
+      int a  = sample[i++].data;
       push8s(a);
       if (ACCA >= 0 && a != ACCA) {
          failflag |= FAIL_ACCA;
@@ -997,14 +1020,14 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
    }
 
    // The flags are pushed in all cases
-   int flags = sample_q[i].data;
+   int flags = sample[i].data;
    push8s(flags);
    check_FLAGS(flags);
    set_FLAGS(flags);
-   i++;
 
-   // Skip a dead cycle becfore the vector
-   i++;
+   // The vector fetch is always at the end
+   // (even for CWAI)
+   i = sample_q->num_cycles - 3;
 
    // Is an illegal instruction trap?
    if (vector == VEC_IL) {
@@ -1019,15 +1042,15 @@ static int interrupt_helper(sample_t *sample_q, int offset, int full, int vector
    }
 
    // Read the vector and compare against what's expected
-   int vechi = sample_q[i].data;
+   int vechi = sample[i].data;
    memory_read(vechi, vector_base + vector, MEM_POINTER);
-   if (sample_q[i].addr >= 0 && (sample_q[i].addr != vector)) {
+   if (sample[i].addr >= 0 && (sample[i].addr != vector)) {
       failflag |= FAIL_VECTOR;
    }
    i++;
-   int veclo = sample_q[i].data;
+   int veclo = sample[i].data;
    memory_read(veclo, vector_base + vector + 1, MEM_POINTER);
-   if (sample_q[i].addr >= 0 && (sample_q[i].addr != vector + 1)) {
+   if (sample[i].addr >= 0 && (sample[i].addr != vector + 1)) {
       failflag  |= FAIL_VECTOR;
    }
    PC = (vechi << 8) + veclo;
@@ -1067,14 +1090,17 @@ static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t 
    int full_c = (NM == 1) ? 22 : 19;
    int offset = (NM == 1) ?  4 :  3;
    int pc;
+   sample_q_t sample_ref;
+   sample_ref.sample = sample_q;
+   sample_ref.num_cycles = num_cycles;
    if (num_cycles == fast_c) {
-      pc = interrupt_helper(sample_q, offset, 0, VEC_FIQ);
+      pc = interrupt_helper(&sample_ref, offset, 0, VEC_FIQ);
    } else if (num_cycles == full_c && sample_q[full_c - 3].addr == VEC_IRQ) {
       // IRQ
-      pc = interrupt_helper(sample_q, offset, 1, VEC_IRQ);
+      pc = interrupt_helper(&sample_ref, offset, 1, VEC_IRQ);
    } else if (num_cycles == full_c && sample_q[full_c - 3].addr == VEC_NMI) {
       // NMI
-      pc = interrupt_helper(sample_q, offset, 1, VEC_NMI);
+      pc = interrupt_helper(&sample_ref, offset, 1, VEC_NMI);
    } else {
       printf("*** could not determine interrupt type ***\n");
       pc = -1;
@@ -1093,6 +1119,10 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    int index = 0;
    opcode_t *instr = get_instruction(instr_table, b0, b1);
    int mode = instr->mode;
+
+   sample_q_t sample_ref;
+   sample_ref.sample = sample_q;
+   sample_ref.num_cycles = num_cycles;
 
    // Flag that an instruction marked as undocumented has been encoutered
    if (instr->undocumented) {
@@ -1233,8 +1263,10 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    } else if (instr->op == &op_TST && (NM != 1)) {
       // There are two dead cycles at the end of TST
       operand = sample_q[num_cycles - 3].data;
-   } else if (mode == REGISTER) {
-      operand = sample_q[oi + 1].data; // This is the postbyte
+   } else if (mode == IMMEDIATE_8 || mode == REGISTER) {
+      operand = sample_q[oi + 1].data; // In the case of register, this is the postbyte
+   } else if (mode == IMMEDIATE_16) {
+      operand = (sample_q[oi + 1].data << 8) + sample_q[oi + 2].data;
    } else if (instr->op->type == RMWOP) {
       // Read-modify-write instruction (always 8-bit)
       operand = sample_q[num_cycles - 3].data;
@@ -1308,7 +1340,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
             postbyte_cycles = -postbyte_cycles;
             failflag |= FAIL_BADM;
             if (cpu6309) {
-               interrupt_helper(sample_q, oi + 5, 1, VEC_IL);
+               interrupt_helper(&sample_ref, oi + 5, 1, VEC_IL);
                return num_cycles;
             }
          }
@@ -1498,9 +1530,6 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    }
 
    // Emulate the instruction
-   sample_q_t sample_ref;
-   sample_ref.sample = sample_q;
-   sample_ref.num_cycles = num_cycles;
    if (instr->op->emulate) {
       int result = instr->op->emulate(operand, ea, &sample_ref);
 
@@ -2677,7 +2706,16 @@ static int op_fn_COMB(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_CWAI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   // TODO
+   // CC = CC & immediate operand
+   op_fn_ANDC(operand, ea, sample_q);
+   // Lookhead to the vector fetch to determine what event released CWAI
+   int vec = sample_q->sample[sample_q->num_cycles - 3].addr;
+   // Fallback to IRQ if addr is not being captured
+   if (vec < 0) {
+      vec = VEC_IRQ;
+   }
+   // The full state is always stacked
+   interrupt_helper(sample_q, 4, 1, vec);
    return -1;
 }
 
@@ -3203,17 +3241,17 @@ static int op_fn_SUBD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
 
 static int op_fn_SWI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   interrupt_helper(sample_q->sample, 3, 1, VEC_SWI);
+   interrupt_helper(sample_q, 3, 1, VEC_SWI);
    return -1;
 }
 
 static int op_fn_SWI2(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   interrupt_helper(sample_q->sample, 4, 1, VEC_SWI2);
+   interrupt_helper(sample_q, 4, 1, VEC_SWI2);
    return -1;
 }
 
 static int op_fn_SWI3(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   interrupt_helper(sample_q->sample, 4, 1, VEC_SWI3);
+   interrupt_helper(sample_q, 4, 1, VEC_SWI3);
    return -1;
 }
 
@@ -3333,7 +3371,7 @@ static int op_fn_X8C7(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 // as SWI (15).
 
 static int op_fn_XRES(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   interrupt_helper(sample_q->sample, 3, 1, VEC_RST);
+   interrupt_helper(sample_q, 3, 1, VEC_RST);
    return -1;
 }
 
@@ -3860,7 +3898,7 @@ static int op_fn_DECW(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 static int op_fn_DIVD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    if (operand == 0) {
       // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
-      interrupt_helper(sample_q->sample, 3, 1, VEC_DZ);
+      interrupt_helper(sample_q, 3, 1, VEC_DZ);
    } else if (ACCA < 0 || ACCB < 0) {
       ACCA = -1;
       ACCB = -1;
@@ -3894,7 +3932,7 @@ static int op_fn_DIVD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 static int op_fn_DIVQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    if (operand == 0) {
       // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
-      interrupt_helper(sample_q->sample, 3, 1, VEC_DZ);
+      interrupt_helper(sample_q, 3, 1, VEC_DZ);
    } else if (ACCA < 0 || ACCB < 0 || ACCE < 0 || ACCF < 0) {
       ACCA = -1;
       ACCB = -1;
@@ -4287,7 +4325,7 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // Only D, X, Y, U, S are legal, anything else causes an illegal instruction trap
    if (r0 > 4 || r1 > 4) {
       failflag |= FAIL_BADM;
-      interrupt_helper(sample, 7, 1, VEC_IL);
+      interrupt_helper(sample_q, 7, 1, VEC_IL);
       return -1;
    }
 
@@ -4427,9 +4465,9 @@ static int op_fn_TIM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 static int op_fn_TRAP(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    sample_t *sample = sample_q->sample;
    if (sample[0].data == 0x10 || sample[0].data == 0x11) {
-      interrupt_helper(sample, 5, 1, VEC_IL);
+      interrupt_helper(sample_q, 5, 1, VEC_IL);
    } else {
-      interrupt_helper(sample, 4, 1, VEC_IL);
+      interrupt_helper(sample_q, 4, 1, VEC_IL);
    }
    return -1;
 }
@@ -5498,7 +5536,7 @@ static opcode_t instr_table_6309[] = {
    /* 10 */    { &op_UU   , INHERENT     , 0, 1, 1 },
    /* 11 */    { &op_UU   , INHERENT     , 0, 1, 1 },
    /* 12 */    { &op_NOP  , INHERENT     , 0, 2, 1 },
-   /* 13 */    { &op_SYNC , INHERENT     , 0, 4, 4 },
+   /* 13 */    { &op_SYNC , INHERENT     , 0, 4, 3 },
    /* 14 */    { &op_SEXW , INHERENT     , 0, 2, 1 },
    /* 15 */    { &op_TRAP , ILLEGAL      , 1,20,22 },
    /* 16 */    { &op_LBRA , RELATIVE_16  , 0, 5, 4 },
