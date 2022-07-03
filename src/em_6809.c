@@ -4349,24 +4349,164 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    default: reg1 = pack(ACCA, ACCB); break;
    }
 
-   // The number of bytes expected to be transferred
+   // The number of bytes actually transferred (less if TFR was)
+
+   // NATIVE MODE
+   //
+   // Interrupt sequence forms part of the TFR instruction (no LIC seperating them)
+   //
+   // 12191a   0 11  1 1 00 F    PREFIX
+   // 12191b   1 3b  1 0 00 0    OPCODE
+   // 12191c   2 21  1 0 00 1    POSTBYTE
+   // 12191d   3 21  1 0 00 F    -
+   // 12191e   4 21  1 0 00 F    -
+   // 12191f   5 21  1 0 00 F    -
+   // 121920   6 20  1 0 00 8    Rd
+   // 121921   7 20  1 0 00 F    -
+   // 121922   8 20  0 0 00 0    Wr
+   // 121923   9 20  1 0 00 8    Rd
+   // 121924  10 20  1 0 00 F    -
+   // 121925  11 20  0 0 00 1    Wr
+   // 121926  12 20  1 0 00 8    Rd
+   // 121927  13 20  1 0 00 F    -
+   // 121928  14 20  0 0 00 2    Wr
+   // 121929  15 20  1 0 00 8    Rd
+   // 12192a  16 20  1 0 00 F    -
+   // 12192b  17 20  0 0 00 3    Wr
+   // 12192c  18 20  1 0 00 8    Rd
+   // 12192d  19 20  1 0 00 F    -
+   // 12192e  20 20  0 0 00 4    Wr
+   // ...
+   // 121b9c 642 20  1 0 00 8    Rd
+   // 121b9d 643 20  1 0 00 F    -
+   // 121b9e 644 20  0 0 00 4    Wr
+   // 121b9f 645 20  1 0 00 8    Rd
+   // 121ba0 646 20  1 0 00 F    -
+   // 121ba1 647 20  0 0 00 5    Wr
+   // 121ba2 648 20  1 0 00 8    Rd
+   // 121ba3 649 20  1 0 00 F    -
+   // 121ba4 650 20  0 0 00 6    Wr
+   // 121ba5 651 20  1 0 00 8    Rd, not sure if PC or IO
+   // 121ba6 652 20  1 0 00 F    -
+   //                            End of 653 cycle TFM (6 + 215 * 3 + 2)
+   //
+   //                            Start of 19 cycle interrupt
+   // 121ba7 653 20  1 0 00 F    -
+   // 121ba8 654 bf  0 0 00 1 <<<< PC at offset 3
+   // 121ba9 655 cb  0 0 00 0
+   // 121baa 656 08  0 0 00 F
+   // 121bab 657 19  0 0 00 E
+   // 121bac 658 58  0 0 00 D
+   // 121bad 659 03  0 0 00 C
+   // 121bae 660 d7  0 0 00 B
+   // 121baf 661 7c  0 0 00 A
+   // 121bb0 662 00  0 0 00 9
+   // 121bb1 663 29  0 0 00 8
+   // 121bb2 664 03  0 0 00 7
+   // 121bb3 665 04  0 0 00 6
+   // 121bb4 666 0d  0 0 00 5
+   // 121bb5 667 c0  0 0 00 4 <<<< end of 14 writes
+   // 121bb6 668 20  1 0 00 F
+   // 121bb7 669 d9  1 0 10 8 <<<< Vector
+   // 121bb8 670 04  1 0 10 9
+   // 121bb9 671 04  1 0 00 F
+
+
+   // EMULATED MODE
+   //
+   // Interrupt sequence after the TFR instruction ()
+   //
+   // 1716f0    0 11  1 0 00 D    PREFIX
+   // 1716f1    1 3b  1 0 00 E    OPCODE
+   // 1716f2    2 21  1 0 00 F    POSTBYTE
+   // 1716f3    3 21  1 0 00 F    -
+   // 1716f4    4 21  1 0 00 F    -
+   // 1716f5    5 21  1 0 00 F    -
+   // 1716f6    6 20  1 0 00 8    Rd
+   // 1716f7    7 20  1 0 00 F    -
+   // 1716f8    8 20  0 0 00 0    Wr
+   // 1716f9    9 20  1 0 00 8    Rd
+   // 1716fa   10 20  1 0 00 F    -
+   // 1716fb   11 20  0 0 00 1    Wr
+   // 1716fc   12 20  1 0 00 8    Rd
+   // 1716fd   13 20  1 0 00 F    -
+   // 1716fe   14 20  0 0 00 2    Wr
+   // 1716ff   15 20  1 0 00 8    Rd
+   // 171700   16 20  1 0 00 F    -
+   // 171701   17 20  0 0 00 3    Wr
+   // 171702   18 20  1 0 00 8    Rd
+   // 171703   19 20  1 0 00 F    -
+   // 171704   20 20  0 0 00 4    Wr
+   // ...
+   // 1722bd 3021 20  1 0 00 8    Rd
+   // 1722be 3022 20  1 0 00 F    -
+   // 1722bf 3023 20  0 0 00 D    Wr
+   // 1722c0 3024 20  1 0 00 8    Rd
+   // 1722c1 3025 20  1 0 00 F    -
+   // 1722c2 3026 20  0 0 00 E    Wr
+   // 1722c3 3027 20  1 0 00 8    Rd
+   // 1722c4 3028 20  1 0 00 F    -
+   // 1722c5 3029 20  0 0 00 F    Wr
+   // 1722c6 3030 20  1 0 00 8    Rd
+   // 1722c7 3031 20  1 0 00 F    -
+   // 1722c8 3032 20  0 0 00 0    Wr
+   // 1722c9 3033 20  1 0 00 8    Rd (not sure of what)
+   // 1722ca 3034 20  1 1 00 F    -    <<<<< LIC
+   //                             End of 3035 cycles TFM (6 + 1009 * 3 + 2)
+   //
+   //                             Start of 17 cycle interrupt
+   // 1722cb    0 20  1 1 00 F
+   // 1722cc    0 bd  0 1 00 1 <<<< PC at offset 1
+   // 1722cd    0 cb  0 1 00 0
+   // 1722ce    0 08  0 1 00 F
+   // 1722cf    0 19  0 1 00 E
+   // 1722d0    0 58  0 1 00 D
+   // 1722d1    0 03  0 1 00 C
+   // 1722d2    0 f1  0 1 00 B
+   // 1722d3    0 7f  0 1 00 A
+   // 1722d4    0 00  0 1 00 9
+   // 1722d5    0 04  0 1 00 8
+   // 1722d6    0 0d  0 1 00 7
+   // 1722d7    0 c0  0 1 00 6 <<<< end of 12 writes
+   // 1722d8    0 20  1 1 00 F
+   // 1722d9    0 d8  1 1 10 8 <<<< Vector
+   // 1722da    0 ff  1 1 10 9
+   // 1722db    0 ff  1 1 00 F
+
+
+   // The number of bytes expected to be transferred is in W
    int W = pack(ACCE, ACCF);
-
-   // If there is a mismatch, then check for an interrupt
+   // Assume we are not interrupted
    int interrupted = 0;
-
-   // The number of bytes actually transferred (TFR may have been interrupted)
    int num_bytes = W;
-   int num_cycles = sample_q->num_cycles;
-   int int_cycles = (NM == 1) ? 22 : 20;
-   if (W >= 0 && num_cycles != W) {
-      interrupted = em_6809_match_interrupt(sample + num_cycles - int_cycles, int_cycles);
-      if (interrupted) {
-         num_bytes = (num_cycles - int_cycles - 5) / 3;
-      } else {
-         num_bytes = (num_cycles - 6) / 3;
+   // TODO: Is it worth inferring W from num_cycles (assuming not interrupted)
+   // Now look for an interrupt sequence in the expected place for each mode
+   if (NM == 1) {
+      // In native mode an interrupt is normally 22 cycles
+      if (em_6809_match_interrupt(sample + sample_q->num_cycles - 22, 22)) {
+         num_bytes = (sample_q->num_cycles - 27) / 3;
+         sample_q->num_cycles -= 22;
+         interrupted = 1;
+      }
+   } else {
+      // In emulated mode an interrupt is normally 19 cycles
+      if (em_6809_match_interrupt(sample + sample_q->num_cycles - 2, 19)) {
+         num_bytes = (sample_q->num_cycles - 8) / 3;
+         sample_q->num_cycles -= 2;
+         interrupted = 1;
       }
    }
+
+   // Handle the case where the common actions when TFM is interrupted in either bode
+   if (interrupted) {
+      // set the PC back three cycles (the length of TFM), so the TFM re-executes after the RTI
+      if (PC >= 0) {
+         PC = (PC - 3) & 0xffff;
+      }
+      // cancel the num_cycles warning
+      failflag &= ~FAIL_CYCLES;
+   }
+
 
    // Update R0, and memory read modelling
    if (reg0 >= 0) {
@@ -4438,18 +4578,6 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    if (W >= 0 && num_bytes >= 0) {
       W -= num_bytes;
       unpack(W, &ACCE, &ACCF);
-   }
-
-   // Handle the case where the TFM was interrupted
-   if (interrupted) {
-      // reduce the number of samples by the length of the interrupt sequence
-      sample_q->num_cycles -= int_cycles;
-      // set the PC back three cycles (the length of TFM), so the TFM re-executes after the RTI
-      if (PC >= 0) {
-         PC = (PC - 3) & 0xffff;
-      }
-      // cancel the num_cycles warning
-      failflag &= ~FAIL_CYCLES;
    }
 
    return -1;
@@ -5838,22 +5966,22 @@ static opcode_t instr_table_6309[] = {
    /* 103D */  { &op_TRAP , ILLEGAL      , 1,21,23 },
    /* 103E */  { &op_TRAP , ILLEGAL      , 1,21,23 },
    /* 103F */  { &op_SWI2 , INHERENT     , 0,20,22 },
-   /* 1040 */  { &op_NEGD , INHERENT     , 0, 2, 1 },
+   /* 1040 */  { &op_NEGD , INHERENT     , 0, 3, 2 },
    /* 1041 */  { &op_TRAP , ILLEGAL      , 1,21,23 },
    /* 1042 */  { &op_TRAP , ILLEGAL      , 1,21,23 },
-   /* 1043 */  { &op_COMD , INHERENT     , 0, 2, 1 },
-   /* 1044 */  { &op_LSRD , INHERENT     , 0, 2, 1 },
+   /* 1043 */  { &op_COMD , INHERENT     , 0, 3, 2 },
+   /* 1044 */  { &op_LSRD , INHERENT     , 0, 3, 2 },
    /* 1045 */  { &op_TRAP , ILLEGAL      , 1,20,22 },
-   /* 1046 */  { &op_RORD , INHERENT     , 0, 2, 1 },
-   /* 1047 */  { &op_ASRD , INHERENT     , 0, 2, 1 },
-   /* 1048 */  { &op_ASLD , INHERENT     , 0, 2, 1 },
-   /* 1049 */  { &op_ROLD , INHERENT     , 0, 2, 1 },
-   /* 104A */  { &op_DECD , INHERENT     , 0, 2, 1 },
+   /* 1046 */  { &op_RORD , INHERENT     , 0, 3, 2 },
+   /* 1047 */  { &op_ASRD , INHERENT     , 0, 3, 2 },
+   /* 1048 */  { &op_ASLD , INHERENT     , 0, 3, 2 },
+   /* 1049 */  { &op_ROLD , INHERENT     , 0, 3, 2 },
+   /* 104A */  { &op_DECD , INHERENT     , 0, 3, 2 },
    /* 104B */  { &op_TRAP , ILLEGAL      , 1,21,23 },
-   /* 104C */  { &op_INCD , INHERENT     , 0, 2, 1 },
-   /* 104D */  { &op_TSTD , INHERENT     , 0, 2, 1 },
+   /* 104C */  { &op_INCD , INHERENT     , 0, 3, 2 },
+   /* 104D */  { &op_TSTD , INHERENT     , 0, 3, 2 },
    /* 104E */  { &op_TRAP , ILLEGAL      , 1,21,23 },
-   /* 104F */  { &op_CLRD , INHERENT     , 0, 2, 1 },
+   /* 104F */  { &op_CLRD , INHERENT     , 0, 3, 2 },
    /* 1050 */  { &op_TRAP , ILLEGAL      , 1,21,23 },
    /* 1051 */  { &op_TRAP , ILLEGAL      , 1,21,23 },
    /* 1052 */  { &op_TRAP , ILLEGAL      , 1,21,23 },
@@ -6098,35 +6226,35 @@ static opcode_t instr_table_6309[] = {
    /* 1140 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1141 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1142 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
-   /* 1143 */  { &op_COME , INHERENT     , 0, 2, 2 },
+   /* 1143 */  { &op_COME , INHERENT     , 0, 3, 2 },
    /* 1144 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1145 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1146 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1147 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1148 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1149 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
-   /* 114A */  { &op_DECE , INHERENT     , 0, 2, 2 },
+   /* 114A */  { &op_DECE , INHERENT     , 0, 3, 2 },
    /* 114B */  { &op_TRAP , ILLEGAL      , 0,21,23 },
-   /* 114C */  { &op_INCE , INHERENT     , 0, 2, 2 },
-   /* 114D */  { &op_TSTE , INHERENT     , 0, 2, 2 },
+   /* 114C */  { &op_INCE , INHERENT     , 0, 3, 2 },
+   /* 114D */  { &op_TSTE , INHERENT     , 0, 3, 2 },
    /* 114E */  { &op_TRAP , ILLEGAL      , 0,21,23 },
-   /* 114F */  { &op_CLRE , INHERENT     , 0, 2, 2 },
+   /* 114F */  { &op_CLRE , INHERENT     , 0, 3, 2 },
    /* 1150 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1151 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1152 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
-   /* 1153 */  { &op_COMF , INHERENT     , 0, 2, 2 },
+   /* 1153 */  { &op_COMF , INHERENT     , 0, 3, 2 },
    /* 1154 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1155 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1156 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1157 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1158 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1159 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
-   /* 115A */  { &op_DECF , INHERENT     , 0, 2, 2 },
+   /* 115A */  { &op_DECF , INHERENT     , 0, 3, 2 },
    /* 115B */  { &op_TRAP , ILLEGAL      , 0,21,23 },
-   /* 115C */  { &op_INCF , INHERENT     , 0, 2, 2 },
-   /* 115D */  { &op_TSTF , ILLEGAL      , 0, 2, 2 },
+   /* 115C */  { &op_INCF , INHERENT     , 0, 3, 2 },
+   /* 115D */  { &op_TSTF , ILLEGAL      , 0, 3, 2 },
    /* 115E */  { &op_TRAP , ILLEGAL      , 0,21,23 },
-   /* 115F */  { &op_CLRF , INHERENT     , 0, 2, 2 },
+   /* 115F */  { &op_CLRF , INHERENT     , 0, 3, 2 },
    /* 1160 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1161 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 1162 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
