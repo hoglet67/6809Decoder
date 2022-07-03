@@ -46,8 +46,13 @@ typedef enum {
 } opsize_t;
 
 typedef struct {
+   sample_t *sample;
+   int num_cycles;
+} sample_q_t;
+
+typedef struct {
    const char *mnemonic;
-   int (*emulate)(operand_t, ea_t, sample_t *);
+   int (*emulate)(operand_t, ea_t, sample_q_t *);
    optype_t type;
    opsize_t size;
 } operation_t;

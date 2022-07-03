@@ -44,7 +44,6 @@ typedef struct {
    int8_t        addr; // -1 indicates unknown
 } sample_t;
 
-
 // This is used to pa
 typedef struct {
    int           pc;
@@ -101,7 +100,7 @@ typedef struct {
    int (*count_cycles)(sample_t *sample_q, int num_samples);
    void (*reset)(sample_t *sample_q, int num_cycles, instruction_t *instruction);
    void (*interrupt)(sample_t *sample_q, int num_cycles, instruction_t *instruction);
-   void (*emulate)(sample_t *sample_q, int num_cycles, instruction_t *instruction);
+   int (*emulate)(sample_t *sample_q, int num_cycles, instruction_t *instruction);
    int (*disassemble)(char *bp, instruction_t *instruction);
    int (*get_PC)();
    int (*get_NM)();

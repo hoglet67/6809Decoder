@@ -535,7 +535,7 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
       em->interrupt(sample_q, num_cycles, &instruction);
    } else {
       // Handle a normal instruction
-      em->emulate(sample_q, num_cycles, &instruction);
+      num_cycles = em->emulate(sample_q, num_cycles, &instruction);
    }
 
    // Sanity check the pc prediction has not gone awry
