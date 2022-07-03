@@ -236,7 +236,6 @@ static opcode_t instr_table_6809[];
 static opcode_t instr_table_6309[];
 
 static operation_t op_MULD ;
-static operation_t op_TFM  ;
 static operation_t op_TST  ;
 static operation_t op_XSTX ;
 static operation_t op_XSTU ;
@@ -1227,9 +1226,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
 
    // Pick out the operand (Fig 17 in datasheet, esp sheet 5)
    operand_t operand;
-   if (instr->op == &op_TFM) {
-      operand = num_cycles;
-   } else if (instr->op == &op_MULD) {
+   if (instr->op == &op_MULD) {
       // There are many dead cycles at the end of MULD
       // TODO - Maybe we should add a dead-cycles column to the op data structure
       operand = (sample_q[num_cycles - 26].data << 8) + sample_q[num_cycles - 25].data;
@@ -4292,131 +4289,129 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       failflag |= FAIL_BADM;
       interrupt_helper(sample, 7, 1, VEC_IL);
       return -1;
+   }
 
-   } else {
+   // Get reg0 (the source address)
+   int reg0;
+   switch (r0) {
+   case 1:  reg0 = X;                break;
+   case 2:  reg0 = Y;                break;
+   case 3:  reg0 = U;                break;
+   case 4:  reg0 = S;                break;
+   default: reg0 = pack(ACCA, ACCB); break;
+   }
 
-      // Get reg0 (the source address)
-      int reg0;
-      switch (r0) {
-      case 1:  reg0 = X;                break;
-      case 2:  reg0 = Y;                break;
-      case 3:  reg0 = U;                break;
-      case 4:  reg0 = S;                break;
-      default: reg0 = pack(ACCA, ACCB); break;
-      }
+   // Get reg1 (the destination address)
+   int reg1;
+   switch (r1) {
+   case 1:  reg1 = X;                break;
+   case 2:  reg1 = Y;                break;
+   case 3:  reg1 = U;                break;
+   case 4:  reg1 = S;                break;
+   default: reg1 = pack(ACCA, ACCB); break;
+   }
 
-      // Get reg1 (the destination address)
-      int reg1;
-      switch (r1) {
-      case 1:  reg1 = X;                break;
-      case 2:  reg1 = Y;                break;
-      case 3:  reg1 = U;                break;
-      case 4:  reg1 = S;                break;
-      default: reg1 = pack(ACCA, ACCB); break;
-      }
+   // The number of bytes expected to be transferred
+   int W = pack(ACCE, ACCF);
 
-      // The number of bytes expected to be transferred
-      int W = pack(ACCE, ACCF);
+   // If there is a mismatch, then check for an interrupt
+   int interrupted = 0;
 
-      // If there is a mismatch, then check for an interrupt
-      int interrupted = 0;
-
-      // The number of bytes actually transferred (TFR may have been interrupted)
-      int num_bytes = W;
-      int num_cycles = operand;
-      int int_cycles = (NM == 1) ? 22 : 20;
-      if (W >= 0 && num_cycles != W) {
-         interrupted = em_6809_match_interrupt(sample + num_cycles - int_cycles, int_cycles);
-         if (interrupted) {
-            num_bytes = (operand - int_cycles - 5) / 3;
-         } else {
-            num_bytes = (operand - 6) / 3;
-         }
-      }
-
-      // Update R0, and memory read modelling
-      if (reg0 >= 0) {
-         sample_t *rd_sample = sample + 6;
-         if (opcode == 0x38 || opcode == 0x3a) {
-            if (num_bytes >= 0) {
-               for (int i = 0; i < num_bytes; i++) {
-                  memory_read(rd_sample->data, reg0, MEM_DATA);
-                  reg0 = (reg0 + 1) & 0xffff;
-                  sample += 3;
-               }
-            } else {
-               reg0 = -1;
-            }
-         } else if (opcode == 0x39) {
-            if (num_bytes >= 0) {
-               for (int i = 0; i < num_bytes; i++) {
-                  memory_read(sample->data, reg0, MEM_DATA);
-                  reg0 = (reg0 - 1) & 0xffff;
-                  sample += 3;
-               }
-            } else {
-               reg0 = -1;
-            }
-         }
-         switch (r0) {
-         case 1:  X = reg0;                   break;
-         case 2:  Y = reg0;                   break;
-         case 3:  U = reg0;                   break;
-         case 4:  S = reg0;                   break;
-         default: unpack(reg0, &ACCA, &ACCB); break;
-         }
-      }
-
-      // Update R0, and memory write modelling
-      if (reg1 >= 0) {
-         sample_t *wr_sample = sample + 8;
-         if (opcode == 0x38 || opcode == 0x3b) {
-            if (num_bytes >= 0) {
-               for (int i = 0; i < num_bytes; i++) {
-                  memory_write(wr_sample->data, reg1, MEM_DATA);
-                  reg1 = (reg1 + 1) & 0xffff;
-                  sample += 3;
-               }
-            } else {
-               reg1 = -1;
-            }
-         } else if (opcode == 0x39) {
-            if (num_bytes >= 0) {
-               for (int i = 0; i < num_bytes; i++) {
-                  memory_write(sample->data, reg1, MEM_DATA);
-                  reg1 = (reg1 - 1) & 0xffff;
-                  sample += 3;
-               }
-            } else {
-               reg1 = -1;
-            }
-         }
-         switch (r1) {
-         case 1:  X = reg1;                   break;
-         case 2:  Y = reg1;                   break;
-         case 3:  U = reg1;                   break;
-         case 4:  S = reg1;                   break;
-         default: unpack(reg1, &ACCA, &ACCB); break;
-         }
-      }
-
-      // Update the final value of W
-      if (W >= 0 && num_bytes >= 0) {
-         W -= num_bytes;
-         unpack(W, &ACCE, &ACCF);
-      }
-
-      // Handle the case where the TFM was interrupted
+   // The number of bytes actually transferred (TFR may have been interrupted)
+   int num_bytes = W;
+   int num_cycles = sample_q->num_cycles;
+   int int_cycles = (NM == 1) ? 22 : 20;
+   if (W >= 0 && num_cycles != W) {
+      interrupted = em_6809_match_interrupt(sample + num_cycles - int_cycles, int_cycles);
       if (interrupted) {
-         // reduce the number of samples by the length of the interrupt sequence
-         sample_q->num_cycles -= int_cycles;
-         // set the PC back three cycles (the length of TFM), so the TFM re-executes after the RTI
-         if (PC >= 0) {
-            PC = (PC - 3) & 0xffff;
-         }
-         // cancel the num_cycles warning
-         failflag &= ~FAIL_CYCLES;
+         num_bytes = (num_cycles - int_cycles - 5) / 3;
+      } else {
+         num_bytes = (num_cycles - 6) / 3;
       }
+   }
+
+   // Update R0, and memory read modelling
+   if (reg0 >= 0) {
+      sample_t *rd_sample = sample + 6;
+      if (opcode == 0x38 || opcode == 0x3a) {
+         if (num_bytes >= 0) {
+            for (int i = 0; i < num_bytes; i++) {
+               memory_read(rd_sample->data, reg0, MEM_DATA);
+               reg0 = (reg0 + 1) & 0xffff;
+               sample += 3;
+            }
+         } else {
+            reg0 = -1;
+         }
+      } else if (opcode == 0x39) {
+         if (num_bytes >= 0) {
+            for (int i = 0; i < num_bytes; i++) {
+               memory_read(sample->data, reg0, MEM_DATA);
+               reg0 = (reg0 - 1) & 0xffff;
+               sample += 3;
+            }
+         } else {
+            reg0 = -1;
+         }
+      }
+      switch (r0) {
+      case 1:  X = reg0;                   break;
+      case 2:  Y = reg0;                   break;
+      case 3:  U = reg0;                   break;
+      case 4:  S = reg0;                   break;
+      default: unpack(reg0, &ACCA, &ACCB); break;
+      }
+   }
+
+   // Update R0, and memory write modelling
+   if (reg1 >= 0) {
+      sample_t *wr_sample = sample + 8;
+      if (opcode == 0x38 || opcode == 0x3b) {
+         if (num_bytes >= 0) {
+            for (int i = 0; i < num_bytes; i++) {
+               memory_write(wr_sample->data, reg1, MEM_DATA);
+               reg1 = (reg1 + 1) & 0xffff;
+               sample += 3;
+            }
+         } else {
+            reg1 = -1;
+         }
+      } else if (opcode == 0x39) {
+         if (num_bytes >= 0) {
+            for (int i = 0; i < num_bytes; i++) {
+               memory_write(sample->data, reg1, MEM_DATA);
+               reg1 = (reg1 - 1) & 0xffff;
+               sample += 3;
+            }
+         } else {
+            reg1 = -1;
+         }
+      }
+      switch (r1) {
+      case 1:  X = reg1;                   break;
+      case 2:  Y = reg1;                   break;
+      case 3:  U = reg1;                   break;
+      case 4:  S = reg1;                   break;
+      default: unpack(reg1, &ACCA, &ACCB); break;
+      }
+   }
+
+   // Update the final value of W
+   if (W >= 0 && num_bytes >= 0) {
+      W -= num_bytes;
+      unpack(W, &ACCE, &ACCF);
+   }
+
+   // Handle the case where the TFM was interrupted
+   if (interrupted) {
+      // reduce the number of samples by the length of the interrupt sequence
+      sample_q->num_cycles -= int_cycles;
+      // set the PC back three cycles (the length of TFM), so the TFM re-executes after the RTI
+      if (PC >= 0) {
+         PC = (PC - 3) & 0xffff;
+      }
+      // cancel the num_cycles warning
+      failflag &= ~FAIL_CYCLES;
    }
 
    return -1;
