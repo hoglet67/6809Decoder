@@ -541,6 +541,7 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
 
    if (pc >= 0) {
       if (oldpc >= 0 && oldpc != pc) {
+         failflag |= FAIL_PC;
          printf("pc: prediction failed at %04X old pc was %04X\n", pc, oldpc);
       }
    }

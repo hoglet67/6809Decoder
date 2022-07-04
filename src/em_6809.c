@@ -169,33 +169,37 @@ enum {
 // ====================================================================
 
 enum {
-   FAIL_ACCA   = 0x00000010,
-   FAIL_ACCB   = 0x00000020,
-   FAIL_ACCE   = 0x00000040,
-   FAIL_ACCF   = 0x00000080,
-   FAIL_X      = 0x00000100,
-   FAIL_Y      = 0x00000200,
-   FAIL_U      = 0x00000400,
-   FAIL_S      = 0x00000800,
-   FAIL_DP     = 0x00001000,
-   FAIL_E      = 0x00002000,
-   FAIL_F      = 0x00004000,
-   FAIL_H      = 0x00008000,
-   FAIL_I      = 0x00010000,
-   FAIL_N      = 0x00020000,
-   FAIL_Z      = 0x00040000,
-   FAIL_V      = 0x00080000,
-   FAIL_C      = 0x00100000,
-   FAIL_RESULT = 0x00200000,
-   FAIL_VECTOR = 0x00400000,
-   FAIL_CYCLES = 0x00800000,
-   FAIL_UNDOC  = 0x01000000,
-   FAIL_BADM   = 0x02000000,
+   FAIL_ACCA   = 0x00000100,
+   FAIL_ACCB   = 0x00000200,
+   FAIL_ACCE   = 0x00000400,
+   FAIL_ACCF   = 0x00000800,
+   FAIL_X      = 0x00001000,
+   FAIL_Y      = 0x00002000,
+   FAIL_U      = 0x00004000,
+   FAIL_S      = 0x00008000,
+   FAIL_DP     = 0x00010000,
+   FAIL_E      = 0x00020000,
+   FAIL_F      = 0x00040000,
+   FAIL_H      = 0x00080000,
+   FAIL_I      = 0x00100000,
+   FAIL_N      = 0x00200000,
+   FAIL_Z      = 0x00400000,
+   FAIL_V      = 0x00800000,
+   FAIL_C      = 0x01000000,
+   FAIL_RESULT = 0x02000000,
+   FAIL_VECTOR = 0x04000000,
+   FAIL_CYCLES = 0x08000000,
+   FAIL_UNDOC  = 0x10000000,
+   FAIL_BADM   = 0x20000000
 };
 
 static const char * fail_hints[32] = {
-   "PC",
+   "AddrInstr",
+   "AddrPointer",
+   "AddrData",
+   "AddrStack",
    "Memory",
+   "PC",
    "?",
    "?",
    "ACCA",
@@ -220,10 +224,6 @@ static const char * fail_hints[32] = {
    "Cycles",
    "Undoc",
    "BadMode",
-   "?",
-   "?",
-   "?",
-   "?",
    "?",
    "?"
 };
@@ -386,53 +386,62 @@ static void set_NZ16(int value) {
    Z = value == 0;
 }
 
-static void pop8s(int value) {
+static int pop8s(sample_t *sample) {
    if (S >= 0) {
-      memory_read(value & 0xff, S, MEM_STACK);
+      memory_read(sample, S, MEM_STACK);
       S = (S + 1) & 0xffff;
    }
+   return sample->data;
 }
 
-static void push8s(int value) {
+static int push8s(sample_t *sample) {
    if (S >= 0) {
       S = (S - 1) & 0xffff;
-      memory_write(value & 0xff, S, MEM_STACK);
+      memory_write(sample, S, MEM_STACK);
    }
+   return sample->data;
 }
 
-static void pop16s(int value) {
-   pop8s(value >> 8);
-   pop8s(value);
+static int pop16s(sample_t *sample) {
+   pop8s(sample);
+   pop8s(sample + 1);
+   return (sample->data << 8) + (sample + 1)->data;
+
 }
 
-static void push16s(int value) {
-   push8s(value);
-   push8s(value >> 8);
+static int push16s(sample_t *sample) {
+   push8s(sample);
+   push8s(sample + 1);
+   return ((sample + 1)->data << 8) + sample->data;
 }
 
 
-static void pop8u(int value) {
+static int pop8u(sample_t *sample) {
    if (U >= 0) {
-      memory_read(value & 0xff, U, MEM_STACK);
+      memory_read(sample, U, MEM_STACK);
       U = (U + 1) & 0xffff;
    }
+   return sample->data;
 }
 
-static void push8u(int value) {
+static int push8u(sample_t *sample) {
    if (U >= 0) {
       U = (U - 1) & 0xffff;
-      memory_write(value & 0xff, U, MEM_STACK);
+      memory_write(sample, U, MEM_STACK);
    }
+   return sample->data;
 }
 
-static void pop16u(int value) {
-   pop8u(value >> 8);
-   pop8u(value);
+static int pop16u(sample_t *sample) {
+   pop8u(sample);
+   pop8u(sample + 1);
+   return (sample->data << 8) + (sample + 1)->data;
 }
 
-static void push16u(int value) {
-   push8u(value);
-   push8u(value >> 8);
+static int push16u(sample_t *sample) {
+   push8u(sample);
+   push8u(sample + 1);
+   return ((sample + 1)->data << 8) + sample->data;
 }
 
 static int pack0(int byte) {
@@ -943,39 +952,36 @@ static int interrupt_helper(sample_q_t *sample_q, int offset, int full, int vect
    int i = offset;
 
    // The PC is pushed in all cases
-   int pc = (sample[i + 1].data << 8) + sample[i].data;
+   int pc = push16s(sample + i);
    i += 2;
-   push16s(pc);
 
    // The full state is pushed in IRQ/NMI/SWI/SWI2/SWI3
    if (full) {
 
-      int u  = (sample[i + 1].data << 8) + sample[i].data;
+
+      int u  = push16s(sample + i);
       i += 2;
-      push16s(u);
       if (U >= 0 && u != U) {
          failflag |= FAIL_U;
       }
       U = u;
 
-      int y  = (sample[i + 1].data << 8) + sample[i].data;
+      int y  = push16s(sample + i);
       i += 2;
-      push16s(y);
       if (Y >= 0 && y != Y) {
          failflag |= FAIL_Y;
       }
       Y = y;
 
-      int x  = (sample[i + 1].data << 8) + sample[i].data;
+      int x = push16s(sample + i);
       i += 2;
-      push16s(x);
       if (X >= 0 && x != X) {
          failflag |= FAIL_X;
       }
       X = x;
 
-      int dp = sample[i++].data;
-      push8s(dp);
+      int dp = push8s(sample + i);
+      i++;
       if (DP >= 0 && dp != DP) {
          failflag |= FAIL_DP;
       }
@@ -983,15 +989,15 @@ static int interrupt_helper(sample_q_t *sample_q, int offset, int full, int vect
 
       if (NM == 1) {
 
-         int f  = sample[i++].data;
-         push8s(f);
+         int f = push8s(sample + i);
+         i++;
          if (ACCF >= 0 && f != ACCF) {
             failflag |= FAIL_ACCF;
          }
          ACCF = f;
 
-         int e  = sample[i++].data;
-         push8s(e);
+         int e = push8s(sample + i);
+         i++;
          if (ACCE >= 0 && e != ACCE) {
             failflag |= FAIL_ACCE;
          }
@@ -999,15 +1005,15 @@ static int interrupt_helper(sample_q_t *sample_q, int offset, int full, int vect
 
       }
 
-      int b  = sample[i++].data;
-      push8s(b);
+      int b = push8s(sample + i);
+      i++;
       if (ACCB >= 0 && b != ACCB) {
          failflag |= FAIL_ACCB;
       }
       ACCB = b;
 
-      int a  = sample[i++].data;
-      push8s(a);
+      int a = push8s(sample + i);
+      i++;
       if (ACCA >= 0 && a != ACCA) {
          failflag |= FAIL_ACCA;
       }
@@ -1020,8 +1026,7 @@ static int interrupt_helper(sample_q_t *sample_q, int offset, int full, int vect
    }
 
    // The flags are pushed in all cases
-   int flags = sample[i].data;
-   push8s(flags);
+   int flags = push8s(sample + i);
    check_FLAGS(flags);
    set_FLAGS(flags);
 
@@ -1043,13 +1048,15 @@ static int interrupt_helper(sample_q_t *sample_q, int offset, int full, int vect
 
    // Read the vector and compare against what's expected
    int vechi = sample[i].data;
-   memory_read(vechi, vector_base + vector, MEM_POINTER);
+   memory_read(sample + i, vector_base + vector, MEM_POINTER);
+   // TODO: This error is superfluous, as we will already detect FAIL_ADDR
    if (sample[i].addr >= 0 && (sample[i].addr != vector)) {
       failflag |= FAIL_VECTOR;
    }
    i++;
    int veclo = sample[i].data;
-   memory_read(veclo, vector_base + vector + 1, MEM_POINTER);
+   memory_read(sample + i, vector_base + vector + 1, MEM_POINTER);
+   // TODO: This error is superfluous, as we will already detect FAIL_ADDR
    if (sample[i].addr >= 0 && (sample[i].addr != vector + 1)) {
       failflag  |= FAIL_VECTOR;
    }
@@ -1129,23 +1136,16 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
       failflag |= FAIL_UNDOC;
    }
 
-   // Sanity check the LS 4 bits of the PC Address
-   if (PC >= 0 && sample_q[0].addr >= 0) {
-      if ((PC & 15) != sample_q[0].addr) {
-         failflag |= FAIL_PC;
-      }
-   }
-
    // Memory modelling of the opcode and the prefix
    if (PC >= 0) {
-      memory_read(b0, PC + index, MEM_INSTR);
+      memory_read(sample_q + index, PC + index, MEM_INSTR);
    }
    index++;
 
    // If there is a prefix, skip past it and read the opcode
    if (b0 == 0x10 || b0 == 0x11) {
       if (PC >= 0) {
-         memory_read(b1, PC + index, MEM_INSTR);
+         memory_read(sample_q + index, PC + index, MEM_INSTR);
       }
       index++;
       // Increment opcode index (oi), which allows the rest of the code to ignore the prefix
@@ -1154,10 +1154,9 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
 
    // If there is an immediate byte (AIM/EIM/OIM/TIM only), skip past it
    if (mode == DIRECTIM || mode == EXTENDEDIM || mode == INDEXEDIM) {
-      int imm = sample_q[index].data;
       // The byte doesn't need to be saved, because it's always read from sample_q[1]
       if (PC >= 0) {
-         memory_read(imm, PC + index, MEM_INSTR);
+         memory_read(sample_q + index, PC + index, MEM_INSTR);
       }
       index++;
       // Decrement the mode to get back to the base addressing mode
@@ -1170,7 +1169,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    if (mode == REGISTER || mode == INDEXED || mode == DIRECTBIT) {
       pb = sample_q[index].data;
       if (PC >= 0) {
-         memory_read(pb, PC + index, MEM_INSTR);
+         memory_read(sample_q + index, PC + index, MEM_INSTR);
       }
       index++;
    }
@@ -1198,7 +1197,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
          // Memory modelling of the displacement bytes
          if (PC >= 0) {
             for (int i = 0; i < disp_bytes; i++) {
-               memory_read(sample_q[index + i].data, PC + index + i, MEM_INSTR);
+               memory_read(sample_q + index + i, PC + index + i, MEM_INSTR);
             }
          }
          index += disp_bytes;
@@ -1209,7 +1208,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    case RELATIVE_8:
    case IMMEDIATE_8:
       if (PC >= 0) {
-         memory_read(sample_q[index].data, PC + index, MEM_INSTR);
+         memory_read(sample_q + index, PC + index, MEM_INSTR);
       }
       index++;
       break;
@@ -1217,17 +1216,17 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    case RELATIVE_16:
    case IMMEDIATE_16:
       if (PC >= 0) {
-         memory_read(sample_q[index    ].data, PC + index    , MEM_INSTR);
-         memory_read(sample_q[index + 1].data, PC + index + 1, MEM_INSTR);
+         memory_read(sample_q + index    , PC + index    , MEM_INSTR);
+         memory_read(sample_q + index + 1, PC + index + 1, MEM_INSTR);
       }
       index += 2;
       break;
    case IMMEDIATE_32:
       if (PC >= 0) {
-         memory_read(sample_q[index    ].data, PC + index    , MEM_INSTR);
-         memory_read(sample_q[index + 1].data, PC + index + 1, MEM_INSTR);
-         memory_read(sample_q[index + 2].data, PC + index + 2, MEM_INSTR);
-         memory_read(sample_q[index + 3].data, PC + index + 3, MEM_INSTR);
+         memory_read(sample_q + index    , PC + index    , MEM_INSTR);
+         memory_read(sample_q + index + 1, PC + index + 1, MEM_INSTR);
+         memory_read(sample_q + index + 2, PC + index + 2, MEM_INSTR);
+         memory_read(sample_q + index + 3, PC + index + 3, MEM_INSTR);
       }
       index += 4;
       break;
@@ -1252,48 +1251,6 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    // Update the PC assuming not change of flow takes place
    if (PC >= 0) {
       PC = (PC + instruction->length) & 0xffff;
-   }
-
-   // Pick out the operand (Fig 17 in datasheet, esp sheet 5)
-   operand_t operand;
-   if (instr->op == &op_MULD) {
-      // There are many dead cycles at the end of MULD
-      // TODO - Maybe we should add a dead-cycles column to the op data structure
-      operand = (sample_q[num_cycles - 26].data << 8) + sample_q[num_cycles - 25].data;
-   } else if (instr->op == &op_TST && (NM != 1)) {
-      // There are two dead cycles at the end of TST
-      operand = sample_q[num_cycles - 3].data;
-   } else if (mode == IMMEDIATE_8 || mode == REGISTER) {
-      operand = sample_q[oi + 1].data; // In the case of register, this is the postbyte
-   } else if (mode == IMMEDIATE_16) {
-      operand = (sample_q[oi + 1].data << 8) + sample_q[oi + 2].data;
-   } else if (instr->op->type == RMWOP) {
-      // Read-modify-write instruction (always 8-bit)
-      operand = sample_q[num_cycles - 3].data;
-   } else if (instr->op->size == SIZE_32) {
-      operand = (sample_q[num_cycles - 4].data << 24) + (sample_q[num_cycles - 3].data << 16) + (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
-   } else if (instr->op->size == SIZE_16) {
-      if (instr->op->type == LOADOP || instr->op->type == STOREOP || instr->op->type == JSROP || (NM == 1)) {
-         // No dead cycle at the end with LDD/LDS/LDU/LDX/LDY/STD/STS/STU/STX/STY/JSR
-         operand = (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
-      } else {
-         // Dead cycle at the end in ADDD/CMPD/CMPS/CMPU/CMPX/CMPY/SUBD
-         operand = (sample_q[num_cycles - 3].data << 8) + sample_q[num_cycles - 2].data;
-      }
-   } else {
-      operand = sample_q[num_cycles - 1].data;
-   }
-
-   // Operand 2 is the value written back in a store or read-modify-write
-   operand_t operand2 = operand;
-   if (instr->op->type == RMWOP || instr->op->type == STOREOP) {
-      if (instr->op->size == SIZE_32) {
-         operand2 = (sample_q[num_cycles - 4].data << 24) + (sample_q[num_cycles - 3].data << 16) + (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
-      } else if (instr->op->size == SIZE_16) {
-         operand2 = (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
-      } else {
-         operand2 = sample_q[num_cycles - 1].data;
-      }
    }
 
    // Calculate the effective address (for additional memory reads)
@@ -1496,9 +1453,9 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
                // - the final 2 steps back to the effective address read
                offset += oi;
                if (ea >= 0) {
-                  memory_read(sample_q[offset    ].data, ea, MEM_POINTER);
+                  memory_read(sample_q + offset    , ea, MEM_POINTER);
                   ea = (ea + 1 ) & 0xffff;
-                  memory_read(sample_q[offset + 1].data, ea, MEM_POINTER);
+                  memory_read(sample_q + offset + 1, ea, MEM_POINTER);
                }
                ea = ((sample_q[offset].data << 8) + sample_q[offset + 1].data) & 0xffff;
             }
@@ -1514,27 +1471,95 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
       ea = (PC - 1) & 0xffff;
    }
 
-   // Model memory reads
-   if (ea >= 0 && (instr->op->type == LOADOP || instr->op->type == READOP || instr->op->type == RMWOP)) {
-      if (instr->op->size == SIZE_32) {
-         memory_read((operand >> 24) & 0xff, ea,     MEM_DATA);
-         memory_read((operand >> 16) & 0xff, ea + 1, MEM_DATA);
-         memory_read((operand >>  8) & 0xff, ea + 2, MEM_DATA);
-         memory_read( operand         & 0xff, ea + 3, MEM_DATA);
-      } else if (instr->op->size == SIZE_16) {
-         memory_read((operand >>  8) & 0xff, ea,     MEM_DATA);
-         memory_read( operand        & 0xff, ea + 1, MEM_DATA);
+   // Pick out the read operand (Fig 17 in datasheet, esp sheet 5)
+   if (instr->op == &op_MULD) {
+      // There are many dead cycles at the end of MULD
+      // TODO - Maybe we should add a dead-cycles column to the op data structure
+      oi = num_cycles - 26;
+   } else if (instr->op == &op_TST) {
+      // There are two dead cycles at the end of TST in emul mode, and one in native mode
+      oi = num_cycles - ((NM == 1) ? 2 : 3);
+   } else if (mode == IMMEDIATE_8 || mode == IMMEDIATE_16 || mode == REGISTER) {
+      // operand immediately follows the opcode
+      oi++;
+   } else if (mode == DIRECTBIT) {
+      // There is one dead cycle at the end of directbit
+      oi = num_cycles - 2;
+   } else if (instr->op->type == RMWOP) {
+      // Read-modify-write instruction
+      oi = num_cycles - 3;
+   } else if (instr->op->size == SIZE_32) {
+      // Quad-byte operand
+      oi = num_cycles - 4;
+   } else if (instr->op->size == SIZE_16) {
+      // Double byte operand
+      if (instr->op->type == LOADOP || instr->op->type == STOREOP || NM == 1) {
+         // No dead cycle at the end with LDD/LDS/LDU/LDX/LDY/STD/STS/STU/STX/STY/JSR
+         oi = num_cycles - 2;
       } else {
-         memory_read( operand        & 0xff, ea,     MEM_DATA);
+         // Dead cycle at the end in ADDD/CMPD/CMPS/CMPU/CMPX/CMPY/SUBD
+         oi = num_cycles - 3;
+      }
+   } else {
+      // Single byte operand
+      oi = num_cycles - 1;
+   }
+
+   // Calculate the read operand
+   operand_t operand;
+   if (instr->op->size == SIZE_32) {
+      operand = (sample_q[oi    ].data << 24) + (sample_q[oi + 1].data << 16) +
+                (sample_q[oi + 2].data <<  8) +  sample_q[oi + 3].data;
+   } else if (instr->op->size == SIZE_16) {
+      operand = (sample_q[oi].data << 8) + sample_q[oi + 1].data;
+   } else {
+      operand = sample_q[oi].data;
+   }
+
+   // Memory modelling of the read operand
+   if (ea >= 0 && (instr->op->type == RMWOP || instr->op->type == LOADOP ||  instr->op->type == READOP)) {
+      if (instr->op->size == SIZE_32) {
+         memory_read(sample_q + oi    , ea,     MEM_DATA);
+         memory_read(sample_q + oi + 1, ea + 1, MEM_DATA);
+         memory_read(sample_q + oi + 2, ea + 2, MEM_DATA);
+         memory_read(sample_q + oi + 3, ea + 3, MEM_DATA);
+      } else if (instr->op->size == SIZE_16) {
+         memory_read(sample_q + oi    , ea    , MEM_DATA);
+         memory_read(sample_q + oi + 1, ea + 1, MEM_DATA);
+      } else {
+         memory_read(sample_q + oi    , ea    , MEM_DATA);
       }
    }
 
-   // Emulate the instruction
+   // Operand 2 is the value written back in a store or read-modify-write
+   operand_t operand2 = 0;
+   if (instr->op->type == RMWOP || instr->op->type == STOREOP) {
+      if (instr->op->size == SIZE_32) {
+         operand2 = (sample_q[num_cycles - 4].data << 24) + (sample_q[num_cycles - 3].data << 16) + (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
+         if (ea >= 0) {
+            memory_write(sample_q + num_cycles - 4, ea,     MEM_DATA);
+            memory_write(sample_q + num_cycles - 3, ea + 1, MEM_DATA);
+            memory_write(sample_q + num_cycles - 2, ea + 2, MEM_DATA);
+            memory_write(sample_q + num_cycles - 1, ea + 3, MEM_DATA);
+         }
+      } else if (instr->op->size == SIZE_16) {
+         operand2 = (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
+         if (ea >= 0) {
+            memory_write(sample_q + num_cycles - 2, ea    , MEM_DATA);
+            memory_write(sample_q + num_cycles - 1, ea + 1, MEM_DATA);
+         }
+      } else {
+         operand2 = sample_q[num_cycles - 1].data;
+         if (ea >= 0) {
+            memory_write(sample_q + num_cycles - 1, ea    , MEM_DATA);
+         }
+      }
+   }
+
+   // Emulate the instruction, and check the result against what was seen on the bus
    if (instr->op->emulate) {
       int result = instr->op->emulate(operand, ea, &sample_ref);
-
       if (instr->op->type == STOREOP || instr->op->type == RMWOP) {
-
          // WRTEOP:
          //    8-bit: STA STB
          //   16-bit: STD STS STU STX STY
@@ -1545,21 +1570,6 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
          // Check result of instruction against bye
          if (result >= 0 && result != operand2) {
             failflag |= FAIL_RESULT;
-         }
-
-         // Model memory writes based on result seen on bus
-         if (ea >= 0) {
-            if (instr->op->size == SIZE_32) {
-               memory_write((operand2 >> 24) & 0xff, ea,     MEM_DATA);
-               memory_write((operand2 >> 16) & 0xff, ea + 1, MEM_DATA);
-               memory_write((operand2 >>  8) & 0xff, ea + 2, MEM_DATA);
-               memory_write( operand2        & 0xff, ea + 3, MEM_DATA);
-            } else if (instr->op->size == SIZE_16) {
-               memory_write((operand2 >>  8) & 0xff, ea,     MEM_DATA);
-               memory_write( operand2        & 0xff, ea + 1, MEM_DATA);
-            } else {
-               memory_write( operand2        & 0xff, ea,     MEM_DATA);
-            }
          }
       }
    }
@@ -2086,8 +2096,8 @@ static void push_helper(sample_q_t *sample_q, int system) {
    // 16 Flags  skipped if bit 0=0
    sample_t *sample = sample_q->sample;
    int *us;
-   void (*push8)(int);
-   void (*push16)(int);
+   int (*push8)(sample_t *);
+   int (*push16)(sample_t *);
    int fail_us;
    if (system) {
       push8 = push8s;
@@ -2105,68 +2115,64 @@ static void push_helper(sample_q_t *sample_q, int system) {
    int tmp;
    int i = (NM == 1) ? 4 : 5;
    if (pb & 0x80) {
-      tmp = (sample[i + 1].data << 8) + sample[i].data;
+      tmp = push16(sample + i);
       i += 2;
-      push16(tmp);
       if (PC >= 0 && PC != tmp) {
          failflag |= FAIL_PC;
       }
       PC = tmp;
    }
    if (pb & 0x40) {
-      tmp = (sample[i + 1].data << 8) + sample[i].data;
+      tmp = push16(sample + i);
       i += 2;
-      push16(tmp);
       if (*us >= 0 && *us != tmp) {
          failflag |= fail_us;
       }
       *us = tmp;
    }
    if (pb & 0x20) {
-      tmp = (sample[i + 1].data << 8) + sample[i].data;
+      tmp = push16(sample + i);
       i += 2;
-      push16(tmp);
       if (Y >= 0 && Y != tmp) {
          failflag |= FAIL_Y;
       }
       Y = tmp;
    }
    if (pb & 0x10) {
-      tmp = (sample[i + 1].data << 8) + sample[i].data;
+      tmp = push16(sample + i);
       i += 2;
-      push16(tmp);
       if (X >= 0 && X != tmp) {
          failflag |= FAIL_X;
       }
       X = tmp;
    }
    if (pb & 0x08) {
-      tmp = sample[i++].data;
-      push8(tmp);
+      tmp = push8(sample + i);
+      i++;
       if (DP >= 0 && DP != tmp) {
          failflag |= FAIL_DP;
       }
       DP = tmp;
    }
    if (pb & 0x04) {
-      tmp = sample[i++].data;
-      push8(tmp);
+      tmp = push8(sample + i);
+      i++;
       if (ACCB >= 0 && ACCB != tmp) {
          failflag |= FAIL_ACCB;
       }
       ACCB = tmp;
    }
    if (pb & 0x02) {
-      tmp = sample[i++].data;
-      push8(tmp);
+      tmp = push8(sample + i);
+      i++;
       if (ACCA >= 0 && ACCA != tmp) {
          failflag |= FAIL_ACCA;
       }
       ACCA = tmp;
    }
    if (pb & 0x01) {
-      tmp = sample[i++].data;
-      push8(tmp);
+      tmp = push8(sample + i);
+      i++;
       check_FLAGS(tmp);
       set_FLAGS(tmp);
    }
@@ -2192,8 +2198,8 @@ static void pull_helper(sample_q_t *sample_q, int system) {
    // 16 --
    sample_t *sample = sample_q->sample;
    int *us;
-   void (*pop8)(int);
-   void (*pop16)(int);
+   int (*pop8)(sample_t *);
+   int (*pop16)(sample_t *);
    if (system) {
       pop8 = pop8s;
       pop16 = pop16s;
@@ -2208,47 +2214,43 @@ static void pull_helper(sample_q_t *sample_q, int system) {
    int tmp;
    int i = (NM == 1) ? 3 : 4;
    if (pb & 0x01) {
-      tmp = sample[i++].data;
-      pop8(tmp);
+      tmp = pop8(sample + i);
+      i++;
       set_FLAGS(tmp);
    }
    if (pb & 0x02) {
-      tmp = sample[i++].data;
-      pop8(tmp);
+      tmp = pop8(sample + i);
+      i++;
       ACCA = tmp;
    }
    if (pb & 0x04) {
-      tmp = sample[i++].data;
-      pop8(tmp);
+      tmp = pop8(sample + i);
+      i++;
       ACCB = tmp;
    }
    if (pb & 0x08) {
-      tmp = sample[i++].data;
-      pop8(tmp);
+      tmp = pop8(sample + i);
+      i++;
       DP = tmp;
    }
    if (pb & 0x10) {
-      tmp = (sample[i].data << 8) + sample[i + 1].data;
+      tmp = pop16(sample + i);
       i += 2;
-      pop16(tmp);
       X = tmp;
    }
    if (pb & 0x20) {
-      tmp = (sample[i].data << 8) + sample[i + 1].data;
+      tmp = pop16(sample + i);
       i += 2;
-      pop16(tmp);
       Y = tmp;
    }
    if (pb & 0x40) {
-      tmp = (sample[i].data << 8) + sample[i + 1].data;
+      tmp = pop16(sample + i);
       i += 2;
-      pop16(tmp);
       *us = tmp;
    }
    if (pb & 0x80) {
-      tmp = (sample[i].data << 8) + sample[i + 1].data;
+      tmp = pop16(sample + i);
       i += 2;
-      pop16(tmp);
       PC = tmp;
    }
 }
@@ -2617,9 +2619,7 @@ static int op_fn_BRN(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_BSR(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   // operand is actually byte swapped at this point
-   push8s(operand >> 8); // this pushes the low byte
-   push8s(operand);      // this pushes he high byte
+   push16s(sample_q->sample + sample_q->num_cycles - 2);
    PC = ea & 0xffff;
    return -1;
 }
@@ -2891,9 +2891,7 @@ static int op_fn_JMP(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_JSR(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   // operand is actually byte swapped at this point
-   push8s(operand >> 8); // this pushes the low byte
-   push8s(operand);      // this pushes he high byte
+   push16s(sample_q->sample + sample_q->num_cycles - 2);
    PC = ea & 0xffff;
    return -1;
 }
@@ -3121,6 +3119,8 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
    int i = 2;
 
+   // TODO: Rewrite using inline pop8s/pop16s
+
    // Do the flags first, as the stacked E indicates how much to restore
    set_FLAGS(sample[i++].data);
 
@@ -3145,7 +3145,7 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
    // Memory modelling
    for (int j = 2; j < i; j++) {
-      pop8s(sample[j].data);
+      pop8s(sample + j);
    }
 
    return -1;
@@ -3153,9 +3153,7 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
 static int op_fn_RTS(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    sample_t *sample = sample_q->sample;
-   pop8s(sample[2].data);
-   pop8s(sample[3].data);
-   PC = (sample[2].data << 8) + sample[3].data;
+   PC = pop16s(sample + 2);
    return -1;
 }
 
@@ -3621,15 +3619,13 @@ static void set_q_nz_unknown() {
 
 static void pushw_helper(sample_q_t *sample_q, int system) {
    sample_t *sample = sample_q->sample;
-   void (*push8)(int) = system ? push8s : push8u;
-   int e = sample[5].data;
-   int f = sample[4].data;
-   push8(f);
+   int (*push8)(sample_t *) = system ? push8s : push8u;
+   int f = push8(sample + 4);
    if (ACCF >= 0 && ACCF != f) {
       failflag |= FAIL_ACCF;
    }
    ACCF = f;
-   push8(e);
+   int e = push8(sample + 5);
    if (ACCE >= 0 && ACCE != e) {
       failflag |= FAIL_ACCE;
    }
@@ -3638,13 +3634,9 @@ static void pushw_helper(sample_q_t *sample_q, int system) {
 
 static void pullw_helper(sample_q_t *sample_q, int system) {
    sample_t *sample = sample_q->sample;
-   void (*pop8)(int) = system ? pop8s : pop8u;
-   int e = sample[4].data;
-   int f = sample[5].data;
-   pop8(e);
-   ACCE = e;
-   pop8(f);
-   ACCF = f;
+   int (*pop8)(sample_t *) = system ? pop8s : pop8u;
+   ACCE = pop8(sample + 4);
+   ACCF = pop8(sample + 5);
 }
 
 // ====================================================================
@@ -4514,9 +4506,9 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       if (opcode == 0x38 || opcode == 0x3a) {
          if (num_bytes >= 0) {
             for (int i = 0; i < num_bytes; i++) {
-               memory_read(rd_sample->data, reg0, MEM_DATA);
+               memory_read(rd_sample, reg0, MEM_DATA);
                reg0 = (reg0 + 1) & 0xffff;
-               sample += 3;
+               rd_sample += 3;
             }
          } else {
             reg0 = -1;
@@ -4524,9 +4516,9 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       } else if (opcode == 0x39) {
          if (num_bytes >= 0) {
             for (int i = 0; i < num_bytes; i++) {
-               memory_read(sample->data, reg0, MEM_DATA);
+               memory_read(rd_sample, reg0, MEM_DATA);
                reg0 = (reg0 - 1) & 0xffff;
-               sample += 3;
+               rd_sample += 3;
             }
          } else {
             reg0 = -1;
@@ -4547,9 +4539,9 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       if (opcode == 0x38 || opcode == 0x3b) {
          if (num_bytes >= 0) {
             for (int i = 0; i < num_bytes; i++) {
-               memory_write(wr_sample->data, reg1, MEM_DATA);
+               memory_write(wr_sample, reg1, MEM_DATA);
                reg1 = (reg1 + 1) & 0xffff;
-               sample += 3;
+               wr_sample += 3;
             }
          } else {
             reg1 = -1;
@@ -4557,9 +4549,9 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       } else if (opcode == 0x39) {
          if (num_bytes >= 0) {
             for (int i = 0; i < num_bytes; i++) {
-               memory_write(sample->data, reg1, MEM_DATA);
+               memory_write(wr_sample, reg1, MEM_DATA);
                reg1 = (reg1 - 1) & 0xffff;
-               sample += 3;
+               wr_sample += 3;
             }
          } else {
             reg1 = -1;

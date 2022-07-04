@@ -18,9 +18,9 @@ void memory_set_rd_logging(int bitmask);
 
 void memory_set_wr_logging(int bitmask);
 
-void memory_read(int data, int ea, mem_access_t type);
+void memory_read(sample_t *sample, int ea, mem_access_t type);
 
-void memory_write(int data, int ea, mem_access_t type);
+void memory_write(sample_t *sample, int ea, mem_access_t type);
 
 int memory_read_raw(int ea);
 

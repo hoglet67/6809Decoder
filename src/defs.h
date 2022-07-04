@@ -5,8 +5,12 @@
 
 // Standard failures
 
-#define FAIL_PC     0x00000001
-#define FAIL_MEMORY 0x00000002
+#define FAIL_ADDR_INSTR 0x00000001
+#define FAIL_ADDR_PTR   0x00000002
+#define FAIL_ADDR_DATA  0x00000004
+#define FAIL_ADDR_STACK 0x00000008
+#define FAIL_MEMORY     0x00000010
+#define FAIL_PC         0x00000020
 
 typedef enum {
    MACHINE_DEFAULT,
@@ -111,5 +115,11 @@ typedef struct {
 } cpu_emulator_t;
 
 extern uint32_t failflag;
+
+static inline void validate_address(sample_t *sample, int ea, int fail) {
+   if (sample->addr >= 0 && sample->addr != (ea & 15)) {
+      failflag |= fail;
+   }
+}
 
 #endif

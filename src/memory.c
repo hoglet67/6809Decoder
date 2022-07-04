@@ -212,7 +212,9 @@ void memory_set_wr_logging(int bitmask) {
    mem_wr_logging = bitmask;
 }
 
-void memory_read(int data, int ea, mem_access_t type) {
+void memory_read(sample_t *sample, int ea, mem_access_t type) {
+   int data = sample->data;
+   validate_address(sample, ea, 1 << type);
    assert(ea >= 0);
    assert(data >= 0);
    // Log memory read
@@ -225,7 +227,9 @@ void memory_read(int data, int ea, mem_access_t type) {
    }
 }
 
-void memory_write(int data, int ea, mem_access_t type) {
+void memory_write(sample_t *sample, int ea, mem_access_t type) {
+   int data = sample->data;
+   validate_address(sample, ea, 1 << type);
    assert(ea >= 0);
    assert(data >= 0);
    // Delegate memory write to machine specific handler
