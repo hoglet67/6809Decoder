@@ -9,8 +9,9 @@
 #define FAIL_ADDR_PTR   0x00000002
 #define FAIL_ADDR_DATA  0x00000004
 #define FAIL_ADDR_STACK 0x00000008
-#define FAIL_MEMORY     0x00000010
-#define FAIL_PC         0x00000020
+#define FAIL_RNW        0x00000010
+#define FAIL_MEMORY     0x00000020
+#define FAIL_PC         0x00000040
 
 typedef enum {
    MACHINE_DEFAULT,
