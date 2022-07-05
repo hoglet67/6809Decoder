@@ -493,45 +493,61 @@ int write_s(char *buffer, const char *s) {
    return i;
 }
 
-static int analyze_instruction(sample_t *sample_q, int num_samples) {
-   static int total_cycles = 0;
-   static int interrupt_depth = 0;
-   static int skipping_interrupted = 0;
 
-   int window = LONGEST_INSTRUCTION;
-
+static int exec_instruction(sample_t *sample_q, int num_samples, instruction_t *instruction) {
    int num_cycles;
-   int intr_seen = 0;
-   int rst_seen = em->match_reset(sample_q, window);
-   if (rst_seen) {
-      num_cycles = rst_seen;
+   int window = LONGEST_INSTRUCTION;
+   instruction->intr_seen = 0;
+   instruction->rst_seen = em->match_reset(sample_q, window);
+   if (instruction->rst_seen) {
+      num_cycles = instruction->rst_seen;
    } else {
-      intr_seen = em->match_interrupt(sample_q, window);
-      if (intr_seen) {
-         num_cycles = intr_seen;
+      instruction->intr_seen = em->match_interrupt(sample_q, window);
+      if (instruction->intr_seen) {
+         num_cycles = instruction->intr_seen;
       } else {
          num_cycles = em->count_cycles(sample_q, num_samples);
       }
    }
 
-   // Deal with partial final instruction
-   if (num_samples < num_cycles || num_cycles == 0) {
-      return num_samples;
+   // Two cases where num_cycles < 0:
+   //    in non-LIC mode, where the instruction length can't be determined from the know CPU state
+   //    if the final instruction is truncated
+
+   if (num_cycles >= 0) {
+      if (instruction->rst_seen) {
+         // Handle a reset
+         em->reset(sample_q, num_cycles, instruction);
+      } else if (instruction->intr_seen) {
+         // Handle an interrupt
+         em->interrupt(sample_q, num_cycles, instruction);
+      } else {
+         // Handle a normal instruction
+         num_cycles = em->emulate(sample_q, num_cycles, instruction);
+      }
    }
 
-   instruction_t instruction;
+   return num_cycles;
+}
+
+
+static int analyze_instruction(sample_t *sample_q, int num_samples) {
+   static int total_cycles = 0;
+   static int interrupt_depth = 0;
+   static int skipping_interrupted = 0;
 
    int oldpc = em->get_PC();
 
-   if (rst_seen) {
-      // Handle a reset
-      em->reset(sample_q, num_cycles, &instruction);
-   } else if (intr_seen) {
-      // Handle an interrupt
-      em->interrupt(sample_q, num_cycles, &instruction);
-   } else {
-      // Handle a normal instruction
-      num_cycles = em->emulate(sample_q, num_cycles, &instruction);
+   instruction_t instruction;
+
+   int num_cycles = exec_instruction(sample_q, num_samples, &instruction);
+
+   if (num_cycles == CYCLES_TRUNCATED) {
+      // Silently consume all remaining samples
+      return num_samples;
+   } else if (num_cycles == CYCLES_UNKNOWN) {
+      // Silently slip one cycle
+      return 1;
    }
 
    // Sanity check the pc prediction has not gone awry
@@ -561,7 +577,7 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
       if (interrupt_depth == 0) {
          skipping_interrupted = 0;
       }
-      if (intr_seen) {
+      if (instruction.intr_seen) {
          interrupt_depth++;
          skipping_interrupted = 1;
       } else if (interrupt_depth > 0 && instruction.instr[0] == 0x3b) {
@@ -616,9 +632,9 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
 
       // Show instruction disassembly
       if (fail || arguments.show_something) {
-         if (rst_seen) {
+         if (instruction.rst_seen) {
             numchars = write_s(bp, "RESET !!");
-         } else if (intr_seen) {
+         } else if (instruction.intr_seen) {
             numchars = write_s(bp, "INTERRUPT !!");
          } else {
             numchars = em->disassemble(bp, &instruction);
@@ -667,35 +683,16 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
 }
 
 // ====================================================================
-// Generic instruction decoder
-// ====================================================================
-
-// This stage is mostly about cleaning coming out of reset in all cases
-//
-//        Rst Sync
-//
-// Case 1:  ?   ?  : search for heuristic at n, n+1, n+2 - consume n+2 cycles
-// Case 2:  ?  01  : search for heuristic at 5, 6, 7 - consume 7 ctcles
-// Case 3: 01   ?  : dead reconning; 8 or 9 depending on the cpu type
-// Case 4: 01  01  : mark first instruction after rst stable
-//
-
-int decode_instruction(sample_t *sample_q, int num_samples) {
-
-   // Decode the instruction
-   int num_cycles = analyze_instruction(sample_q, num_samples);
-
-   return num_cycles;
-}
-
-// ====================================================================
-// Queue a small number of samples so the decoders can lookahead
+// Queue a large number of samples so the decoders can lookahead
 // ====================================================================
 
 // BLOCK is guaranteed to be larger than the longest running instuction
 // TODO: apart from SYNC or CWAI
 
 #define BLOCK (256*1024)
+
+#define SYNC_RANGE 100
+#define SYNC_WINDOW 1000
 
 // Queue three blocks
 static sample_t sample_q[BLOCK * 3];
@@ -705,35 +702,98 @@ void queue_sample(sample_t *sample) {
    static sample_t *sample_wr = sample_q;
    static sample_t *sample_rd = sample_q;
 
-   // Try to synchronize to the instructions stream using LIC
-   if (!synced) {
-      if (sample->lic < 0) {
-         // No LIC, so mark as in-sync and falled through to process the sample
-         synced = 1;
-      } else if (sample->lic) {
-         // LIC is one, so mark as in-sync
-         synced = 1;
-         if (em->get_NM() != 1) {
-            // In emulation mode, LIC really is on the last intruction cycle, so drop this sample
-            return;
-         }
-      } else {
-         // LIC is zero, so drop the sample as we are not key in sync
-         return;
-      }
-   }
-
-   // Make a copy of the sample structure
-   *sample_wr++ = *sample;
 
    // At the end of the stream, allow the buffered samples to drain
    if (sample->type == LAST) {
       // Drain the queue when the LAST marker is seen
       while (sample_rd < sample_wr) {
-         sample_rd += decode_instruction(sample_rd, sample_wr - sample_rd);
+         sample_rd += analyze_instruction(sample_rd, sample_wr - sample_rd);
       }
       return;
+   } else {
+      // Make a copy of the sample structure
+      *sample_wr++ = *sample;
    }
+
+
+   // TODO: Handle RESET
+
+   // Try to synchronize to the instruction
+   if (!synced) {
+      if (sample_wr < sample_q + BLOCK) {
+         return;
+      }
+      if (sample_rd->lic >= 0) {
+         // LIC is available, so step forward to the first sample with LIC == 1
+         while (!sample_rd->lic) {
+            sample_rd++;
+         }
+         // In emulation mode, LIC is on the last intruction cycle, so skip forward one more
+         if (em->get_NM() != 1) {
+            sample_rd++;
+         }
+      } else {
+         // LIC is not available, so use heuristics
+
+         // TODO: Move into a separe function
+         // TODO: Also detect native mode
+
+         // Preserve the modelling state
+         int mem_modelling  = memory_get_modelling();
+         int mem_rd_logging = memory_get_rd_logging();
+         int mem_wr_logging = memory_get_wr_logging();
+         memory_destroy();
+         sample_t *sample_best = NULL;
+         int error_best = INT_MAX;
+         // This should make the LIC and non-LIC trace start at the same instruction
+         if (em->get_NM() != 1) {
+            sample_rd++;
+         }
+         for (int i = 0; i < SYNC_RANGE && error_best > 0; i++) {
+            sample_t *sample_tmp = sample_rd;
+            int error_count = 0;
+
+            // Re-initialize the emulator
+            em->init(&arguments);
+            memory_init(0x10000, arguments.machine);
+            memory_set_modelling(0);
+            memory_set_rd_logging(0);
+            memory_set_wr_logging(0);
+            while (sample_tmp < sample_q + SYNC_WINDOW ) {
+               instruction_t instruction;
+               failflag = 0;
+               int num_cycles = exec_instruction(sample_tmp, BLOCK - (sample_tmp - sample_q), &instruction);
+               if (num_cycles == CYCLES_TRUNCATED) {
+                  break;
+               } else if (num_cycles == CYCLES_UNKNOWN) {
+                  num_cycles = 1;
+               }
+               sample_tmp += num_cycles;
+               if (failflag) {
+                  error_count++;
+               }
+            }
+            memory_destroy();
+
+            fprintf(stderr, "Offset %3d had %d errors\n", i, error_count);
+            if (error_count < error_best) {
+               sample_best = sample_rd;
+               error_best = error_count;
+            }
+            sample_rd++;
+         }
+         fprintf(stderr, "Best is %ld\n", sample_best - sample_q);
+         sample_rd = sample_best;
+         // Initialize for real
+         em->init(&arguments);
+         memory_init(0x10000, arguments.machine);
+         memory_set_modelling(mem_modelling);
+         memory_set_rd_logging(mem_rd_logging);
+         memory_set_wr_logging(mem_wr_logging);
+      }
+      synced = 1;
+   }
+
 
    // Sample_q is NOT a circular buffer!
    //
@@ -741,7 +801,7 @@ void queue_sample(sample_t *sample) {
    // consumed, we can move everything back in the block.
    if (sample_wr > sample_q + 2 * BLOCK) {
       while (sample_rd < sample_q + BLOCK) {
-         sample_rd += decode_instruction(sample_rd, sample_wr - sample_rd);
+         sample_rd += analyze_instruction(sample_rd, sample_wr - sample_rd);
       }
       // The first block has been processed, so move everything down a block
       //printf("Block processed\n");

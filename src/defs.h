@@ -54,6 +54,8 @@ typedef struct {
    int           pc;
    uint8_t       instr[8];
    uint8_t       length;
+   int           rst_seen;
+   int           intr_seen;
 } instruction_t;
 
 void write_hex1(char *buffer, int value);
@@ -97,6 +99,11 @@ typedef struct {
    char *filename;
    int show_romno;
 } arguments_t;
+
+// Error return valyes from count_cycles
+
+#define CYCLES_UNKNOWN   -1   // The cycle count could not be determined
+#define CYCLES_TRUNCATED -2   // The final instruction was truncated
 
 typedef struct {
    void (*init)(arguments_t *args);

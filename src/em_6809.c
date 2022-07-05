@@ -584,6 +584,31 @@ static void set_regp(int i, int val) {
 // ====================================================================
 
 static void em_6809_init(arguments_t *args) {
+   // Set everything to unknown
+   ACCA = -1;
+   ACCB = -1;
+   ACCE = -1;
+   ACCF = -1;
+   X    = -1;
+   Y    = -1;
+   S    = -1;
+   U    = -1;
+   DP   = -1;
+   PC   = -1;
+   TV   = -1;
+   E    = -1;
+   F    = -1;
+   H    = -1;
+   I    = -1;
+   N    = -1;
+   Z    = -1;
+   V    = -1;
+   C    = -1;
+   NM   = -1;
+   FM   = -1;
+   IL   = -1;
+   DZ   = -1;
+   // Parse arguments
    show_cycle_errors = args->show_cycles;
    if (args->reg_s >= 0) {
       S = args->reg_s;
@@ -777,7 +802,7 @@ static int get_num_cycles(sample_t *sample_q, int num_samples) {
    }
    if (b0 == 0x13) {
       // SYNC, look ahead for sync acknowledge
-      cycle_count = -1;
+      cycle_count = CYCLES_UNKNOWN;
       if (sample_q[0].ba >= 0) {
          for (int i = 1; i < num_samples; i++) {
             if (sample_q[i].ba == 1) {
@@ -795,7 +820,7 @@ static int get_num_cycles(sample_t *sample_q, int num_samples) {
       }
    } else if (b0 == 0x3c) {
       // CWAIT, ahead for fector fetch
-      cycle_count = -1;
+      cycle_count = CYCLES_UNKNOWN;
       if (sample_q[0].bs >= 0) {
          for (int i = 1; i < num_samples; i++) {
             if (sample_q[i].bs == 1) {
@@ -840,7 +865,7 @@ static int get_num_cycles(sample_t *sample_q, int num_samples) {
             if (W >= 0) {
                cycle_count = 6 + 3 * W;
             } else {
-               cycle_count = -1; // Can't determine this
+               cycle_count = CYCLES_UNKNOWN; // Can't determine this
             }
          }
       }
@@ -875,16 +900,16 @@ static int count_cycles_with_lic(sample_t *sample_q, int num_samples) {
          return i;
       }
    }
-   return 1;
+   return CYCLES_TRUNCATED;
 }
 
 static int count_cycles_without_lic(sample_t *sample_q, int num_samples) {
    int num_cycles = get_num_cycles(sample_q, num_samples);
-   if (num_cycles >= 0) {
+   if (num_cycles > num_samples) {
+      return CYCLES_TRUNCATED;
+   } else {
       return num_cycles;
    }
-   printf ("cycle prediction unknown\n");
-   return 1;
 }
 
 static int em_6809_count_cycles(sample_t *sample_q, int num_samples) {

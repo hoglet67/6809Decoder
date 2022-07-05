@@ -212,6 +212,19 @@ void memory_set_wr_logging(int bitmask) {
    mem_wr_logging = bitmask;
 }
 
+
+int memory_get_modelling() {
+   return mem_model;
+}
+
+int memory_get_rd_logging() {
+   return mem_rd_logging;
+}
+
+int memory_get_wr_logging() {
+   return mem_wr_logging;
+}
+
 void memory_read(sample_t *sample, int ea, mem_access_t type) {
    int data = sample->data;
    validate_address(sample, ea, 1 << type);
