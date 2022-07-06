@@ -1253,6 +1253,17 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    }
    instruction->length = index;
 
+   // Sanity check the instruction bytes have sequential addresses
+   // which can help to avoid incorrect synchronization to the instruction stream
+   if (sample_q[0].addr >= 0) {
+      for (int i = 1; i < instruction->length; i++) {
+         if (sample_q[i].addr != ((sample_q[0].addr + i) & 15)) {
+            failflag |= FAIL_ADDR_INSTR;
+            break;
+         }
+      }
+   }
+
    // In main, instruction->pc is checked against the emulated PC, so in the case
    // of JSR/BSR/LBSR this provides a means of sanity checking
    if (instr->op->type == JSROP) {
