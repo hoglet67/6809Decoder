@@ -226,13 +226,15 @@ int memory_get_wr_logging() {
 }
 
 void memory_read(sample_t *sample, int ea, mem_access_t type) {
-   int data = sample->data;
-   validate_address(sample, ea, 1 << type);
    if (sample->rnw == 0) {
       failflag |= FAIL_RNW;
    }
-   assert(ea >= 0);
-   assert(data >= 0);
+   // If the effective address is unknown, we can't do any modelling
+   if (ea < 0) {
+      return;
+   }
+   int data = sample->data;
+   validate_address(sample, ea, 1 << type);
    // Log memory read
    if (mem_rd_logging & (1 << type)) {
       log_memory_access("Rd: ", data, ea, 0);
@@ -244,13 +246,15 @@ void memory_read(sample_t *sample, int ea, mem_access_t type) {
 }
 
 void memory_write(sample_t *sample, int ea, mem_access_t type) {
-   int data = sample->data;
-   validate_address(sample, ea, 1 << type);
    if (sample->rnw == 1) {
       failflag |= FAIL_RNW;
    }
-   assert(ea >= 0);
-   assert(data >= 0);
+   // If the effective address is unknown, we can't do any modelling
+   if (ea < 0) {
+      return;
+   }
+   int data = sample->data;
+   validate_address(sample, ea, 1 << type);
    // Delegate memory write to machine specific handler
    int ignored = 0;
    if (mem_model & (1 << type)) {

@@ -387,8 +387,8 @@ static void set_NZ16(int value) {
 }
 
 static int pop8s(sample_t *sample) {
+   memory_read(sample, S, MEM_STACK);
    if (S >= 0) {
-      memory_read(sample, S, MEM_STACK);
       S = (S + 1) & 0xffff;
    }
    return sample->data;
@@ -397,8 +397,8 @@ static int pop8s(sample_t *sample) {
 static int push8s(sample_t *sample) {
    if (S >= 0) {
       S = (S - 1) & 0xffff;
-      memory_write(sample, S, MEM_STACK);
    }
+   memory_write(sample, S, MEM_STACK);
    return sample->data;
 }
 
@@ -417,8 +417,8 @@ static int push16s(sample_t *sample) {
 
 
 static int pop8u(sample_t *sample) {
+   memory_read(sample, U, MEM_STACK);
    if (U >= 0) {
-      memory_read(sample, U, MEM_STACK);
       U = (U + 1) & 0xffff;
    }
    return sample->data;
@@ -427,8 +427,8 @@ static int pop8u(sample_t *sample) {
 static int push8u(sample_t *sample) {
    if (U >= 0) {
       U = (U - 1) & 0xffff;
-      memory_write(sample, U, MEM_STACK);
    }
+   memory_write(sample, U, MEM_STACK);
    return sample->data;
 }
 
@@ -1142,6 +1142,10 @@ static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t 
    }
 }
 
+static inline int offset_address(int base, int offset) {
+   return (base >= 0) ? (base + offset) & 0xffff : base;
+}
+
 static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
 
    int b0 = sample_q[0].data;
@@ -1162,16 +1166,12 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    }
 
    // Memory modelling of the opcode and the prefix
-   if (PC >= 0) {
-      memory_read(sample_q + index, PC + index, MEM_INSTR);
-   }
+   memory_read(sample_q + index, offset_address(PC, index), MEM_INSTR);
    index++;
 
    // If there is a prefix, skip past it and read the opcode
    if (b0 == 0x10 || b0 == 0x11) {
-      if (PC >= 0) {
-         memory_read(sample_q + index, PC + index, MEM_INSTR);
-      }
+      memory_read(sample_q + index, offset_address(PC, index), MEM_INSTR);
       index++;
       // Increment opcode index (oi), which allows the rest of the code to ignore the prefix
       oi++;
@@ -1180,9 +1180,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    // If there is an immediate byte (AIM/EIM/OIM/TIM only), skip past it
    if (mode == DIRECTIM || mode == EXTENDEDIM || mode == INDEXEDIM) {
       // The byte doesn't need to be saved, because it's always read from sample_q[1]
-      if (PC >= 0) {
-         memory_read(sample_q + index, PC + index, MEM_INSTR);
-      }
+      memory_read(sample_q + index, offset_address(PC, index), MEM_INSTR);
       index++;
       // Decrement the mode to get back to the base addressing mode
       mode--;
@@ -1193,9 +1191,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    // If there is a post byte, skip past it
    if (mode == REGISTER || mode == INDEXED || mode == DIRECTBIT) {
       pb = sample_q[index].data;
-      if (PC >= 0) {
-         memory_read(sample_q + index, PC + index, MEM_INSTR);
-      }
+      memory_read(sample_q + index, offset_address(PC, index), MEM_INSTR);
       index++;
    }
 
@@ -1220,10 +1216,8 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
             }
          }
          // Memory modelling of the displacement bytes
-         if (PC >= 0) {
-            for (int i = 0; i < disp_bytes; i++) {
-               memory_read(sample_q + index + i, PC + index + i, MEM_INSTR);
-            }
+         for (int i = 0; i < disp_bytes; i++) {
+            memory_read(sample_q + index + i, offset_address(PC, index + i), MEM_INSTR);
          }
          index += disp_bytes;
       }
@@ -1232,27 +1226,21 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    case DIRECT:
    case RELATIVE_8:
    case IMMEDIATE_8:
-      if (PC >= 0) {
-         memory_read(sample_q + index, PC + index, MEM_INSTR);
-      }
+      memory_read(sample_q + index, offset_address(PC, index), MEM_INSTR);
       index++;
       break;
    case EXTENDED:
    case RELATIVE_16:
    case IMMEDIATE_16:
-      if (PC >= 0) {
-         memory_read(sample_q + index    , PC + index    , MEM_INSTR);
-         memory_read(sample_q + index + 1, PC + index + 1, MEM_INSTR);
-      }
+      memory_read(sample_q + index    , offset_address(PC, index)    , MEM_INSTR);
+      memory_read(sample_q + index + 1, offset_address(PC, index + 1), MEM_INSTR);
       index += 2;
       break;
    case IMMEDIATE_32:
-      if (PC >= 0) {
-         memory_read(sample_q + index    , PC + index    , MEM_INSTR);
-         memory_read(sample_q + index + 1, PC + index + 1, MEM_INSTR);
-         memory_read(sample_q + index + 2, PC + index + 2, MEM_INSTR);
-         memory_read(sample_q + index + 3, PC + index + 3, MEM_INSTR);
-      }
+      memory_read(sample_q + index    , offset_address(PC, index)    , MEM_INSTR);
+      memory_read(sample_q + index + 1, offset_address(PC, index + 1), MEM_INSTR);
+      memory_read(sample_q + index + 2, offset_address(PC, index + 2), MEM_INSTR);
+      memory_read(sample_q + index + 3, offset_address(PC, index + 3), MEM_INSTR);
       index += 4;
       break;
    default:
@@ -1477,11 +1465,11 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
                // - the first 2 skips the opcode and postbyte
                // - the final 2 steps back to the effective address read
                offset += oi;
+               memory_read(sample_q + offset    , ea, MEM_POINTER);
                if (ea >= 0) {
-                  memory_read(sample_q + offset    , ea, MEM_POINTER);
                   ea = (ea + 1 ) & 0xffff;
-                  memory_read(sample_q + offset + 1, ea, MEM_POINTER);
                }
+               memory_read(sample_q + offset + 1, ea, MEM_POINTER);
                ea = ((sample_q[offset].data << 8) + sample_q[offset + 1].data) & 0xffff;
             }
          }
@@ -1542,17 +1530,17 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    }
 
    // Memory modelling of the read operand
-   if (ea >= 0 && (instr->op->type == RMWOP || instr->op->type == LOADOP ||  instr->op->type == READOP)) {
+   if (instr->op->type == RMWOP || instr->op->type == LOADOP ||  instr->op->type == READOP) {
       if (instr->op->size == SIZE_32) {
-         memory_read(sample_q + oi    , ea,     MEM_DATA);
-         memory_read(sample_q + oi + 1, ea + 1, MEM_DATA);
-         memory_read(sample_q + oi + 2, ea + 2, MEM_DATA);
-         memory_read(sample_q + oi + 3, ea + 3, MEM_DATA);
+         memory_read(sample_q + oi    ,                ea,     MEM_DATA);
+         memory_read(sample_q + oi + 1, offset_address(ea, 1), MEM_DATA);
+         memory_read(sample_q + oi + 2, offset_address(ea, 2), MEM_DATA);
+         memory_read(sample_q + oi + 3, offset_address(ea, 3), MEM_DATA);
       } else if (instr->op->size == SIZE_16) {
-         memory_read(sample_q + oi    , ea    , MEM_DATA);
-         memory_read(sample_q + oi + 1, ea + 1, MEM_DATA);
+         memory_read(sample_q + oi    ,                ea    , MEM_DATA);
+         memory_read(sample_q + oi + 1, offset_address(ea, 1), MEM_DATA);
       } else {
-         memory_read(sample_q + oi    , ea    , MEM_DATA);
+         memory_read(sample_q + oi    ,                ea    , MEM_DATA);
       }
    }
 
@@ -1561,23 +1549,17 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    if (instr->op->type == RMWOP || instr->op->type == STOREOP) {
       if (instr->op->size == SIZE_32) {
          operand2 = (sample_q[num_cycles - 4].data << 24) + (sample_q[num_cycles - 3].data << 16) + (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
-         if (ea >= 0) {
-            memory_write(sample_q + num_cycles - 4, ea,     MEM_DATA);
-            memory_write(sample_q + num_cycles - 3, ea + 1, MEM_DATA);
-            memory_write(sample_q + num_cycles - 2, ea + 2, MEM_DATA);
-            memory_write(sample_q + num_cycles - 1, ea + 3, MEM_DATA);
-         }
+         memory_write(sample_q + num_cycles - 4,                ea,     MEM_DATA);
+         memory_write(sample_q + num_cycles - 3, offset_address(ea, 1), MEM_DATA);
+         memory_write(sample_q + num_cycles - 2, offset_address(ea, 2), MEM_DATA);
+         memory_write(sample_q + num_cycles - 1, offset_address(ea, 3), MEM_DATA);
       } else if (instr->op->size == SIZE_16) {
          operand2 = (sample_q[num_cycles - 2].data << 8) + sample_q[num_cycles - 1].data;
-         if (ea >= 0) {
-            memory_write(sample_q + num_cycles - 2, ea    , MEM_DATA);
-            memory_write(sample_q + num_cycles - 1, ea + 1, MEM_DATA);
-         }
+         memory_write(sample_q + num_cycles - 2,                ea,     MEM_DATA);
+         memory_write(sample_q + num_cycles - 1, offset_address(ea, 1), MEM_DATA);
       } else {
          operand2 = sample_q[num_cycles - 1].data;
-         if (ea >= 0) {
-            memory_write(sample_q + num_cycles - 1, ea    , MEM_DATA);
-         }
+         memory_write(sample_q + num_cycles - 1,                ea    , MEM_DATA);
       }
    }
 
@@ -4526,69 +4508,65 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
 
    // Update R0, and memory read modelling
-   if (reg0 >= 0) {
-      sample_t *rd_sample = sample + 6;
-      if (opcode == 0x38 || opcode == 0x3a) {
-         if (num_bytes >= 0) {
-            for (int i = 0; i < num_bytes; i++) {
-               memory_read(rd_sample, reg0, MEM_DATA);
-               reg0 = (reg0 + 1) & 0xffff;
-               rd_sample += 3;
-            }
-         } else {
-            reg0 = -1;
+   sample_t *rd_sample = sample + 6;
+   if (opcode == 0x38 || opcode == 0x3a) {
+      if (num_bytes >= 0) {
+         for (int i = 0; i < num_bytes; i++) {
+            memory_read(rd_sample, reg0, MEM_DATA);
+            reg0 = offset_address(reg0, 1);
+            rd_sample += 3;
          }
-      } else if (opcode == 0x39) {
-         if (num_bytes >= 0) {
-            for (int i = 0; i < num_bytes; i++) {
-               memory_read(rd_sample, reg0, MEM_DATA);
-               reg0 = (reg0 - 1) & 0xffff;
-               rd_sample += 3;
-            }
-         } else {
-            reg0 = -1;
+      } else {
+         reg0 = -1;
+      }
+   } else if (opcode == 0x39) {
+      if (num_bytes >= 0) {
+         for (int i = 0; i < num_bytes; i++) {
+            memory_read(rd_sample, reg0, MEM_DATA);
+            reg0 = offset_address(reg0, -1);
+            rd_sample += 3;
          }
+      } else {
+         reg0 = -1;
       }
-      switch (r0) {
-      case 1:  X = reg0;                   break;
-      case 2:  Y = reg0;                   break;
-      case 3:  U = reg0;                   break;
-      case 4:  S = reg0;                   break;
-      default: unpack(reg0, &ACCA, &ACCB); break;
-      }
+   }
+   switch (r0) {
+   case 1:  X = reg0;                   break;
+   case 2:  Y = reg0;                   break;
+   case 3:  U = reg0;                   break;
+   case 4:  S = reg0;                   break;
+   default: unpack(reg0, &ACCA, &ACCB); break;
    }
 
    // Update R0, and memory write modelling
-   if (reg1 >= 0) {
-      sample_t *wr_sample = sample + 8;
-      if (opcode == 0x38 || opcode == 0x3b) {
-         if (num_bytes >= 0) {
-            for (int i = 0; i < num_bytes; i++) {
-               memory_write(wr_sample, reg1, MEM_DATA);
-               reg1 = (reg1 + 1) & 0xffff;
-               wr_sample += 3;
-            }
-         } else {
-            reg1 = -1;
+   sample_t *wr_sample = sample + 8;
+   if (opcode == 0x38 || opcode == 0x3b) {
+      if (num_bytes >= 0) {
+         for (int i = 0; i < num_bytes; i++) {
+            memory_write(wr_sample, reg1, MEM_DATA);
+            reg1 = offset_address(reg1, 1);
+            wr_sample += 3;
          }
-      } else if (opcode == 0x39) {
-         if (num_bytes >= 0) {
-            for (int i = 0; i < num_bytes; i++) {
-               memory_write(wr_sample, reg1, MEM_DATA);
-               reg1 = (reg1 - 1) & 0xffff;
-               wr_sample += 3;
-            }
-         } else {
-            reg1 = -1;
+      } else {
+         reg1 = -1;
+      }
+   } else if (opcode == 0x39) {
+      if (num_bytes >= 0) {
+         for (int i = 0; i < num_bytes; i++) {
+            memory_write(wr_sample, reg1, MEM_DATA);
+            reg1 = offset_address(reg1, -1);
+            wr_sample += 3;
          }
+      } else {
+         reg1 = -1;
       }
-      switch (r1) {
-      case 1:  X = reg1;                   break;
-      case 2:  Y = reg1;                   break;
-      case 3:  U = reg1;                   break;
-      case 4:  S = reg1;                   break;
-      default: unpack(reg1, &ACCA, &ACCB); break;
-      }
+   }
+   switch (r1) {
+   case 1:  X = reg1;                   break;
+   case 2:  Y = reg1;                   break;
+   case 3:  U = reg1;                   break;
+   case 4:  S = reg1;                   break;
+   default: unpack(reg1, &ACCA, &ACCB); break;
    }
 
    // Update the final value of W
