@@ -9,6 +9,13 @@
 #include "em_6809.h"
 #include "memory.h"
 
+// #define DEBUG_SYNC
+
+// Heuristic for synchronizing to the instruction stream
+
+#define SYNC_RANGE   100
+#define SYNC_WINDOW 1000
+
 // Small skew buffer to allow the data bus samples to be taken early or late
 
 #define SKEW_BUFFER_SIZE  32 // Must be a power of 2
@@ -683,89 +690,167 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
 }
 
 // ====================================================================
-// Synchronise to the instruction stream if LIC is available
+// Helper to run the emulation for N cycles
 // ====================================================================
 
-// LIC is available, so step forward to the first sample with LIC == 1
+int run_emulation_for_n_cycles(sample_t *sample, int num_samples, int run_cycles, int nm) {
+   // Save the exising value of NM
+   int saved_nm = arguments.reg_nm;
 
-sample_t *synchronize_to_stream_with_lic(sample_t *sample, int num_samples) {
-   while (!sample->lic) {
-      sample++;
+   // Save the existing modelling state
+   int saved_mem_modelling  = memory_get_modelling();
+   int saved_mem_rd_logging = memory_get_rd_logging();
+   int saved_mem_wr_logging = memory_get_wr_logging();
+
+   // Initialize the emulator
+   arguments.reg_nm = nm;
+   em->init(&arguments);
+   memory_init(0x10000, arguments.machine);
+   memory_set_modelling(0);
+   memory_set_rd_logging(0);
+   memory_set_wr_logging(0);
+
+   // Run the emulator for SYNC_WINDOWS cycles
+   int error_count = 0;
+   sample_t *sample_tmp = sample;
+   while (sample_tmp < sample + run_cycles ) {
+      instruction_t instruction;
+      // TODO: We should properly calculate the number of remaining samples, to cope with very small traces
+      int num_cycles = exec_instruction(sample_tmp, run_cycles, &instruction);
+      if (num_cycles == CYCLES_TRUNCATED) {
+         break;
+      } else if (num_cycles == CYCLES_UNKNOWN) {
+         num_cycles = 1;
+      }
+      sample_tmp += num_cycles;
+      if (failflag) {
+         error_count++;
+         failflag = 0;
+      }
    }
-   // In emulation mode, LIC is on the last intruction cycle, so skip forward one more
-   if (em->get_NM() != 1) {
-      sample++;
-   }
-   return sample;
+
+   // Tear down the memory model
+   memory_destroy();
+
+   // Restore the original memory modelling values
+   memory_set_modelling(saved_mem_modelling);
+   memory_set_rd_logging(saved_mem_rd_logging);
+   memory_set_wr_logging(saved_mem_wr_logging);
+
+   // Restore the original value of NM
+   arguments.reg_nm = saved_nm;
+
+   // Return the error count
+   return error_count;
 }
 
 // ====================================================================
 // Synchronise to the instruction stream if LIC is not available
 // ====================================================================
 
-// LIC is not available, so use heuristics
 
-// TODO: Also detect native mode
+sample_t *synchronize_to_stream(sample_t *sample, int num_samples) {
 
-#define SYNC_RANGE 100
-#define SYNC_WINDOW 1000
+   // The best sampling offset, in emulated and native modes
+   sample_t *sample_best[2] = {NULL,       NULL};
+   int        error_best[2] = {INT_MAX, INT_MAX};
 
-sample_t *synchronize_to_stream_without_lic(sample_t *sample, int num_samples) {
-   // Preserve the modelling state
-   int mem_modelling  = memory_get_modelling();
-   int mem_rd_logging = memory_get_rd_logging();
-   int mem_wr_logging = memory_get_wr_logging();
    memory_destroy();
-   sample_t *sample_best = NULL;
-   sample_t *sample_orig = sample;
-   int error_best = INT_MAX;
-   // This should make the LIC and non-LIC trace start at the same instruction
-   if (em->get_NM() != 1) {
-      sample++;
-   }
-   for (int i = 0; i < SYNC_RANGE && error_best > 0; i++) {
-      sample_t *sample_tmp = sample;
-      int error_count = 0;
 
-      // Re-initialize the emulator
-      em->init(&arguments);
-      memory_init(0x10000, arguments.machine);
-      memory_set_modelling(0);
-      memory_set_rd_logging(0);
-      memory_set_wr_logging(0);
-      while (sample_tmp < sample + SYNC_WINDOW ) {
-         instruction_t instruction;
-         failflag = 0;
-         // SYNC_WINDTH << BLOCK< so there should always be atleast this many cycles available
-         int num_cycles = exec_instruction(sample_tmp, SYNC_WINDOW, &instruction);
-         if (num_cycles == CYCLES_TRUNCATED) {
-            break;
-         } else if (num_cycles == CYCLES_UNKNOWN) {
-            num_cycles = 1;
+   // If reg_nm has been set as a parameter, we can limit the search range
+   // cpu6309  nm   start end
+   //       0   -1      0 0
+   //       0    0      0 0
+   //       0    1      0 0
+   //       1   -1      0 1
+   //       1    0      0 0
+   //       1    1      1 1
+
+   int nm_start = 0;
+   int nm_end   = 0;
+   if (arguments.cpu_type == CPU_6309 || arguments.cpu_type == CPU_6309E) {
+      nm_start = (arguments.reg_nm == 1);
+      nm_end = (arguments.reg_nm != 0);
+   }
+
+   for (int nm = nm_start; nm <= nm_end; nm++) {
+
+#ifdef DEBUG_SYNC
+      fprintf(stderr, "Testing with nm=%d\n", nm);
+#endif
+
+      // Reset back to the start of the sample data
+      sample_t *sample_rd = sample;
+
+      int offset = 0;
+
+      if (sample->lic >= 0) {
+
+         // Step forward to the first sample with LIC == 1
+         while (!sample_rd->lic) {
+            sample_rd++;
+            offset++;
          }
-         sample_tmp += num_cycles;
-         if (failflag) {
-            error_count++;
+         // In emulation mode, LIC is on the last intruction cycle, so skip forward one more
+         if (!nm) {
+            sample_rd++;
+            offset++;
+         }
+
+         // Run the emulation for SYNC_WINDOW cycles
+         int error_count = run_emulation_for_n_cycles(sample_rd, num_samples - offset, SYNC_WINDOW, nm);
+#ifdef DEBUG_SYNC
+         fprintf(stderr, "Offset %3d had %d errors\n", offset, error_count);
+#endif
+         error_best[nm] = error_count;
+         sample_best[nm] = sample_rd;
+
+      } else {
+
+         // This should make the LIC and non-LIC trace start at the same instruction
+
+         if (!nm) {
+            sample_rd++;
+            offset++;
+         }
+
+         // Iterate through the SYNC_RANGE possibe starting offsets
+         for (int i = 0; i < SYNC_RANGE && error_best[nm] > 0; i++) {
+            int error_count = run_emulation_for_n_cycles(sample_rd, num_samples - offset - i, SYNC_WINDOW, nm);
+#ifdef DEBUG_SYNC
+            fprintf(stderr, "Offset %3d had %d errors\n", offset + i, error_count);
+#endif
+            if (error_count < error_best[nm]) {
+               error_best[nm] = error_count;
+               sample_best[nm] = sample_rd;
+            }
+            sample_rd++;
          }
       }
-      memory_destroy();
-
-      fprintf(stderr, "Offset %3d had %d errors\n", i, error_count);
-      if (error_count < error_best) {
-         sample_best = sample;
-         error_best = error_count;
-      }
-      sample++;
    }
-   fprintf(stderr, "Best is %ld\n", sample_best - sample_orig);
+
+   int nm = arguments.reg_nm;
+   // If nm was not specified by the user, then use a heuristic of fewest errors
+   if (nm < 0) {
+      if (error_best[0] < error_best[1]) {
+         nm = 0;
+      } else if (error_best[0] > error_best[1]) {
+         nm = 1;
+      } else {
+         nm = (sample_best[1] < sample_best[0]);
+      }
+   }
+
+#ifdef DEBUG_SYNC
+   fprintf(stderr, "Best is nm=%d offset=%ld\n", nm, sample_best[nm] - sample);
+#endif
+
    // Initialize for real
+   arguments.reg_nm = nm;
    em->init(&arguments);
    memory_init(0x10000, arguments.machine);
-   memory_set_modelling(mem_modelling);
-   memory_set_rd_logging(mem_rd_logging);
-   memory_set_wr_logging(mem_wr_logging);
 
-   return sample_best;
+   return sample_best[nm];
 }
 
 // ====================================================================
@@ -802,11 +887,7 @@ void queue_sample(sample_t *sample) {
       if (sample_wr < sample_q + BLOCK) {
          return;
       }
-      if (sample_rd->lic >= 0) {
-         sample_rd = synchronize_to_stream_with_lic(sample_rd, sample_wr - sample_rd);
-      } else {
-         sample_rd = synchronize_to_stream_without_lic(sample_rd, sample_wr - sample_rd);
-      }
+      sample_rd = synchronize_to_stream(sample_rd, sample_wr - sample_rd);
       synced = 1;
    }
 
