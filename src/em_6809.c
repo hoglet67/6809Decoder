@@ -3292,8 +3292,16 @@ static int op_fn_STB(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_STD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   // Do a bit more work here to correctly set the failute code
+   int fail = 0;
+   if (ACCA >= 0 && ACCA != ((operand >> 8) & 0xff)) {
+      fail |= FAIL_ACCA;
+   }
+   if (ACCB >= 0 && ACCB != (operand & 0xff)) {
+      fail |= FAIL_ACCB;
+   }
    int D = pack(ACCA, ACCB);
-   D = st16_helper(D, operand, FAIL_ACCA | FAIL_ACCB);
+   D = st16_helper(D, operand, fail);
    unpack(D, &ACCA, &ACCB);
    return operand;
 }
@@ -3986,35 +3994,123 @@ static int op_fn_DECW(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_DIVD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   // The cycle times vary depending on the values of the dividend and divisor
+   //
+   // e.g. DIVD &81 in Native mode, with &81 containing &10
+   //
+   // D=0000->07FF (no overflow)                  26 cycles
+   // D=0800->0FFF (twos-complement overflow)     25 cycles
+   // D=1000->7FFF (range overflow)               13 cycles
+   // D=8000->F000 (range overflow)               14 cycles
+   // D=F001->F800 (twos-complement overflow)     26 cycles
+   // D=F801->FFFF (no overflow)                  27 cycles
+   //
+   // e.g. DIVD &81 in Native mode, with &81 containing &f0
+   //
+   // D=0000->07FF (no overflow)                  27 cycles
+   // D=0800->0FFF (twos-complement overflow)     26 cycles
+   // D=1000->7FFF (range overflow)               14 cycles
+   // D=8000->F000 (range overflow)               15 cycles
+   // D=F001->F800 (twos-complement overflow)     27 cycles
+   // D=F801->FFFF (no overflow)                  28 cycles
+   //
+   // The rule for dynamic part of the cycle count seems to be:
+   //
+   // +1 if dividend is negative
+   // +1 if divisor is negative
+   // -1 if twos-complement overflow
+   // -13 if range overflow
+
+   int trap = 0;
+   int cycle_correction = 0;
+
    if (operand == 0) {
-      // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
-      interrupt_helper(sample_q, 3, 1, VEC_DZ);
+      // It seems Z is set in this case
+      Z = 1;
+      N = 0;
+      V = 0;
+      // No cycle correction needed in this case
+      trap = 1;
    } else if (ACCA < 0 || ACCB < 0) {
       ACCA = -1;
       ACCB = -1;
       set_NZVC_unknown();
    } else {
-      int16_t         a = (int16_t)((ACCA << 8) + ACCB);
-       int8_t         b = ( int8_t)operand;
-      int16_t  quotient = a / b;
-      int16_t remainder = a % b;
-      // TODO: Check the details of overflow with an exhaustive test
-      if (quotient < -256 || quotient > 255) {
-         // A range overflow has occurred, accumulators not modified
-         N = 0;
-         Z = 0;
+      int signq = 0; // Set if the quotient will be negative
+      int signr = 0; // Set if the remainder will be negative
+      int a = (ACCA << 8) + ACCB; // 0x0000-0xFFFF
+      int b = operand;            // 0x00-0xFF
+      // Twos-complement a negative dividend
+      if (a >= 0x8000) {
+         a = 0x10000 - a;
+         signq ^= 1;
+         signr ^= 1; // Sign of a non-zero remainder matches the sign of the dividend
+         // There is a one cycle penatly here
+         cycle_correction++;
+      }
+      // Twos-complement a negative divisor
+      if (b >= 0x80) {
+         b = 0x100 - b;
+         signq ^= 1;
+         // There is a one cycle penatly here
+         cycle_correction++;
+      }
+      // Do the division using positive numbers
+      int quotient  = a / b;
+      int remainder = a % b;
+      if (quotient > 255) {
+         // A range overflow has occurred
          V = 1;
          C = 0;
+         Z = 0;
+         // Undocumented: D = dividend magnitude, N = dividend sign
+         N = signr;
+         ACCA = (a >> 8) & 0xff;
+         ACCB =  a       & 0xff;
+         cycle_correction -= 13;
       } else {
+         // Handle the remainder...
+         if (remainder > 0 && signr) {
+            // The remainer sign correction happens regarless of two-complement overflow
+            remainder = 0x100 - remainder;
+         }
          ACCA = remainder & 0xff;
-         ACCB = quotient  & 0xff;
-         C    = quotient  & 1;
-         set_NZ(ACCB);
-         if (quotient < -128 || quotient > 127) {
+         // Handle the quotient...
+         C = quotient & 1;
+         if (quotient > 127) {
             // A two-complement overflow has occurred, set overflow
             V = 1;
+            cycle_correction -= 1;
+         } else {
+            // The quotient is valid, clear overflow
+            V = 0;
+            // The quotient sign correction only happens in this case
+            if (quotient > 0 && signq) {
+               quotient = 0x100 - quotient;
+            }
+         }
+         ACCB = quotient & 0xff;
+         set_NZ(ACCB);
+      }
+   }
+   // Correct the number of cycles
+   if (cycle_correction) {
+      if (sample_q->sample->lic < 0) {
+         // If LIC unavailable, then we actually need to correct num_cycles or we'll loose sync
+         sample_q->num_cycles += cycle_correction;
+      } else {
+         // If LIC is available, then we chech the expected cycles against the actual cycles
+         if (sample_q->num_cycles == get_num_cycles(sample_q->sample, 0) + cycle_correction) {
+            failflag &= ~FAIL_CYCLES;
+         } else {
+            failflag |= FAIL_CYCLES;
          }
       }
+   }
+   // Throw a trap if division by zero
+   if (trap) {
+      // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
+      interrupt_helper(sample_q, sample_q->num_cycles - 18, 1, VEC_DZ);
    }
    return -1;
 }
