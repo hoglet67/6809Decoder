@@ -7,6 +7,14 @@
 #include "em_6809.h"
 #include "dis_6809.h"
 
+// This controls whether the operand is located by working forward
+// from the start of the instruction, or working backwards from the
+// end. It seems with DIVD, working backwards is tricky because the
+// number of cycles varies depending on the operand value. This
+// is particularly problematic when LIC is not available.
+
+#define WORK_FORWARD_TO_OPERAND
+
 // ====================================================================
 // CPU state display
 // ====================================================================
@@ -1195,7 +1203,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
       index++;
    }
 
-   // Process any additional operand bytes
+   // Process any additional instruction bytes
    switch (mode) {
    case INDEXED:
       // In some indexed addressing modes there is also a displacement
@@ -1277,6 +1285,28 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
       PC = (PC + instruction->length) & 0xffff;
    }
 
+   // In indexed mode, calculate the additional postbyte cycles
+   int postbyte_cycles = 0;
+   if (mode == INDEXED) {
+      if (cpu6309) {
+         if (NM == 1) {
+            postbyte_cycles = postbyte_cycles_6309_nat[pb];
+         } else {
+            postbyte_cycles = postbyte_cycles_6309_emu[pb];
+         }
+      } else {
+         postbyte_cycles = postbyte_cycles_6809[pb];
+      }
+      if (postbyte_cycles < 0) {
+         postbyte_cycles = -postbyte_cycles;
+         failflag |= FAIL_BADM;
+         if (cpu6309) {
+            interrupt_helper(&sample_ref, oi + 5, 1, VEC_IL);
+            return num_cycles;
+         }
+      }
+   }
+
    // Calculate the effective address (for additional memory reads)
    // Note: oi is the opcode index (0 = no prefix, 1 = prefix)
    ea_t ea = -1;
@@ -1307,24 +1337,6 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
       break;
    case INDEXED:
       {
-         int postbyte_cycles;
-         if (cpu6309) {
-            if (NM == 1) {
-               postbyte_cycles = postbyte_cycles_6309_nat[pb];
-            } else {
-               postbyte_cycles = postbyte_cycles_6309_emu[pb];
-            }
-         } else {
-            postbyte_cycles = postbyte_cycles_6809[pb];
-         }
-         if (postbyte_cycles < 0) {
-            postbyte_cycles = -postbyte_cycles;
-            failflag |= FAIL_BADM;
-            if (cpu6309) {
-               interrupt_helper(&sample_ref, oi + 5, 1, VEC_IL);
-               return num_cycles;
-            }
-         }
          int *reg = get_index_reg((pb >> 5) & 0x03);
          if (!(pb & 0x80)) {       /* n4,R */
             if (*reg >= 0) {
@@ -1495,6 +1507,73 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
       ea = (PC - 1) & 0xffff;
    }
 
+#ifdef WORK_FORWARD_TO_OPERAND
+
+   // WORK FORWARD to find the operand
+
+   // On entry, oi points to the opcode
+
+   switch (mode) {
+   case INHERENT:
+   case IMMEDIATE_8:
+   case IMMEDIATE_16:
+   case IMMEDIATE_32:
+   case REGISTER:
+      // [ <Prefix> ] <Opcode> <Operand>
+      oi++;
+      break;
+   case DIRECT:
+      if (instr->mode == DIRECTIM) {
+         // [ <Prefix> ] <Opcode> <Immediate> <Direct> <Operand>
+         // oi currently points to <Immediate>
+         oi += 2;
+      } else {
+         // [ <Prefix> ] <Opcode> <Direct> <Dummy> <Operand>
+         oi += (NM == 1) ? 2 : 3;
+      }
+      break;
+   case DIRECTBIT:
+      // [ <Prefix> ] <Opcode> <Postbyte> <Direct> <Dummy> <Operand>
+      oi += (NM == 1) ? 3 : 4;
+      break;
+   case EXTENDED:
+      if (instr->mode == EXTENDEDIM) {
+         // [ <Prefix> ] <Opcode> <Immediate> <Extended Hi> <Extended Lo> <Operand>
+         // oi currently points to <Immediate>
+         oi += 3;
+      } else {
+         // [ <Prefix> ] <Opcode> <Extended Hi> <Extended Lo> <Dummy> <Operand>
+         oi += (NM == 1) ? 3 : 4;
+      }
+      break;
+   case INDEXED:
+      if (instr->mode == INDEXEDIM) {
+         // Test Immediate example in NM=0
+         //
+         // num cycles = 7 (5 + 2 extra indexed)
+         //
+         // 142017  0 6b  1 0 00 B <Opcode>
+         // 142018  1 08  1 0 00 C <Immediate>
+         // 142019  2 e0  1 0 00 D <Postbyte>
+         // 14201a  3 27  1 0 00 E
+         // 14201b  4 27  1 0 00 F
+         // 14201c  5 27  1 0 00 F
+         // 14201d  6 49  1 1 00 C <Operand>
+         // EC6B : 6B 08 E0       : TIM   #$08 ,S+       :   7 : A=80 B=FF E=?? F=?? X=0049 Y=00ED U=0700 S=???? DP=00 T=???? E=1 F=1 H=0 I=1 N=0 Z=1 V=0 C=0 DZ=? IL=? FM=? NM=0
+         //
+         // oi currently points to <Immediate>
+         oi += postbyte_cycles + 3;
+      } else {
+         // [ <Prefix> ] <Opcode> <Postbyte> ... <Operand>
+         oi += postbyte_cycles + ((NM == 1) ? 3 : 3);
+      }
+      break;
+   }
+
+#else
+
+   // WORK BACKWARD from the end of the instruction to find the operand
+
    // Pick out the read operand (Fig 17 in datasheet, esp sheet 5)
    if (instr->op == &op_MULD) {
       // There are many dead cycles at the end of MULD
@@ -1528,6 +1607,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
       // Single byte operand
       oi = num_cycles - 1;
    }
+#endif
 
    // Calculate the read operand
    operand_t operand;
