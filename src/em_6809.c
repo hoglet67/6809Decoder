@@ -4746,7 +4746,6 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // Assume we are not interrupted
    int interrupted = 0;
    int num_bytes = W;
-   // TODO: Is it worth inferring W from num_cycles (assuming not interrupted)
    // Now look for an interrupt sequence in the expected place for each mode
    if (NM == 1) {
       // In native mode an interrupt is normally 22 cycles
