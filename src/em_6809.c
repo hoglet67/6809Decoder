@@ -4300,7 +4300,27 @@ static int op_fn_LDF(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_LDMD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   NM = operand & 1;
+   // The position of LIC moves when NM changes state, so if LIC is being used
+   // then we need to adjust the cycle count to actually by 5 cycles
+   if (operand & 1) {
+      if (NM != 1 && sample_q->sample->lic >= 0) {
+         if (sample_q->num_cycles == 6) {
+            failflag &= ~FAIL_CYCLES;
+         }
+         // Could also just do sample_q->num_cycles = 5;
+         sample_q->num_cycles--;
+      }
+      NM = 1;
+   } else {
+      if (NM == 1 && sample_q->sample->lic >= 0) {
+         if (sample_q->num_cycles == 4) {
+            failflag &= ~FAIL_CYCLES;
+         }
+         // Could also just do sample_q->num_cycles = 5;
+         sample_q->num_cycles++;
+      }
+      NM = 0;
+   }
    FM = (operand >> 1) & 1;
    return -1;
 }
@@ -6482,7 +6502,7 @@ static opcode_t instr_table_6309[] = {
    /* 113A */  { &op_TFM  , REGISTER     , 0, 6, 6 },
    /* 113B */  { &op_TFM  , REGISTER     , 0, 6, 6 },
    /* 113C */  { &op_BITMD, IMMEDIATE_8  , 0, 4, 4 },
-   /* 113D */  { &op_LDMD , IMMEDIATE_8  , 0, 4, 5 },
+   /* 113D */  { &op_LDMD , IMMEDIATE_8  , 0, 5, 5 },
    /* 113E */  { &op_TRAP , ILLEGAL      , 0,21,23 },
    /* 113F */  { &op_SWI3 , INHERENT     , 0,20,22 },
    /* 1140 */  { &op_TRAP , ILLEGAL      , 0,21,23 },
