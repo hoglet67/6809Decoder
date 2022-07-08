@@ -4035,7 +4035,10 @@ static int op_fn_DIVD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       Z = 1;
       N = 0;
       V = 0;
-      // No cycle correction needed in this case
+      // Cycle correction
+      if (NM != 1) {
+         cycle_correction -= 2; // 27 to 25
+      }
       trap = 1;
    } else if (ACCA < 0 || ACCB < 0) {
       ACCA = -1;
@@ -4116,7 +4119,7 @@ static int op_fn_DIVD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // Throw a trap if division by zero
    if (trap) {
       // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
-      interrupt_helper(sample_q, sample_q->num_cycles - 18, 1, VEC_DZ);
+      interrupt_helper(sample_q, sample_q->num_cycles - ((NM == 1) ? 18 : 16), 1, VEC_DZ);
    }
    return -1;
 }
@@ -4139,7 +4142,11 @@ static int op_fn_DIVQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       Z = 1;
       N = 0;
       V = 0;
-      cycle_correction -= 8; // 35 to 27
+      if (NM == 1) {
+         cycle_correction -= 8; // 35 to 27
+      } else {
+         cycle_correction -= 10; // 36 to 26
+      }
       trap = 1;
    } else if (ACCA < 0 || ACCB < 0 || ACCE < 0 || ACCF < 0) {
       ACCA = -1;
@@ -4226,7 +4233,7 @@ static int op_fn_DIVQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // Throw a trap if division by zero
    if (trap) {
       // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
-      interrupt_helper(sample_q, sample_q->num_cycles - 18, 1, VEC_DZ);
+      interrupt_helper(sample_q, sample_q->num_cycles - ((NM == 1) ? 18 : 16), 1, VEC_DZ);
    }
    return -1;
 }
