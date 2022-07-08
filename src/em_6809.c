@@ -1088,14 +1088,12 @@ static int interrupt_helper(sample_q_t *sample_q, int offset, int full, int vect
    // Read the vector and compare against what's expected
    int vechi = sample[i].data;
    memory_read(sample + i, vector_base + vector, MEM_POINTER);
-   // TODO: This error is superfluous, as we will already detect FAIL_ADDR
    if (sample[i].addr >= 0 && (sample[i].addr != vector)) {
       failflag |= FAIL_VECTOR;
    }
    i++;
    int veclo = sample[i].data;
    memory_read(sample + i, vector_base + vector + 1, MEM_POINTER);
-   // TODO: This error is superfluous, as we will already detect FAIL_ADDR
    if (sample[i].addr >= 0 && (sample[i].addr != vector + 1)) {
       failflag  |= FAIL_VECTOR;
    }
@@ -1583,7 +1581,6 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    // Pick out the read operand (Fig 17 in datasheet, esp sheet 5)
    if (instr->op == &op_MULD) {
       // There are many dead cycles at the end of MULD
-      // TODO - Maybe we should add a dead-cycles column to the op data structure
       oi = num_cycles - 26;
    } else if (instr->op == &op_TST) {
       // There are two dead cycles at the end of TST in emul mode, and one in native mode
@@ -3223,8 +3220,6 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
    int i = 2;
 
-   // TODO: Rewrite using inline pop8s/pop16s
-
    // Do the flags first, as the stacked E indicates how much to restore
    set_FLAGS(sample[i++].data);
 
@@ -3627,6 +3622,7 @@ static void directbit_helper(operand_t operand, sample_q_t *sample_q) {
 
    // A destination regnum of 3 is (as far as we know) a NOP
    if (reg_num == 3) {
+      failflag |= FAIL_UNDOC;
       return;
    }
 
@@ -4496,7 +4492,7 @@ static int op_fn_STBT(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    case 0: reg_bit = get_FLAG(reg_bitnum);                       break;
    case 1: reg_bit = (ACCA < 0) ? -1 : (ACCA >> reg_bitnum) & 1; break;
    case 2: reg_bit = (ACCB < 0) ? -1 : (ACCB >> reg_bitnum) & 1; break;
-   default:  return -1; // TODO Illegal Instruction Trap ?
+   case 3: reg_bit = 0; failflag |= FAIL_UNDOC;                ; break;
    }
 
    if (reg_bit >= 0) {
