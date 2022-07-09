@@ -707,11 +707,39 @@ static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
 }
 
 static int em_6809_match_reset(sample_t *sample_q, int num_samples) {
-   // i        addr=E ba=0 bs=1
-   // i + 1    addr=F ba=0 bs=1
-   // i + 2    addr=X ba=0 bs=0
+   // To match reset A3..0 of the address bus must be connected, so we see the vector
+   //
+   // i - n    lic=0 addr=8 ba=0 bs=0
+   // i - 1    lic=0 addr=8 ba=0 bs=0
+   // i        lic=0 addr=E ba=0 bs=1
+   // i + 1    lic=0 addr=F ba=0 bs=1
+   // i + 2    lic=1 addr=X ba=0 bs=0
    // <Start of first instruction>
-   for (int i = 0; i < num_samples - 3; i++) {
+   if (sample_q->addr >= 0) {
+      int i = 0;
+      if (sample_q->lic >= 0) {
+         // LIC is available, so find the next instruction boundary
+         if (NM == 1) {
+            i++;
+         }
+         while (i < num_samples - 3 && !sample_q[i].lic) {
+            i++;
+         }
+         // The vector is two cycles before LIC is seen (NM=0 always now due to reset)
+         if (i < 2) {
+            return 0;
+         }
+         i -= 2;
+      } else {
+         // LIC is not available, so look for a change in the address bus instead
+         // The reason for using the address bus and not bs is efficiency, given
+         // num_samples is very large, and bs is normally 0 for long periods.
+         int addr = sample_q->addr;
+         while (i < num_samples - 3 && sample_q[i].addr == addr) {
+            i++;
+         }
+         // The vector is the first change of the address bus
+      }
       if (sample_q[i].ba < 1 && sample_q[i].bs == 1 && sample_q[i].addr == 0x0E) {
          return i + 3;
       }
@@ -936,6 +964,7 @@ static int em_6809_count_cycles(sample_t *sample_q, int num_samples) {
 
 static void em_6809_reset(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
    instruction->pc = -1;
+   instruction->length = 0;
    // All other registers are unchanged on reset
    DP = 0;
    F  = 1;
@@ -1149,9 +1178,8 @@ static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t 
       printf("*** could not determine interrupt type ***\n");
       pc = -1;
    }
-   if (instruction) {
-      instruction->pc = pc;
-   }
+   instruction->pc = pc;
+   instruction->length = 0;
 }
 
 static inline int offset_address(int base, int offset) {

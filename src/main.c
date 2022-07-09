@@ -16,6 +16,20 @@
 #define SYNC_RANGE   100
 #define SYNC_WINDOW 1000
 
+// BLOCK controls the amount of look-ahead that is allow
+//
+// It's made very large (8M samples), so that long running instructions
+// like SYNC, CWAI and even RESET will fit entirely within one block.
+//
+// This makes the decoder much simpler
+//
+// There is no reason BLOCK couldn't be increased further, if needed
+
+#define BLOCK (8*1024*1024)
+
+// Queue three blocks
+static sample_t sample_q[BLOCK * 3];
+
 // Small skew buffer to allow the data bus samples to be taken early or late
 
 #define SKEW_BUFFER_SIZE  32 // Must be a power of 2
@@ -500,16 +514,15 @@ int write_s(char *buffer, const char *s) {
    return i;
 }
 
-
 static int exec_instruction(sample_t *sample_q, int num_samples, instruction_t *instruction) {
    int num_cycles;
-   int window = LONGEST_INSTRUCTION;
+
    instruction->intr_seen = 0;
-   instruction->rst_seen = em->match_reset(sample_q, window);
+   instruction->rst_seen = em->match_reset(sample_q, num_samples);
    if (instruction->rst_seen) {
       num_cycles = instruction->rst_seen;
    } else {
-      instruction->intr_seen = em->match_interrupt(sample_q, window);
+      instruction->intr_seen = em->match_interrupt(sample_q, num_samples);
       if (instruction->intr_seen) {
          num_cycles = instruction->intr_seen;
       } else {
@@ -537,7 +550,6 @@ static int exec_instruction(sample_t *sample_q, int num_samples, instruction_t *
    return num_cycles;
 }
 
-
 static int analyze_instruction(sample_t *sample_q, int num_samples) {
    static int total_cycles = 0;
    static int interrupt_depth = 0;
@@ -552,7 +564,7 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
    if (num_cycles == CYCLES_TRUNCATED) {
       // Silently consume all remaining samples
       return num_samples;
-   } else if (num_cycles == CYCLES_UNKNOWN) {
+   } else if (num_cycles <= 0) {
       // Silently slip one cycle
       return 1;
    }
@@ -719,7 +731,7 @@ int run_emulation_for_n_cycles(sample_t *sample, int num_samples, int run_cycles
       int num_cycles = exec_instruction(sample_tmp, run_cycles, &instruction);
       if (num_cycles == CYCLES_TRUNCATED) {
          break;
-      } else if (num_cycles == CYCLES_UNKNOWN) {
+      } else if (num_cycles <= 0) {
          num_cycles = 1;
       }
       sample_tmp += num_cycles;
@@ -797,6 +809,12 @@ sample_t *synchronize_to_stream(sample_t *sample, int num_samples) {
             offset++;
          }
 
+         // In the middle of something big!
+         if (offset >= SYNC_RANGE) {
+            offset = 0;
+            sample_rd = sample;
+         }
+
          // Run the emulation for SYNC_WINDOW cycles
          int error_count = run_emulation_for_n_cycles(sample_rd, num_samples - offset, SYNC_WINDOW, nm);
 #ifdef DEBUG_SYNC
@@ -857,14 +875,6 @@ sample_t *synchronize_to_stream(sample_t *sample, int num_samples) {
 // Queue a large number of samples so the decoders can lookahead
 // ====================================================================
 
-// BLOCK is guaranteed to be larger than the longest running instuction
-// TODO: apart from SYNC or CWAI
-
-#define BLOCK (256*1024)
-
-// Queue three blocks
-static sample_t sample_q[BLOCK * 3];
-
 void queue_sample(sample_t *sample) {
    static int synced = 0;
    static sample_t *sample_wr = sample_q;
@@ -872,30 +882,30 @@ void queue_sample(sample_t *sample) {
 
    // At the end of the stream, allow the buffered samples to drain
    if (sample->type == LAST) {
+      // Try to synchronize to the instruction stream
+      if (!synced) {
+         sample_rd = synchronize_to_stream(sample_rd, sample_wr - sample_rd);
+      }
       // Drain the queue when the LAST marker is seen
       while (sample_rd < sample_wr) {
          sample_rd += analyze_instruction(sample_rd, sample_wr - sample_rd);
       }
       return;
-   } else {
-      // Make a copy of the sample structure
-      *sample_wr++ = *sample;
    }
 
-   // Try to synchronize to the instruction
-   if (!synced) {
-      if (sample_wr < sample_q + BLOCK) {
-         return;
-      }
-      sample_rd = synchronize_to_stream(sample_rd, sample_wr - sample_rd);
-      synced = 1;
-   }
+   // Make a copy of the sample structure
+   *sample_wr++ = *sample;
 
    // Sample_q is NOT a circular buffer!
    //
    // When we have two full blocks, we can start to consume the first. Once the first is
    // consumed, we can move everything back in the block.
    if (sample_wr > sample_q + 2 * BLOCK) {
+      // Try to synchronize to the instruction stream
+      if (!synced) {
+         sample_rd = synchronize_to_stream(sample_rd, sample_wr - sample_rd);
+         synced = 1;
+      }
       while (sample_rd < sample_q + BLOCK) {
          sample_rd += analyze_instruction(sample_rd, sample_wr - sample_rd);
       }
