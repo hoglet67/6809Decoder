@@ -846,12 +846,16 @@ static int get_num_cycles(sample_t *sample_q, int num_samples) {
       // SYNC, look ahead for sync acknowledge
       cycle_count = CYCLES_UNKNOWN;
       if (sample_q[0].ba >= 0) {
-         for (int i = 1; i < num_samples; i++) {
-            if (sample_q[i].ba == 1) {
-               cycle_count = i + 2;
-               break;
-            }
+         int i = 0;
+         // Look for Sync acknowledge starting (BA = 1)
+         while (i < num_samples && sample_q[i].ba == 0) {
+            i++;
          }
+         // Look for Sync acknowledge endingstarting (BA = 0)
+         while (i < num_samples && sample_q[i].ba == 1) {
+            i++;
+         }
+         return i + 1;
       }
    } else if (b0 == 0x3B) {
       // RTI
