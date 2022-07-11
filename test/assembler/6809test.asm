@@ -1133,27 +1133,27 @@ CLRREG CLRA
 TBTFR1 BSR   CLRREG
        LDD   #$5678
        TFR   D,X
-       CMPX  #$5678  
+       CMPX  #$5678
        RTS
 TBTFR2 BSR   CLRREG
        LDX   #$1234
        TFR   X,Y
-       CMPY  #$1234  
+       CMPY  #$1234
        RTS
 TBTFR3 BSR   CLRREG
        LDY   #$5500
        TFR   Y,U
-       CMPU  #$5500  
+       CMPU  #$5500
        RTS
 TBTFR4 BSR   CLRREG
        LDU   #$FEFF
        TFR   U,D
-       CMPD  #$FEFF  
+       CMPD  #$FEFF
        RTS
 TBTFR5 BSR   CLRREG
        LDA   #$55
        TFR   A,B
-       CMPB  #$55  
+       CMPB  #$55
        RTS
 TBTFR6 BSR   CLRREG
        LDB   #$AA
@@ -1212,7 +1212,7 @@ TBEXG1 LBSR  CLRREG
        EXG   D,X
        CMPX  #$5678
        BNE   TBEXGE
-       CMPD  #$A55A  
+       CMPD  #$A55A
 TBEXGE RTS
 TBEXG2 LBSR  CLRREG
        LDX   #$1234
@@ -1226,9 +1226,9 @@ TBEXG3 LBSR  CLRREG
        LDY   #$5500
        LDU   #$4711
        EXG   Y,U
-       CMPU  #$5500 
-       BNE   TBEXGE 
-       CMPY  #$4711  
+       CMPU  #$5500
+       BNE   TBEXGE
+       CMPY  #$4711
        RTS
 TBEXG4 LBSR  CLRREG
        LDU   #$FEFF
@@ -1236,13 +1236,13 @@ TBEXG4 LBSR  CLRREG
        EXG   U,D
        CMPD  #$FEFF
        BNE   TBEXGE
-       CMPU  #$9999  
+       CMPU  #$9999
        RTS
 TBEXG5 LBSR  CLRREG
        LDA   #$55
        LDB   #$AA
        EXG   A,B
-       CMPB  #$55  
+       CMPB  #$55
        BNE   TBEXGE
        CMPA  #$AA
        RTS
@@ -1779,4 +1779,3 @@ SUCCES FCC   'All Tests succeded',EOT
        ENDIF
 
        END   BEGIN
-
