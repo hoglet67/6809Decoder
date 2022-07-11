@@ -7,23 +7,25 @@
 *
 
 
-WARMS  EQU   $CD03
-PCRLF  EQU   $CD24
-PUTCHR EQU   $CD18
-PSTRNG EQU   $CD1E
-OUTDEC EQU   $CD39
-EXTREG EQU   $8000
+WARMS  EQU   $8000
+PCRLF  EQU   $FFE7
+PUTCHR EQU   $FFEE
+* PSTRNG EQU   $CD1E
+* OUTDEC EQU   $CD39
+EXTREG EQU   $7000
 DIRPAG EQU   $80
 DPREG  EQU   $00
 EOT    EQU   $4
+IRQVEC EQU   $0204
 
-       ORG   $8100
+       ORG   $3000
 
 BEGIN  BRA   START
 VERSIO FCB   1
 REG161 FDB   0
 
-START  CLR   ERRFLG ; Clear Error flag
+START  JSR   BEEB1
+       CLR   ERRFLG ; Clear Error flag
        JSR   TDAA
 *
 * Test Addressing modes
@@ -81,7 +83,8 @@ START  CLR   ERRFLG ; Clear Error flag
        JSR   TEXG
 *
        JSR   OUTSUC
-       JMP  WARMS
+       JSR   BEEB2
+       JMP   WARMS
 
 **************************************************
 * Test MUL
@@ -123,7 +126,7 @@ TBMUL  FDB   $0000,$0000
        FCB   $00
        FDB   $0101,$0001
        FCB   $00
-LMUL   FCC   'MUL',EOT
+LMUL   FCC   "MUL",EOT
 
 **************************************************
 * Test SEX
@@ -159,7 +162,7 @@ TBSEX  FCB   $00
        FCB   $FF
        FDB   $FFFF
        FCB   $08
-LSEX   FCC   'SEX',EOT
+LSEX   FCC   "SEX",EOT
 
 **************************************************
 * Test TST
@@ -184,7 +187,7 @@ TBTST  FCB   $00,$04
        FCB   $81,$08
        FCB   $C0,$08
        FCB   $40,$00
-LTST   FCC   'TST',EOT
+LTST   FCC   "TST",EOT
 
 **************************************************
 * Test LD
@@ -199,7 +202,7 @@ TLD1   LDA   ,X+
        CMPX  #LTST
        LBNE  TLD1
        RTS
-LLD    FCC   'LD',EOT
+LLD    FCC   "LD",EOT
 
 **************************************************
 * Test ST
@@ -215,7 +218,7 @@ TST1   LDA   ,X+
        CMPX  #LTST
        LBNE  TST1
        RTS
-LST    FCC   'ST',EOT
+LST    FCC   "ST",EOT
 
 **************************************************
 * Test LDD
@@ -246,7 +249,7 @@ TBLDD  FDB   $0000
        FCB   $08
        FDB   $4000
        FCB   $00
-LLDD   FCC   'LDD',EOT
+LLDD   FCC   "LDD",EOT
 
 **************************************************
 * Test STD
@@ -262,7 +265,7 @@ TSTD1  LDD   ,X++
        CMPX  #LLDD
        LBNE  TSTD1
        RTS
-LSTD   FCC   'STD',EOT
+LSTD   FCC   "STD",EOT
 
 **************************************************
 * Test LEA
@@ -291,7 +294,7 @@ TBLEA  FDB   $0000
        FCB   $00
        FDB   $8001
        FCB   $00
-LLEA   FCC   'LEA',EOT
+LLEA   FCC   "LEA",EOT
 
 **************************************************
 * Test BIT
@@ -318,7 +321,7 @@ TBBIT  FCB   $00,$00,$04
        FCB   $FF,$7F,$00
        FCB   $FF,$01,$00
        FCB   $F0,$0F,$04
-LBIT   FCC   'BIT',EOT
+LBIT   FCC   "BIT",EOT
 
 **************************************************
 * Test DAA
@@ -410,7 +413,7 @@ TBDAA
        FCB   $BF,$FF,$21,$25,$01
        FCB   $F0,$FF,$21,$56,$01
        FCB   $FF,$FF,$21,$65,$01
-LDAA   FCC   'DAA',EOT
+LDAA   FCC   "DAA",EOT
 
 **************************************************
 * Test NEG
@@ -437,7 +440,7 @@ TBNEG  FCB   $00,$00,$04
        FCB   $81,$7F,$01
        FCB   $C0,$40,$01
        FCB   $40,$C0,$09
-LNEG   FCC   'NEG',EOT
+LNEG   FCC   "NEG",EOT
 
 **************************************************
 * Test COM
@@ -467,7 +470,7 @@ TBCOM  FCB   $00,$FF,$09
        FCB   $FE,$01,$01
        FCB   $80,$7F,$01
        FCB   $7F,$80,$09
-LCOM   FCC   'COM',EOT
+LCOM   FCC   "COM",EOT
 
 **************************************************
 * Test LSR
@@ -506,7 +509,7 @@ TBLSR  FCB   $00,$00,$04
        FCB   $F8,$7C,$00
        FCB   $FC,$7E,$00
        FCB   $FE,$7F,$00
-LLSR   FCC   'LSR',EOT
+LLSR   FCC   "LSR",EOT
 
 **************************************************
 * Test LSL
@@ -545,7 +548,7 @@ TBLSL  FCB   $00,$00,$04
        FCB   $F8,$F0,$01
        FCB   $FC,$F8,$01
        FCB   $FE,$FC,$01
-LLSL   FCC   'LSL',EOT
+LLSL   FCC   "LSL",EOT
 
 **************************************************
 * Test ASR
@@ -584,7 +587,7 @@ TBASR  FCB   $00,$00,$04
        FCB   $F8,$FC,$08
        FCB   $FC,$FE,$08
        FCB   $FE,$FF,$08
-LASR   FCC   'ASR',EOT
+LASR   FCC   "ASR",EOT
 
 **************************************************
 * Test ROR
@@ -623,7 +626,7 @@ TBROR  FCB   $00,$FE,$00,$00,$04
        FCB   $80,$FF,$01,$C0,$08
        FCB   $FE,$FF,$01,$FF,$08
        FCB   $FF,$FF,$01,$FF,$09
-LROR   FCC   'ROR',EOT
+LROR   FCC   "ROR",EOT
 
 **************************************************
 * Test ROL
@@ -662,7 +665,7 @@ TBROL  FCB   $00,$FE,$00,$00,$04
        FCB   $80,$FF,$01,$01,$01
        FCB   $FE,$FF,$01,$FD,$09
        FCB   $FF,$FF,$01,$FF,$09
-LROL   FCC   'ROL',EOT
+LROL   FCC   "ROL",EOT
 
 **************************************************
 * Test DEC
@@ -688,7 +691,7 @@ TBDEC  FCB   $01,$00,$04
        FCB   $7F,$7E,$00
        FCB   $10,$0F,$00
        FCB   $0F,$0E,$00
-LDEC   FCC   'DEC',EOT
+LDEC   FCC   "DEC",EOT
 
 **************************************************
 * Test INC
@@ -714,7 +717,7 @@ TBINC  FCB   $00,$01,$00
        FCB   $80,$81,$08
        FCB   $0F,$10,$00
        FCB   $10,$11,$00
-LINC   FCC   'INC',EOT
+LINC   FCC   "INC",EOT
 
 **************************************************
 * Test CLR
@@ -740,7 +743,7 @@ TBCLR  FCB   $01,$00,$04
        FCB   $7F,$00,$04
        FCB   $10,$00,$04
        FCB   $0F,$00,$04
-LCLR   FCC   'CLR',EOT
+LCLR   FCC   "CLR",EOT
 
 **************************************************
 * Test ADDD
@@ -788,7 +791,7 @@ TBADDD FDB   $0000,$0000,$0000
        FCB   $09
        FDB   $8001,$8000,$0001
        FCB   $03
-LADDD  FCC   'ADDD',EOT
+LADDD  FCC   "ADDD",EOT
 
 **************************************************
 * Test ADD
@@ -822,7 +825,7 @@ TBADD  FCB   $00,$00,$00,$04
        FCB   $40,$C1,$01,$01
        FCB   $FF,$FF,$FE,$29
        FCB   $81,$80,$01,$03
-LADD   FCC   'ADD',EOT
+LADD   FCC   "ADD",EOT
 
 **************************************************
 * Test ADC
@@ -875,7 +878,7 @@ TBADC  FCB   $00,$FE,$00,$00,$00,$04
        FCB   $40,$FF,$01,$C1,$02,$01
        FCB   $FF,$FF,$01,$FF,$FF,$29
        FCB   $81,$FF,$01,$80,$02,$03
-LADC   FCC   'ADC',EOT
+LADC   FCC   "ADC",EOT
 
 **************************************************
 * Test CMP
@@ -893,7 +896,7 @@ TCMP1  LDB   ,X+
        BNE   TCMP1
        RTS
 
-LCMP   FCC   'CMP',EOT
+LCMP   FCC   "CMP",EOT
 
 **************************************************
 * Test SUB
@@ -938,7 +941,7 @@ TBSUB  FCB   $00,$00,$00,$04
        FCB   $FF,$FF,$00,$04
        FCB   $FF,$FE,$01,$00
        FCB   $FF,$00,$FF,$08
-LSUB   FCC   'SUB',EOT
+LSUB   FCC   "SUB",EOT
 
 **************************************************
 * Test SBC
@@ -1013,7 +1016,7 @@ TBSBC  FCB   $00,$FE,$00,$00,$00,$04
        FCB   $FF,$FF,$01,$FF,$FF,$09
        FCB   $FF,$FF,$01,$FE,$00,$04
        FCB   $FF,$FF,$01,$00,$FE,$08
-LSBC   FCC   'SBC',EOT
+LSBC   FCC   "SBC",EOT
 
 **************************************************
 * Test SUBD
@@ -1085,7 +1088,7 @@ TBSUBD FDB   $0000,$0000,$0000
        FCB   $00
        FDB   $FFFF,$0000,$FFFF
        FCB   $08
-LSUBD  FCC   'SUBD',EOT
+LSUBD  FCC   "SUBD",EOT
 
 **************************************************
 * Test CMPD
@@ -1104,7 +1107,7 @@ TCMPD1 LDD   ,X++
        BNE   TCMPD1
        RTS
 
-LCMPD  FCC   'CMPD',EOT
+LCMPD  FCC   "CMPD",EOT
 
 **************************************************
 * Test TFR
@@ -1188,7 +1191,7 @@ TBTFR  FDB   TBTFR1
        FDB   TBTFR6
        FDB   TBTFR7
        FDB   TBTFR8
-LTFR   FCC   'TFR',EOT
+LTFR   FCC   "TFR",EOT
 
 **************************************************
 * Test EXG
@@ -1299,7 +1302,7 @@ TBEXG  FDB   TBEXG1
        FDB   TBEXG6
        FDB   TBEXG7
        FDB   TBEXG8
-LEXG   FCC   'EXG',EOT
+LEXG   FCC   "EXG",EOT
 
 
 **************************************************
@@ -1719,27 +1722,27 @@ TADIC  LDU   #LADIC
        LBNE  OUTERR
        RTS
 
-LAD1   FCC   'LDA n8,X',EOT
-LAD2   FCC   'LDA ,X+',EOT
-LAD3   FCC   'LDD ,X++',EOT
-LAD4   FCC   'LDA ,-X',EOT
-LAD5   FCC   'LDD ,--X',EOT
-LAD6   FCC   'LDA A,X',EOT
-LAD7   FCC   'LDA B,Y',EOT
-LAD8   FCC   'LDD D,X',EOT
-LAD9   FCC   'LDD n16,X',EOT
-LADA   FCC   'LDA n8,PC',EOT
-LADB   FCC   'LDD n16,PC',EOT
-LADI1  FCC   'LEAX [n8,X]',EOT
-LADI3  FCC   'LEAX [,X++]',EOT
-LADI5  FCC   'LEAX [,--X]',EOT
-LADI6  FCC   'LEAX [A,X]',EOT
-LADI7  FCC   'LEAX [B,Y]',EOT
-LADI8  FCC   'LEAX [D,X]',EOT
-LADI9  FCC   'LEAX [n16,X]',EOT
-LADIA  FCC   'LEAX [n8,PCR]',EOT
-LADIB  FCC   'LEAX [n16,PCR]',EOT
-LADIC  FCC   'LEAX [addr]',EOT
+LAD1   FCC   "LDA n8,X",EOT
+LAD2   FCC   "LDA ,X+",EOT
+LAD3   FCC   "LDD ,X++",EOT
+LAD4   FCC   "LDA ,-X",EOT
+LAD5   FCC   "LDD ,--X",EOT
+LAD6   FCC   "LDA A,X",EOT
+LAD7   FCC   "LDA B,Y",EOT
+LAD8   FCC   "LDD D,X",EOT
+LAD9   FCC   "LDD n16,X",EOT
+LADA   FCC   "LDA n8,PC",EOT
+LADB   FCC   "LDD n16,PC",EOT
+LADI1  FCC   "LEAX [n8,X]",EOT
+LADI3  FCC   "LEAX [,X++]",EOT
+LADI5  FCC   "LEAX [,--X]",EOT
+LADI6  FCC   "LEAX [A,X]",EOT
+LADI7  FCC   "LEAX [B,Y]",EOT
+LADI8  FCC   "LEAX [D,X]",EOT
+LADI9  FCC   "LEAX [n16,X]",EOT
+LADIA  FCC   "LEAX [n8,PCR]",EOT
+LADIB  FCC   "LEAX [n16,PCR]",EOT
+LADIC  FCC   "LEAX [addr]",EOT
 
 **************************************************
 * Print error message for a failed Test
@@ -1765,14 +1768,53 @@ OUTSUC LDA   ERRFLG
 OUTS9  RTS
 
 **************************************************
+* PSTRNG
+**************************************************
+
+PSTRNG CLRA
+       TFR   A,DP
+       JSR   PCRLF
+PSTRLP LDA   ,X+
+       CMPA  #EOT
+       BEQ   PSTRDN
+       JSR   PUTCHR
+       BRA   PSTRLP
+PSTRDN RTS
+
+**************************************************
+* BEEB1
+**************************************************
+
+BEEB1  LDX   IRQVEC
+       STX   IRQOLD
+       LDX   #IRQNEW
+       STX   IRQVEC
+       RTS
+
+IRQNEW CLRA
+       TFR   A,DP
+       JMP   [ IRQOLD ]
+
+IRQOLD FDB 0,0
+
+**************************************************
+* BEEB2
+**************************************************
+
+BEEB2  LDX   IRQOLD
+       STX   IRQVEC
+       JSR   PCRLF
+       RTS
+
+**************************************************
 * Misc data:
 **************************************************
 
 REG162 FDB   0
 ERRFLG FCB   0
 
-ERRM1  FCC   'Failed Test: ',EOT
-SUCCES FCC   'All Tests succeded',EOT
+ERRM1  FCC   "Failed Test: ",EOT
+SUCCES FCC   "All Tests succeded",EOT
 
        IF    *>$BFFF
        ERR   PROGRAM TOO LONG
