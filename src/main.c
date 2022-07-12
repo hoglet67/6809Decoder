@@ -1323,7 +1323,7 @@ int main(int argc, char *argv[]) {
                fprintf(stderr, " ba");
             }
          }
-         if (i >= arguments.idx_addr && i <= arguments.idx_addr + 3) {
+         if (arguments.idx_addr >= 0 && i >= arguments.idx_addr && i <= arguments.idx_addr + 3) {
             if (pass == 0) {
                count++;
             } else if (count > 1) {
