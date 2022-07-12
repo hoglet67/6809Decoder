@@ -142,6 +142,7 @@ enum {
    KEY_INSTR = 'i',
    KEY_MACHINE = 'm',
    KEY_QUIET = 'q',
+   KEY_SHOWROM = 'r',
    KEY_STATE = 's',
    KEY_TRIGGER = 't',
    KEY_CYCLES = 'y',
@@ -220,6 +221,7 @@ static struct argp_option options[] = {
    { "state",        KEY_STATE,         0,                   0, "Show register/flag state",                          GROUP_OUTPUT},
    { "cycles",      KEY_CYCLES,         0,                   0, "Show instruction cycles",                           GROUP_OUTPUT},
    { "samplenum",  KEY_SAMPLES,         0,                   0, "Show bus cycle numbers",                            GROUP_OUTPUT},
+   { "showromno",  KEY_SHOWROM,         0,                   0, "Show BBC rom no for address 8000..BFFF",            GROUP_OUTPUT},
 
    { 0, 0, 0, 0, "Signal defintion options:", GROUP_SIGDEFS},
 
@@ -412,6 +414,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
       break;
    case KEY_SAMPLES:
       arguments->show_samplenums = 1;
+      break;
+   case KEY_SHOWROM:
+      arguments->show_romno = 1;
       break;
    case KEY_TRIGGER:
       if (arg && strlen(arg) > 0) {
@@ -622,6 +627,9 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
       }
       // Show address
       if (fail || arguments.show_address) {
+         if (arguments.show_romno) {
+            bp += write_bankid(bp, pc);
+         }
          if (pc < 0) {
             *bp++ = '?';
             *bp++ = '?';
@@ -1235,7 +1243,7 @@ int main(int argc, char *argv[]) {
 
    // Turn on memory write logging if show rom bank option (-r) is selected
    if (arguments.show_romno) {
-      arguments.mem_model |= (1 << MEM_DATA) | (1 << MEM_STACK);
+      arguments.mem_model |= (1 << MEM_DATA);
    }
 
    memory_set_modelling(  arguments.mem_model       & 0x0f);

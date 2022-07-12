@@ -32,4 +32,6 @@ int memory_read_raw(int ea);
 
 void memory_destroy();
 
+int write_bankid(char *bp, int ea);
+
 #endif

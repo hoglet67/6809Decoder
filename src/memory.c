@@ -26,6 +26,19 @@ static int (*memory_write_fn)(int data, int ea);
 // Machine specific address display handler (to allow SW Rom bank on the Beeb to be shown)
 static int (*addr_display_fn)(char *bp, int ea);
 
+#define TO_HEX(value) ((value) + ((value) < 10 ? '0' : 'A' - 10))
+
+int write_bankid(char *bp, int ea) {
+  if (ea < 0x8000 || ea >= 0xc000) {
+     *bp++ = ' ';
+     *bp++ = ' ';
+   } else {
+     *bp++ = TO_HEX(rom_latch);
+     *bp++ = '-';
+   }
+  return 2;
+}
+
 static inline void log_memory_access(char *msg, int data, int ea, int ignored) {
    char *bp = buffer;
    bp += write_s(bp, msg);
@@ -113,18 +126,9 @@ static void init_dragon() {
 // Beeb Memory Handlers
 // ==================================================
 
-#define TO_HEX(value) ((value) + ((value) < 10 ? '0' : 'A' - 10))
-
-
 static int addr_display_beeb(char *bp, int ea) {
-   if (ea >= 0x8000 && ea < 0xc000) {
-      *bp++ = TO_HEX(rom_latch);
-      *bp++ = ':';
-   } else {
-      *bp++ = ' ';
-      *bp++ = ' ';
-   }
-   write_hex4(bp, ea);
+   write_bankid(bp, ea);
+   write_hex4(bp + 2, ea);
    return 6;
 }
 
