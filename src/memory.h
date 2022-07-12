@@ -10,7 +10,7 @@ typedef enum {
    MEM_STACK    = 3,
 } mem_access_t;
 
-void memory_init(int size, machine_t machine);
+void memory_init(arguments_t *args);
 
 void memory_set_modelling(int bitmask);
 

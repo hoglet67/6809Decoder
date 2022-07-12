@@ -155,6 +155,7 @@ enum {
    KEY_REG_DP,
    KEY_REG_NM,
    KEY_REG_FM,
+   KEY_ROM_LAT,
    KEY_SKIP,
    KEY_SKEW,
    KEY_DATA,
@@ -211,6 +212,7 @@ static struct argp_option options[] = {
    { "reg_dp",      KEY_REG_DP,     "HEX", OPTION_ARG_OPTIONAL, "Initial value of the DP register",                  GROUP_REGISTER},
    { "reg_nm",      KEY_REG_NM,     "HEX", OPTION_ARG_OPTIONAL, "Initial value of the NM flag (6309)",               GROUP_REGISTER},
    { "reg_fm",      KEY_REG_FM,     "HEX", OPTION_ARG_OPTIONAL, "Initial value of the FM flag (6309)",               GROUP_REGISTER},
+   { "rom_latch",  KEY_ROM_LAT,     "HEX", OPTION_ARG_OPTIONAL, "Initial value of the ROM Latch (Beeb)",             GROUP_REGISTER},
 
    { 0, 0, 0, 0, "Output options:", GROUP_OUTPUT},
 
@@ -357,6 +359,13 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
          arguments->reg_fm = strtol(arg, (char **)NULL, 16);
       } else {
          arguments->reg_fm = UNDEFINED;
+      }
+      break;
+   case KEY_ROM_LAT:
+      if (arg && strlen(arg) > 0) {
+         arguments->rom_latch = strtol(arg, (char **)NULL, 16);
+      } else {
+         arguments->rom_latch = UNDEFINED;
       }
       break;
    case KEY_CPU:
@@ -725,7 +734,7 @@ int run_emulation_for_n_cycles(sample_t *sample, int num_samples, int run_cycles
    // Initialize the emulator
    arguments.reg_nm = nm;
    em->init(&arguments);
-   memory_init(0x10000, arguments.machine);
+   memory_init(&arguments);
    memory_set_modelling(0);
    memory_set_rd_logging(0);
    memory_set_wr_logging(0);
@@ -874,7 +883,7 @@ sample_t *synchronize_to_stream(sample_t *sample, int num_samples) {
    // Initialize for real
    arguments.reg_nm = nm;
    em->init(&arguments);
-   memory_init(0x10000, arguments.machine);
+   memory_init(&arguments);
 
    return sample_best[nm];
 }
@@ -1139,6 +1148,7 @@ int main(int argc, char *argv[]) {
    arguments.reg_dp           = UNSPECIFIED;
    arguments.reg_nm           = UNSPECIFIED;
    arguments.reg_fm           = UNSPECIFIED;
+   arguments.rom_latch        = UNSPECIFIED;
 
    // Output options
    arguments.show_address     = 1;
@@ -1239,7 +1249,7 @@ int main(int argc, char *argv[]) {
 
    // Initialize memory modelling
    // (em->init actually mallocs the memory)
-   memory_init(0x10000, arguments.machine);
+   memory_init(&arguments);
 
    // Turn on memory write logging if show rom bank option (-r) is selected
    if (arguments.show_romno) {

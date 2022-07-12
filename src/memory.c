@@ -15,7 +15,7 @@ static int mem_wr_logging = 0;
 #define SWROM_SIZE          0x4000
 #define SWROM_NUM_BANKS     16
 static int *swrom         = NULL;
-static int rom_latch      = 0;
+static int rom_latch      = -1;
 
 static char buffer[256];
 
@@ -29,12 +29,15 @@ static int (*addr_display_fn)(char *bp, int ea);
 #define TO_HEX(value) ((value) + ((value) < 10 ? '0' : 'A' - 10))
 
 int write_bankid(char *bp, int ea) {
-  if (ea < 0x8000 || ea >= 0xc000) {
-     *bp++ = ' ';
-     *bp++ = ' ';
+   if (ea < 0x8000 || ea >= 0xc000) {
+      *bp++ = ' ';
+      *bp++ = ' ';
+   } else if (rom_latch < 0) {
+      *bp++ = '?';
+      *bp++ = '-';
    } else {
-     *bp++ = TO_HEX(rom_latch);
-     *bp++ = '-';
+      *bp++ = TO_HEX(rom_latch);
+      *bp++ = '-';
    }
   return 2;
 }
@@ -98,7 +101,7 @@ static int memory_write_default(int data, int ea) {
    return 0;
 }
 
-static void init_default() {
+static void init_default(arguments_t *args) {
    memory_read_fn  = memory_read_default;
    memory_write_fn = memory_write_default;
    addr_display_fn = addr_display_default;
@@ -116,7 +119,7 @@ static void memory_read_dragon(int data, int ea) {
    memory[ea] = data;
 }
 
-static void init_dragon() {
+static void init_dragon(arguments_t *args) {
    memory_read_fn  = memory_read_dragon;
    memory_write_fn = memory_write_default;
    addr_display_fn = addr_display_default;
@@ -142,7 +145,11 @@ static inline int *get_memptr_beeb(int ea) {
       exit(1);
    }
    if (ea >= 0x8000 && ea < 0xC000) {
-      return swrom + (rom_latch << 14) + (ea & 0x3FFF);
+      if (rom_latch >= 0) {
+         return swrom + (rom_latch << 14) + (ea & 0x3FFF);
+      } else {
+         return NULL;
+      }
    } else {
       return memory + ea;
    }
@@ -151,7 +158,7 @@ static inline int *get_memptr_beeb(int ea) {
 static void memory_read_beeb(int data, int ea) {
    if (ea < 0xfc00 || ea >= 0xff00) {
       int *memptr = get_memptr_beeb(ea);
-      if (*memptr >= 0 && *memptr != data) {
+      if (memptr && *memptr >= 0 && *memptr != data) {
          log_memory_fail(ea, *memptr, data);
          failflag |= FAIL_MEMORY;
       }
@@ -164,33 +171,38 @@ static int memory_write_beeb(int data, int ea) {
       set_rom_latch(data & 0xf);
    }
    int *memptr = get_memptr_beeb(ea);
-   *memptr = data;
+   if (memptr) {
+      *memptr = data;
+   }
    return 0;
 }
 
-static void init_beeb() {
+static void init_beeb(arguments_t *args) {
    swrom = init_ram(SWROM_NUM_BANKS * SWROM_SIZE);
    memory_read_fn  = memory_read_beeb;
    memory_write_fn = memory_write_beeb;
    addr_display_fn = addr_display_beeb;
+   if (args->rom_latch >= 0 && args->rom_latch <= 15) {
+      rom_latch = args->rom_latch;
+   }
 }
 
 // ==================================================
 // Public Methods
 // ==================================================
 
-void memory_init(int size, machine_t machine) {
-   memory = init_ram(size);
+void memory_init(arguments_t *args) {
+   memory = init_ram(0x10000);
    // Setup the machine specific memory read/write handler
-   switch (machine) {
+   switch (args->machine) {
    case MACHINE_DRAGON32:
-      init_dragon();
+      init_dragon(args);
       break;
    case MACHINE_BEEB:
-      init_beeb();
+      init_beeb(args);
       break;
    default:
-      init_default();
+      init_default(args);
       break;
    }
 }

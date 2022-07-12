@@ -88,6 +88,7 @@ typedef struct {
    int reg_dp;
    int reg_nm;
    int reg_fm;
+   int rom_latch;
    int byte;
    int debug;
    int skip;
