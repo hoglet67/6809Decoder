@@ -1,0 +1,62 @@
+FOR I%=&10 TO &13 STEP 3
+P%=&3000
+[OPT I%
+.dotest
+CLRA
+STA &80
+STA &81
+.loop
+ANDCC #&F0
+.orcc
+ORCC #&00
+EQUB &11
+EQUB &D3
+EQUB &80
+PSHS CC
+PULS CC
+INC &81
+BNE loop
+INC &80
+BNE loop
+RTS
+.test
+STS &80
+LDY #&5678
+LDA #&10
+STA orcc+1
+.loop1
+LDX #u_table
+LDU ,X++
+.loop2
+JSR dotest
+LDU ,X++
+BNE loop2
+LDA orcc+1
+EORA #&0F
+STA orcc+1
+CMPA #&10
+BNE loop1
+RTS
+.u_table
+EQUW &0000
+EQUW &007F
+EQUW &0080
+EQUW &00FF
+EQUW &0144
+EQUW &0244
+EQUW &0444
+EQUW &0844
+EQUW &1044
+EQUW &2044
+EQUW &4044
+EQUW &8044
+EQUB &FF00
+EQUB &FF7F
+EQUB &FF80
+EQUB &FFFF
+EQUW &0000
+]
+NEXT
+PRINT "Press a key to run test"
+Z=GET
+CALL test
