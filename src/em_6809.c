@@ -244,9 +244,13 @@ static opcode_t instr_table_6809[];
 static opcode_t instr_table_6309[];
 
 static operation_t op_CWAI ;
-static operation_t op_RTI  ;
-static operation_t op_SYNC ;
 static operation_t op_MULD ;
+static operation_t op_RTI  ;
+static operation_t op_PSHS ;
+static operation_t op_PSHU ;
+static operation_t op_PULS ;
+static operation_t op_PULU ;
+static operation_t op_SYNC ;
 static operation_t op_TST  ;
 static operation_t op_XSTX ;
 static operation_t op_XSTU ;
@@ -885,10 +889,16 @@ static int get_num_cycles(sample_t *sample_q, int num_samples) {
             }
          }
       }
-   } else if (b0 >= 0x34 && b0 <= 0x37) {
+   } else if (instr->op == &op_PSHS || instr->op == &op_PULS || instr->op == &op_PSHU || instr->op == &op_PULU) {
+      uint8_t pb;
+      if (b0 == 0x10 || b0 == 0x11) {
+         pb = sample_q[2].data;
+      } else {
+         pb = sample_q[1].data;
+      }
       // PSHS/PULS/PSHU/PULU
-      cycle_count += count_ones_in_nibble[b1 & 0x0f];            // bits 0..3 are 8 bit registers
-      cycle_count += count_ones_in_nibble[(b1 >> 4) & 0x0f] * 2; // bits 4..7 are 16 bit registers
+      cycle_count += count_ones_in_nibble[pb & 0x0f];            // bits 0..3 are 8 bit registers
+      cycle_count += count_ones_in_nibble[(pb >> 4) & 0x0f] * 2; // bits 4..7 are 16 bit registers
    } else if (instr->mode == INDEXED || instr->mode == INDEXEDIM) {
       // For INDEXED address, the instruction table cycles
       // are the minimum the instruction will execute in
