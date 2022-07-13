@@ -2567,6 +2567,11 @@ static int xnc_helper(int val) {
    }
 }
 
+static int xdec_helper(int val) {
+   C = 1;
+   return dec_helper(val);
+}
+
 // ====================================================================
 // Common 6809/6309 Instructions
 // ====================================================================
@@ -3604,6 +3609,19 @@ static int op_fn_XSTY(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    return Y & 0xff;
 }
 
+static int op_fn_XDEC(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   return xdec_helper(operand);
+}
+
+static int op_fn_XDECA(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   ACCA = xdec_helper(ACCA);
+   return -1;
+}
+
+static int op_fn_XDECB(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   ACCB = xdec_helper(ACCB);
+   return -1;
+}
 
 // ====================================================================
 // 6309 Helpers
@@ -5152,6 +5170,9 @@ static operation_t op_UU    = { "???",   op_fn_UU,       OTHER , 0 };
 static operation_t op_XX    = { "???",   op_fn_XX,       OTHER , 0 };
 static operation_t op_X18   = { "X18",   op_fn_X18,      REGOP , 0 };
 static operation_t op_X8C7  = { "X8C7",  op_fn_X8C7,    READOP , 0 };
+static operation_t op_XDEC  = { "XDEC",  op_fn_XDEC ,    RMWOP , 0 };
+static operation_t op_XDECA = { "XDECA", op_fn_XDECA,    REGOP , 0 };
+static operation_t op_XDECB = { "XDECB", op_fn_XDECB,    REGOP , 0 };
 static operation_t op_XHCF  = { "XHCF",  op_fn_XHCF,    READOP , 0 };
 static operation_t op_XNC   = { "XNC",   op_fn_XNC,      RMWOP , 0 };
 static operation_t op_XNCA  = { "XNCA",  op_fn_XNCA,     REGOP , 0 };
@@ -5266,7 +5287,7 @@ static opcode_t instr_table_6809[] = {
    /* 08 */    { &op_ASL  , DIRECT       , 0, 6 },
    /* 09 */    { &op_ROL  , DIRECT       , 0, 6 },
    /* 0A */    { &op_DEC  , DIRECT       , 0, 6 },
-   /* 0B */    { &op_DEC  , DIRECT       , 1, 6 },
+   /* 0B */    { &op_XDEC , DIRECT       , 1, 6 },
    /* 0C */    { &op_INC  , DIRECT       , 0, 6 },
    /* 0D */    { &op_TST  , DIRECT       , 0, 6 },
    /* 0E */    { &op_JMP  , DIRECT       , 0, 3 },
@@ -5330,7 +5351,7 @@ static opcode_t instr_table_6809[] = {
    /* 48 */    { &op_ASLA , INHERENT     , 0, 2 },
    /* 49 */    { &op_ROLA , INHERENT     , 0, 2 },
    /* 4A */    { &op_DECA , INHERENT     , 0, 2 },
-   /* 4B */    { &op_DECA , INHERENT     , 1, 2 },
+   /* 4B */    { &op_XDECA, INHERENT     , 1, 2 },
    /* 4C */    { &op_INCA , INHERENT     , 0, 2 },
    /* 4D */    { &op_TSTA , INHERENT     , 0, 2 },
    /* 4E */    { &op_CLRA , INHERENT     , 1, 2 },
@@ -5346,7 +5367,7 @@ static opcode_t instr_table_6809[] = {
    /* 58 */    { &op_ASLB , INHERENT     , 0, 2 },
    /* 59 */    { &op_ROLB , INHERENT     , 0, 2 },
    /* 5A */    { &op_DECB , INHERENT     , 0, 2 },
-   /* 5B */    { &op_DECB , INHERENT     , 1, 2 },
+   /* 5B */    { &op_XDECB, INHERENT     , 1, 2 },
    /* 5C */    { &op_INCB , INHERENT     , 0, 2 },
    /* 5D */    { &op_TSTB , INHERENT     , 0, 2 },
    /* 5E */    { &op_CLRB , INHERENT     , 1, 2 },
@@ -5362,7 +5383,7 @@ static opcode_t instr_table_6809[] = {
    /* 68 */    { &op_ASL  , INDEXED      , 0, 6 },
    /* 69 */    { &op_ROL  , INDEXED      , 0, 6 },
    /* 6A */    { &op_DEC  , INDEXED      , 0, 6 },
-   /* 6B */    { &op_DEC  , INDEXED      , 1, 6 },
+   /* 6B */    { &op_XDEC , INDEXED      , 1, 6 },
    /* 6C */    { &op_INC  , INDEXED      , 0, 6 },
    /* 6D */    { &op_TST  , INDEXED      , 0, 6 },
    /* 6E */    { &op_JMP  , INDEXED      , 0, 3 },
@@ -5378,7 +5399,7 @@ static opcode_t instr_table_6809[] = {
    /* 78 */    { &op_ASL  , EXTENDED     , 0, 7 },
    /* 79 */    { &op_ROL  , EXTENDED     , 0, 7 },
    /* 7A */    { &op_DEC  , EXTENDED     , 0, 7 },
-   /* 7B */    { &op_DEC  , EXTENDED     , 1, 7 },
+   /* 7B */    { &op_XDEC , EXTENDED     , 1, 7 },
    /* 7C */    { &op_INC  , EXTENDED     , 0, 7 },
    /* 7D */    { &op_TST  , EXTENDED     , 0, 7 },
    /* 7E */    { &op_JMP  , EXTENDED     , 0, 4 },
