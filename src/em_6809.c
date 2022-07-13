@@ -243,6 +243,9 @@ static const char * fail_hints[32] = {
 static opcode_t instr_table_6809[];
 static opcode_t instr_table_6309[];
 
+static operation_t op_CWAI ;
+static operation_t op_RTI  ;
+static operation_t op_SYNC ;
 static operation_t op_MULD ;
 static operation_t op_TST  ;
 static operation_t op_XSTX ;
@@ -656,7 +659,14 @@ static void em_6809_init(arguments_t *args) {
    opcode_t *instr_6809 = instr_table_6809;
    int fail = 0;
    for (int i = 0; i < 0x300; i++) {
-      if (!instr_6809->undocumented) {
+      if (instr_6809->undocumented) {
+         // If the MODE is marked as illegal, then fall-through to the base instruction
+         if (i >= 0x100 && instr_6809->mode == ILLEGAL) {
+            *instr_6809 = instr_table_6809[i & 0xff];
+            instr_6809->undocumented = 1;
+            instr_6809->cycles++;
+         }
+      } else {
          if (instr_6309->cycles != instr_6809->cycles) {
             printf("cycle mismatch in instruction table: %04x (%d cf %d)\n", i, instr_6309->cycles, instr_6809->cycles);
             fail = 1;
@@ -842,7 +852,7 @@ static int get_num_cycles(sample_t *sample_q, int num_samples) {
          break;
       }
    }
-   if (b0 == 0x13) {
+   if (instr->op == &op_SYNC) {
       // SYNC, look ahead for sync acknowledge
       cycle_count = CYCLES_UNKNOWN;
       if (sample_q[0].ba >= 0) {
@@ -857,14 +867,14 @@ static int get_num_cycles(sample_t *sample_q, int num_samples) {
          }
          return i + 1;
       }
-   } else if (b0 == 0x3B) {
+   } else if (instr->op == &op_RTI) {
       // RTI
       int stacked_E = sample_q[2].data & 0x80;
       if (stacked_E) {
          // RTI takes 9 additional cycles if E = 1 (and two more if in native mode)
          cycle_count += (NM == 1) ? 11 : 9;
       }
-   } else if (b0 == 0x3c) {
+   } else if (instr->op == &op_CWAI) {
       // CWAIT, ahead for fector fetch
       cycle_count = CYCLES_UNKNOWN;
       if (sample_q[0].bs >= 0) {
@@ -921,8 +931,13 @@ static int get_num_cycles(sample_t *sample_q, int num_samples) {
 
 static int count_cycles_with_lic(sample_t *sample_q, int num_samples) {
    int expected = get_num_cycles(sample_q, num_samples);
+
+   uint8_t b0 = sample_q[0].data;
+   uint8_t b1 = sample_q[1].data;
+   opcode_t *instr = get_instruction(instr_table, b0, b1);
+
    // In the case of SYNC when NM=0 then LIC can be set mid-instruction, so is unreliable
-   if (sample_q[0].data == 0x13) {
+   if (instr->op == &op_SYNC) {
       return expected;
    }
    // If NM==0 then LIC set on the last cycle of the instruction
