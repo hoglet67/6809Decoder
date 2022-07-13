@@ -2224,6 +2224,14 @@ static int or16_helper(int val, operand_t operand) {
    return val;
 }
 
+static inline sample_t *skip_prefixes(sample_q_t *sample_q) {
+   sample_t *sample = sample_q->sample;
+   while (sample->data == 0x10 || sample->data == 0x11) {
+      sample++;
+   }
+   return sample;
+}
+
 static void push_helper(sample_q_t *sample_q, int system) {
    //  0 opcode
    //  1 postbyte
@@ -2242,7 +2250,7 @@ static void push_helper(sample_q_t *sample_q, int system) {
    // 14 B      skipped if bit 2=0
    // 15 A      skipped if bit 1=0
    // 16 Flags  skipped if bit 0=0
-   sample_t *sample = sample_q->sample;
+   sample_t *sample = skip_prefixes(sample_q);
    int *us;
    int (*push8)(sample_t *);
    int (*push16)(sample_t *);
@@ -2258,7 +2266,6 @@ static void push_helper(sample_q_t *sample_q, int system) {
       us = &S;
       fail_us = FAIL_S;
    }
-
    int pb = sample[1].data;
    int tmp;
    int i = (NM == 1) ? 4 : 5;
@@ -2344,7 +2351,7 @@ static void pull_helper(sample_q_t *sample_q, int system) {
    // 14 PCH    skipped if bit 7=0
    // 15 PCL    skipped if bit 7=0
    // 16 --
-   sample_t *sample = sample_q->sample;
+   sample_t *sample = skip_prefixes(sample_q);
    int *us;
    int (*pop8)(sample_t *);
    int (*pop16)(sample_t *);
@@ -3274,7 +3281,7 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    //  12 PCH
    //  13 PCL
    //  14 ---
-   sample_t *sample = sample_q->sample;
+   sample_t *sample = skip_prefixes(sample_q);
 
    int i = 2;
 
@@ -3309,7 +3316,7 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_RTS(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   sample_t *sample = sample_q->sample;
+   sample_t *sample = skip_prefixes(sample_q);
    PC = pop16s(sample + 2);
    return -1;
 }
