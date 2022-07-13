@@ -253,7 +253,9 @@ static operation_t op_PULU ;
 static operation_t op_SYNC ;
 static operation_t op_TST  ;
 static operation_t op_XSTX ;
+static operation_t op_XSTY ;
 static operation_t op_XSTU ;
+static operation_t op_XSTS ;
 
 // ====================================================================
 // Helper Methods
@@ -1316,6 +1318,12 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
       break;
    }
 
+   // Special Case XSTS/XSTU/XSTX/XSTY
+   if (instr->op == &op_XSTS || instr->op == &op_XSTU || instr->op == &op_XSTX || instr->op == &op_XSTY) {
+      // The instruction is marked as IMMEDIATE_8, because the final byte is written not read
+      index++;
+   }
+
    // Copy instruction for ease of hex printing
    for (int i = 0; i < index; i++) {
       instruction->instr[i] = sample_q[i].data;
@@ -1562,8 +1570,8 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    default:
       break;
    }
-   // Special Case XSTX/XSTU
-   if (PC >= 0 && (instr->op == &op_XSTX || instr->op == &op_XSTU)) {
+   // Special Case XSTS/XSTU/XSTX/XSTY
+   if (PC >= 0 && (instr->op == &op_XSTS || instr->op == &op_XSTU || instr->op == &op_XSTX || instr->op == &op_XSTY)) {
       // The write happens to second byte of immediate data
       ea = (PC - 1) & 0xffff;
    }
@@ -3568,11 +3576,11 @@ static int op_fn_XRES(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 // bits in the Condition Codes register are affected. Each of these
 // opcodes execute in 3 MPU cycles.
 
-static int op_fn_XSTX(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+static int op_fn_XSTS(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    N = 1;
    Z = 0;
    V = 0;
-   return X & 0xff;
+   return S & 0xff;
 }
 
 static int op_fn_XSTU(operand_t operand, ea_t ea, sample_q_t *sample_q) {
@@ -3581,6 +3589,21 @@ static int op_fn_XSTU(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    V = 0;
    return U & 0xff;
 }
+
+static int op_fn_XSTX(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   N = 1;
+   Z = 0;
+   V = 0;
+   return X & 0xff;
+}
+
+static int op_fn_XSTY(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   N = 1;
+   Z = 0;
+   V = 0;
+   return Y & 0xff;
+}
+
 
 // ====================================================================
 // 6309 Helpers
@@ -5133,8 +5156,10 @@ static operation_t op_XHCF  = { "XHCF",  op_fn_XHCF,    READOP , 0 };
 static operation_t op_XNC   = { "XNC",   op_fn_XNC,      RMWOP , 0 };
 static operation_t op_XNCA  = { "XNCA",  op_fn_XNCA,     REGOP , 0 };
 static operation_t op_XNCB  = { "XNCB",  op_fn_XNCB,     REGOP , 0 };
-static operation_t op_XSTX  = { "XSTX",  op_fn_XSTX,   STOREOP , 0 };
+static operation_t op_XSTS  = { "XSTS",  op_fn_XSTS,   STOREOP , 0 };
 static operation_t op_XSTU  = { "XSTU",  op_fn_XSTU,   STOREOP , 0 };
+static operation_t op_XSTX  = { "XSTX",  op_fn_XSTX,   STOREOP , 0 };
+static operation_t op_XSTY  = { "XSTY",  op_fn_XSTY,   STOREOP , 0 };
 static operation_t op_XRES  = { "XRES",  op_fn_XRES,     OTHER , 0 };
 
 // 6309
@@ -5437,7 +5462,7 @@ static opcode_t instr_table_6809[] = {
    /* CC */    { &op_LDD  , IMMEDIATE_16 , 0, 3 },
    /* CD */    { &op_XHCF , INHERENT     , 1, 1 },
    /* CE */    { &op_LDU  , IMMEDIATE_16 , 0, 3 },
-   /* 8F */    { &op_XSTU , IMMEDIATE_8  , 1, 3 },
+   /* CF */    { &op_XSTU , IMMEDIATE_8  , 1, 3 },
    /* D0 */    { &op_SUBB , DIRECT       , 0, 4 },
    /* D1 */    { &op_CMPB , DIRECT       , 0, 4 },
    /* D2 */    { &op_SBCB , DIRECT       , 0, 4 },
@@ -5630,7 +5655,7 @@ static opcode_t instr_table_6809[] = {
    /* 108C */  { &op_CMPY , IMMEDIATE_16 , 0, 5 },
    /* 108D */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 108E */  { &op_LDY  , IMMEDIATE_16 , 0, 4 },
-   /* 108F */  { &op_XX   , ILLEGAL      , 1, 1 },
+   /* 108F */  { &op_XSTY , IMMEDIATE_8  , 1, 4 },
    /* 1090 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 1091 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 1092 */  { &op_XX   , ILLEGAL      , 1, 1 },
@@ -5694,7 +5719,7 @@ static opcode_t instr_table_6809[] = {
    /* 10CC */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10CD */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10CE */  { &op_LDS  , IMMEDIATE_16 , 0, 4 },
-   /* 10CF */  { &op_XX   , ILLEGAL      , 1, 1 },
+   /* 10CF */  { &op_XSTS , IMMEDIATE_8  , 1, 4 },
    /* 10D0 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10D1 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10D2 */  { &op_XX   , ILLEGAL      , 1, 1 },
