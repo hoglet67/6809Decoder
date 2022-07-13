@@ -3623,6 +3623,18 @@ static int op_fn_XDECB(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    return -1;
 }
 
+static int op_fn_XADDD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   add16_helper(pack(ACCA, ACCB), 0, operand);
+   return -1;
+}
+
+static int op_fn_XADDU(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   // This one took some figuring out!
+   int tmpU = (U >= 0) ? (U | 0xff00) : -1;
+   add16_helper(tmpU, 0, operand);
+   return -1;
+}
+
 // ====================================================================
 // 6309 Helpers
 // ====================================================================
@@ -5170,6 +5182,8 @@ static operation_t op_UU    = { "???",   op_fn_UU,       OTHER , 0 };
 static operation_t op_XX    = { "???",   op_fn_XX,       OTHER , 0 };
 static operation_t op_X18   = { "X18",   op_fn_X18,      REGOP , 0 };
 static operation_t op_X8C7  = { "X8C7",  op_fn_X8C7,    READOP , 0 };
+static operation_t op_XADDD = { "XADDD", op_fn_XADDD,   READOP , 1 };
+static operation_t op_XADDU = { "XADDU", op_fn_XADDU,   READOP , 1 };
 static operation_t op_XDEC  = { "XDEC",  op_fn_XDEC ,    RMWOP , 0 };
 static operation_t op_XDECA = { "XDECA", op_fn_XDECA,    REGOP , 0 };
 static operation_t op_XDECB = { "XDECB", op_fn_XDECB,    REGOP , 0 };
@@ -5728,7 +5742,7 @@ static opcode_t instr_table_6809[] = {
    /* 10C0 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10C1 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10C2 */  { &op_XX   , ILLEGAL      , 1, 1 },
-   /* 10C3 */  { &op_XX   , ILLEGAL      , 1, 1 },
+   /* 10C3 */  { &op_XADDD, IMMEDIATE_16 , 1, 5 },
    /* 10C4 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10C5 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10C6 */  { &op_XX   , ILLEGAL      , 1, 1 },
@@ -5744,7 +5758,7 @@ static opcode_t instr_table_6809[] = {
    /* 10D0 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10D1 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10D2 */  { &op_XX   , ILLEGAL      , 1, 1 },
-   /* 10D3 */  { &op_XX   , ILLEGAL      , 1, 1 },
+   /* 10D3 */  { &op_XADDD, DIRECT       , 1, 7 },
    /* 10D4 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10D5 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10D6 */  { &op_XX   , ILLEGAL      , 1, 1 },
@@ -5760,7 +5774,7 @@ static opcode_t instr_table_6809[] = {
    /* 10E0 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10E1 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10E2 */  { &op_XX   , ILLEGAL      , 1, 1 },
-   /* 10E3 */  { &op_XX   , ILLEGAL      , 1, 1 },
+   /* 10E3 */  { &op_XADDD, INDEXED      , 1, 7 },
    /* 10E4 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10E5 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10E6 */  { &op_XX   , ILLEGAL      , 1, 1 },
@@ -5776,7 +5790,7 @@ static opcode_t instr_table_6809[] = {
    /* 10F0 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10F1 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10F2 */  { &op_XX   , ILLEGAL      , 1, 1 },
-   /* 10F3 */  { &op_XX   , ILLEGAL      , 1, 1 },
+   /* 10F3 */  { &op_XADDD, EXTENDED     , 1, 8 },
    /* 10F4 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10F5 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 10F6 */  { &op_XX   , ILLEGAL      , 1, 1 },
@@ -5985,7 +5999,7 @@ static opcode_t instr_table_6809[] = {
    /* 11C0 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11C1 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11C2 */  { &op_XX   , ILLEGAL      , 1, 1 },
-   /* 11C3 */  { &op_XX   , ILLEGAL      , 1, 1 },
+   /* 11C3 */  { &op_XADDU, IMMEDIATE_16 , 1, 5 },
    /* 11C4 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11C5 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11C6 */  { &op_XX   , ILLEGAL      , 1, 1 },
@@ -6001,7 +6015,7 @@ static opcode_t instr_table_6809[] = {
    /* 11D0 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11D1 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11D2 */  { &op_XX   , ILLEGAL      , 1, 1 },
-   /* 11D3 */  { &op_XX   , ILLEGAL      , 1, 1 },
+   /* 11E3 */  { &op_XADDU, DIRECT       , 1, 7 },
    /* 11D4 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11D5 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11D6 */  { &op_XX   , ILLEGAL      , 1, 1 },
@@ -6017,7 +6031,7 @@ static opcode_t instr_table_6809[] = {
    /* 11E0 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11E1 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11E2 */  { &op_XX   , ILLEGAL      , 1, 1 },
-   /* 11E3 */  { &op_XX   , ILLEGAL      , 1, 1 },
+   /* 11E3 */  { &op_XADDU, INDEXED      , 1, 7 },
    /* 11E4 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11E5 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11E6 */  { &op_XX   , ILLEGAL      , 1, 1 },
@@ -6033,7 +6047,7 @@ static opcode_t instr_table_6809[] = {
    /* 11F0 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11F1 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11F2 */  { &op_XX   , ILLEGAL      , 1, 1 },
-   /* 11F3 */  { &op_XX   , ILLEGAL      , 1, 1 },
+   /* 11F3 */  { &op_XADDU, EXTENDED     , 1, 8 },
    /* 11F4 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11F5 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11F6 */  { &op_XX   , ILLEGAL      , 1, 1 },
