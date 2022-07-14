@@ -1,0 +1,20 @@
+P%=&3000
+[
+.test
+NOP
+NOP
+NOP
+CLRA
+TFR A,CC
+NOP
+NOP
+EQUB &3E
+NOP
+NOP
+NOP
+NOP
+RTS
+]
+FOR A=1 TO 10
+CALL test
+NEXT
