@@ -6049,7 +6049,7 @@ static opcode_t instr_table_6809[] = {
    /* 11D0 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11D1 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11D2 */  { &op_XX   , ILLEGAL      , 1, 1 },
-   /* 11E3 */  { &op_XADDU, DIRECT       , 1, 7 },
+   /* 11D3 */  { &op_XADDU, DIRECT       , 1, 7 },
    /* 11D4 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11D5 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 11D6 */  { &op_XX   , ILLEGAL      , 1, 1 },
