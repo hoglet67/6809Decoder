@@ -2575,7 +2575,7 @@ static int xnc_helper(int val) {
 }
 
 static int xdec_helper(int val) {
-   C = 1;
+   C = (val != 0);
    return dec_helper(val);
 }
 
