@@ -3565,9 +3565,17 @@ static int op_fn_X8C7(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 // could cause an RTI instruction for a Reset handler to fail to
 // operate as expected. This opcode uses the same number of MPU cycles
 // as SWI (15).
+//
+// DMB: $10 $3E invokes the SWI2 trap (so is the same as SWI2)
+//      $11 $3e invokes the FIQ trap
 
 static int op_fn_XRES(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    interrupt_helper(sample_q, 3, 1, VEC_RST);
+   return -1;
+}
+
+static int op_fn_XFIQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   interrupt_helper(sample_q, 4, 1, VEC_FIQ);
    return -1;
 }
 
@@ -5187,6 +5195,7 @@ static operation_t op_XADDU = { "XADDU", op_fn_XADDU,   READOP , 1 };
 static operation_t op_XDEC  = { "XDEC",  op_fn_XDEC ,    RMWOP , 0 };
 static operation_t op_XDECA = { "XDECA", op_fn_XDECA,    REGOP , 0 };
 static operation_t op_XDECB = { "XDECB", op_fn_XDECB,    REGOP , 0 };
+static operation_t op_XFIQ  = { "XFIQ",  op_fn_XFIQ,     OTHER , 0 };
 static operation_t op_XHCF  = { "XHCF",  op_fn_XHCF,    READOP , 0 };
 static operation_t op_XNC   = { "XNC",   op_fn_XNC,      RMWOP , 0 };
 static operation_t op_XNCA  = { "XNCA",  op_fn_XNCA,     REGOP , 0 };
@@ -5609,7 +5618,7 @@ static opcode_t instr_table_6809[] = {
    /* 103B */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 103C */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 103D */  { &op_XX   , ILLEGAL      , 1, 1 },
-   /* 103E */  { &op_XX   , ILLEGAL      , 1, 1 },
+   /* 103E */  { &op_SWI2 , INHERENT     , 1,20 },
    /* 103F */  { &op_SWI2 , INHERENT     , 0,20 },
    /* 1040 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 1041 */  { &op_XX   , ILLEGAL      , 1, 1 },
@@ -5866,7 +5875,7 @@ static opcode_t instr_table_6809[] = {
    /* 113B */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 113C */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 113D */  { &op_XX   , ILLEGAL      , 1, 1 },
-   /* 113E */  { &op_XX   , ILLEGAL      , 1, 1 },
+   /* 113E */  { &op_XFIQ , INHERENT     , 1,20 },
    /* 113F */  { &op_SWI3 , INHERENT     , 0,20 },
    /* 1140 */  { &op_XX   , ILLEGAL      , 1, 1 },
    /* 1141 */  { &op_XX   , ILLEGAL      , 1, 1 },
