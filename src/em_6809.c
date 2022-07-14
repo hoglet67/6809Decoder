@@ -2579,6 +2579,14 @@ static int xdec_helper(int val) {
    return dec_helper(val);
 }
 
+static int xclr_helper() {
+   N = 0;
+   Z = 1;
+   V = 0;
+   // Unlike CLR, C is unchanged
+   return 0;
+}
+
 // ====================================================================
 // Common 6809/6309 Instructions
 // ====================================================================
@@ -3640,6 +3648,16 @@ static int op_fn_XSTY(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    Z = 0;
    V = 0;
    return Y & 0xff;
+}
+
+static int op_fn_XCLRA(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   ACCA = xclr_helper(ACCA);
+   return -1;
+}
+
+static int op_fn_XCLRB(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   ACCB = xclr_helper(ACCB);
+   return -1;
 }
 
 static int op_fn_XDEC(operand_t operand, ea_t ea, sample_q_t *sample_q) {
@@ -5217,6 +5235,8 @@ static operation_t op_X18   = { "X18",   op_fn_X18,      REGOP , 0 };
 static operation_t op_X8C7  = { "X8C7",  op_fn_X8C7,    READOP , 0 };
 static operation_t op_XADDD = { "XADDD", op_fn_XADDD,   READOP , 1 };
 static operation_t op_XADDU = { "XADDU", op_fn_XADDU,   READOP , 1 };
+static operation_t op_XCLRA = { "XCLRA", op_fn_XCLRA,    REGOP , 0 };
+static operation_t op_XCLRB = { "XCLRB", op_fn_XCLRB,    REGOP , 0 };
 static operation_t op_XDEC  = { "XDEC",  op_fn_XDEC ,    RMWOP , 0 };
 static operation_t op_XDECA = { "XDECA", op_fn_XDECA,    REGOP , 0 };
 static operation_t op_XDECB = { "XDECB", op_fn_XDECB,    REGOP , 0 };
@@ -5402,7 +5422,7 @@ static opcode_t instr_table_6809[] = {
    /* 4B */    { &op_XDECA, INHERENT     , 1, 2 },
    /* 4C */    { &op_INCA , INHERENT     , 0, 2 },
    /* 4D */    { &op_TSTA , INHERENT     , 0, 2 },
-   /* 4E */    { &op_CLRA , INHERENT     , 1, 2 },
+   /* 4E */    { &op_XCLRA, INHERENT     , 1, 2 },
    /* 4F */    { &op_CLRA , INHERENT     , 0, 2 },
    /* 50 */    { &op_NEGB , INHERENT     , 0, 2 },
    /* 51 */    { &op_NEGB , INHERENT     , 1, 2 },
@@ -5418,7 +5438,7 @@ static opcode_t instr_table_6809[] = {
    /* 5B */    { &op_XDECB, INHERENT     , 1, 2 },
    /* 5C */    { &op_INCB , INHERENT     , 0, 2 },
    /* 5D */    { &op_TSTB , INHERENT     , 0, 2 },
-   /* 5E */    { &op_CLRB , INHERENT     , 1, 2 },
+   /* 5E */    { &op_XCLRB, INHERENT     , 1, 2 },
    /* 5F */    { &op_CLRB , INHERENT     , 0, 2 },
    /* 60 */    { &op_NEG  , INDEXED      , 0, 6 },
    /* 61 */    { &op_NEG  , INDEXED      , 1, 6 },
