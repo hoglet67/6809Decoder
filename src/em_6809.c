@@ -252,6 +252,7 @@ static operation_t op_PULS ;
 static operation_t op_PULU ;
 static operation_t op_SYNC ;
 static operation_t op_TST  ;
+static operation_t op_XHCF ;
 static operation_t op_XSTX ;
 static operation_t op_XSTY ;
 static operation_t op_XSTU ;
@@ -949,9 +950,15 @@ static int count_cycles_with_lic(sample_t *sample_q, int num_samples) {
    opcode_t *instr = get_instruction(instr_table, b0, b1);
 
    // In the case of SYNC when NM=0 then LIC can be set mid-instruction, so is unreliable
-   if (instr->op == &op_SYNC) {
-      return expected;
+   // In the case of HCF, then LIC is never toggled
+   if (instr->op == &op_SYNC || instr->op == &op_XHCF) {
+      if (expected > num_samples) {
+         return CYCLES_TRUNCATED;
+      } else {
+         return expected;
+      }
    }
+
    // If NM==0 then LIC set on the last cycle of the instruction
    // If NM==1 then LIC set on the first cycle of the instruction
    int offset = (NM == 1) ? 1 : 0;
@@ -3518,7 +3525,25 @@ static int op_fn_XNCB(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 // mode in which the Address lines are incrementally strobed.
 
 static int op_fn_XHCF(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   // TODO
+   sample_t *samples = sample_q->sample;
+   if (PC >= 0) {
+      int i = 0;
+      // Ignore any prefixes
+      while (i < 0x10000 && (samples[i].data == 0x10 || samples[i].data == 0x11)) {
+         i++;
+      }
+      // Ignore the opcode
+      i++;
+      // Set back the PC to the start of the instruction, so HCF re-executes
+      PC = (PC - i) & 0xffff;
+      // Read 64K - i bytes starting at PC + i
+      while (i < 0x10000) {
+         memory_read(samples + i, (PC + i) & 0xffff, MEM_DATA);
+         i++;
+      }
+      // Force the number of cycles to 64K
+      sample_q->num_cycles = 0x10000;
+   }
    return -1;
 }
 
@@ -5319,8 +5344,8 @@ static opcode_t instr_table_6809[] = {
    /* 11 */    { &op_UU   , INHERENT     , 0, 1 },
    /* 12 */    { &op_NOP  , INHERENT     , 0, 2 },
    /* 13 */    { &op_SYNC , INHERENT     , 0, 4 },
-   /* 14 */    { &op_XHCF , INHERENT     , 1, 1 },
-   /* 15 */    { &op_XHCF , INHERENT     , 1, 1 },
+   /* 14 */    { &op_XHCF , INHERENT     , 1, 0x10000 },
+   /* 15 */    { &op_XHCF , INHERENT     , 1, 0x10000 },
    /* 16 */    { &op_LBRA , RELATIVE_16  , 0, 5 },
    /* 17 */    { &op_LBSR , RELATIVE_16  , 0, 9 },
    /* 18 */    { &op_X18  , INHERENT     , 1, 3 },
@@ -5504,7 +5529,7 @@ static opcode_t instr_table_6809[] = {
    /* CA */    { &op_ORB  , IMMEDIATE_8  , 0, 2 },
    /* CB */    { &op_ADDB , IMMEDIATE_8  , 0, 2 },
    /* CC */    { &op_LDD  , IMMEDIATE_16 , 0, 3 },
-   /* CD */    { &op_XHCF , INHERENT     , 1, 1 },
+   /* CD */    { &op_XHCF , INHERENT     , 1, 0x10000 },
    /* CE */    { &op_LDU  , IMMEDIATE_16 , 0, 3 },
    /* CF */    { &op_XSTU , IMMEDIATE_8  , 1, 3 },
    /* D0 */    { &op_SUBB , DIRECT       , 0, 4 },
