@@ -528,42 +528,6 @@ int write_s(char *buffer, const char *s) {
    return i;
 }
 
-static int exec_instruction(sample_t *sample_q, int num_samples, instruction_t *instruction) {
-   int num_cycles;
-
-   instruction->intr_seen = 0;
-   instruction->rst_seen = em->match_reset(sample_q, num_samples);
-   if (instruction->rst_seen) {
-      num_cycles = instruction->rst_seen;
-   } else {
-      instruction->intr_seen = em->match_interrupt(sample_q, num_samples);
-      if (instruction->intr_seen) {
-         num_cycles = instruction->intr_seen;
-      } else {
-         num_cycles = em->count_cycles(sample_q, num_samples);
-      }
-   }
-
-   // Two cases where num_cycles < 0:
-   //    in non-LIC mode, where the instruction length can't be determined from the know CPU state
-   //    if the final instruction is truncated
-
-   if (num_cycles >= 0) {
-      if (instruction->rst_seen) {
-         // Handle a reset
-         em->reset(sample_q, num_cycles, instruction);
-      } else if (instruction->intr_seen) {
-         // Handle an interrupt
-         em->interrupt(sample_q, num_cycles, instruction);
-      } else {
-         // Handle a normal instruction
-         num_cycles = em->emulate(sample_q, num_cycles, instruction);
-      }
-   }
-
-   return num_cycles;
-}
-
 static int analyze_instruction(sample_t *sample_q, int num_samples) {
    static int total_cycles = 0;
    static int interrupt_depth = 0;
@@ -573,7 +537,7 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
 
    instruction_t instruction;
 
-   int num_cycles = exec_instruction(sample_q, num_samples, &instruction);
+   int num_cycles = em->emulate(sample_q, num_samples, &instruction);
 
    if (num_cycles == CYCLES_TRUNCATED) {
       // Silently consume all remaining samples
@@ -745,7 +709,7 @@ int run_emulation_for_n_cycles(sample_t *sample, int num_samples, int run_cycles
    while (sample_tmp < sample + run_cycles ) {
       instruction_t instruction;
       // TODO: We should properly calculate the number of remaining samples, to cope with very small traces
-      int num_cycles = exec_instruction(sample_tmp, run_cycles, &instruction);
+      int num_cycles = em->emulate(sample_tmp, run_cycles, &instruction);
       if (num_cycles == CYCLES_TRUNCATED) {
          break;
       } else if (num_cycles <= 0) {

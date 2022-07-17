@@ -1031,6 +1031,7 @@ static int em_6809_count_cycles(sample_t *sample_q, int num_samples) {
 static void em_6809_reset(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
    instruction->pc = -1;
    instruction->length = 0;
+   instruction->rst_seen = 1;
    // All other registers are unchanged on reset
    DP = 0;
    F  = 1;
@@ -1220,6 +1221,7 @@ static int interrupt_helper(sample_q_t *sample_q, int offset, int full, int vect
    return pc;
 }
 
+
 static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
    // Calculate expected number of cycles in the interrupt dispatch,
    // taking account native mode on the 6309 pushing two extra bytes
@@ -1247,13 +1249,36 @@ static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t 
    }
    instruction->pc = pc;
    instruction->length = 0;
+   instruction->intr_seen = 1;
 }
 
 static inline int offset_address(int base, int offset) {
    return (base >= 0) ? (base + offset) & 0xffff : base;
 }
 
-static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
+static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *instruction) {
+   int num_cycles;
+
+   instruction->intr_seen = 0;
+   instruction->rst_seen = 0;
+
+   if ((num_cycles = em_6809_match_reset(sample_q, num_samples)) > 0) {
+      em_6809_reset(sample_q, num_cycles, instruction);
+      return num_cycles;
+   }
+
+   if ((num_cycles = em_6809_match_interrupt(sample_q, num_samples)) > 0) {
+      em_6809_interrupt(sample_q, num_cycles, instruction);
+      return num_cycles;
+   }
+
+   // Two cases where num_cycles < 0:
+   //    in non-LIC mode, where the instruction length can't be determined from the know CPU state
+   //    if the final instruction is truncated
+   if ((num_cycles = em_6809_count_cycles(sample_q, num_samples)) < 0) {
+      return num_cycles;
+   }
+
    int pb = 0;
    int index = 0;
    opcode_t *instr = get_instruction(instr_table, sample_q);
@@ -1925,11 +1950,6 @@ static int em_6809_write_fail(char *bp, uint32_t fail) {
 
 cpu_emulator_t em_6809 = {
    .init = em_6809_init,
-   .match_reset = em_6809_match_reset,
-   .match_interrupt = em_6809_match_interrupt,
-   .count_cycles = em_6809_count_cycles,
-   .reset = em_6809_reset,
-   .interrupt = em_6809_interrupt,
    .emulate = em_6809_emulate,
    .disassemble = dis_6809_disassemble,
    .get_PC = em_6809_get_PC,
