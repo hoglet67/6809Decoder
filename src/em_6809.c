@@ -252,6 +252,7 @@ static operation_t op_PULS ;
 static operation_t op_PULU ;
 static operation_t op_SYNC ;
 static operation_t op_TST  ;
+static operation_t op_TFM  ;
 static operation_t op_XHCF ;
 static operation_t op_XSTX ;
 static operation_t op_XSTY ;
@@ -764,6 +765,24 @@ static int em_6809_match_reset(sample_t *sample_q, int num_samples) {
    return 0;
 }
 
+static inline int is_prefix(sample_t *sample) {
+   return (sample->data & 0xfe) == 0x10;
+}
+
+static inline opcode_t *get_instruction(opcode_t *instr_table, sample_t *sample) {
+   int prefix = 0;
+   if (is_prefix(sample)) {
+      prefix = 1 + (sample->data & 1);
+      sample++;
+      // On the 6809, additional prefixes are ignored
+      while (!cpu6309 && is_prefix(sample)) {
+         sample++;
+      }
+   }
+   return instr_table + 0x100 * prefix + sample->data;
+}
+
+
 // Return the number of cycles the instruction is expected to take
 //
 // Note: in a small number of cases, this value will be incorrect,
@@ -777,13 +796,29 @@ static int em_6809_match_reset(sample_t *sample_q, int num_samples) {
 // In addition, it also can't handle the case of TFM being interrupted
 
 static int get_num_cycles(sample_t *sample_q, int num_samples) {
-   uint8_t b0 = sample_q[0].data;
-   uint8_t b1 = sample_q[1].data;
-   opcode_t *instr = get_instruction(instr_table, b0, b1);
+   opcode_t *instr = get_instruction(instr_table, sample_q);
    int cycle_count = (NM == 1) ? instr->cycles_native : instr->cycles;
+
+   sample_t *sample = sample_q;
+
+   // Process the prefix bytes
+   uint8_t prefix = 0;
+   if (is_prefix(sample)) {
+      prefix = sample->data;
+      sample++;
+      // On the 6809, additional prefixes are ignored
+      while (!cpu6309 && is_prefix(sample)) {
+         cycle_count++;
+         sample++;
+      }
+   }
+
+   // Sample_q now points to the opcode byte
+   uint8_t opcode = sample->data;
+
    // Long Branch, one additional cycle if branch taken (unless in native mode)
-   if (NM !=1 && b0 == 0x10) {
-      switch (b1) {
+   if (NM !=1 && prefix == 0x10) {
+      switch (opcode) {
       case 0x21: /* LBRN */
          cycle_count++;
          break;
@@ -872,17 +907,18 @@ static int get_num_cycles(sample_t *sample_q, int num_samples) {
          while (i < num_samples && sample_q[i].ba == 1) {
             i++;
          }
-         return i + 1;
+         cycle_count = i + 1;
       }
    } else if (instr->op == &op_RTI) {
       // RTI
-      int stacked_E = sample_q[2].data & 0x80;
+      int stacked_E = sample[2].data & 0x80;
       if (stacked_E) {
          // RTI takes 9 additional cycles if E = 1 (and two more if in native mode)
          cycle_count += (NM == 1) ? 11 : 9;
       }
    } else if (instr->op == &op_CWAI) {
-      // CWAIT, ahead for fector fetch
+      // CWAIT - cycle count in instruction tables is 20/22
+      // ahead for fector fetch
       cycle_count = CYCLES_UNKNOWN;
       if (sample_q[0].bs >= 0) {
          for (int i = 1; i < num_samples; i++) {
@@ -893,20 +929,14 @@ static int get_num_cycles(sample_t *sample_q, int num_samples) {
          }
       }
    } else if (instr->op == &op_PSHS || instr->op == &op_PULS || instr->op == &op_PSHU || instr->op == &op_PULU) {
-      uint8_t pb;
-      if (b0 == 0x10 || b0 == 0x11) {
-         pb = sample_q[2].data;
-      } else {
-         pb = sample_q[1].data;
-      }
       // PSHS/PULS/PSHU/PULU
-      cycle_count += count_ones_in_nibble[pb & 0x0f];            // bits 0..3 are 8 bit registers
-      cycle_count += count_ones_in_nibble[(pb >> 4) & 0x0f] * 2; // bits 4..7 are 16 bit registers
+      uint8_t postbyte = sample[1].data;
+      cycle_count += count_ones_in_nibble[postbyte & 0x0f];            // bits 0..3 are 8 bit registers
+      cycle_count += count_ones_in_nibble[(postbyte >> 4) & 0x0f] * 2; // bits 4..7 are 16 bit registers
    } else if (instr->mode == INDEXED || instr->mode == INDEXEDIM) {
       // For INDEXED address, the instruction table cycles
       // are the minimum the instruction will execute in
-      int postindex = ((b0 == 0x10 || b0 == 0x11) ? 2 : 1) + (instr->mode == INDEXEDIM);
-      int postbyte = sample_q[postindex].data;
+      uint8_t postbyte = sample[instr->mode == INDEXEDIM ? 2 : 1].data;
       int postbyte_cycles;
       if (cpu6309) {
          if (NM == 1) {
@@ -922,17 +952,17 @@ static int get_num_cycles(sample_t *sample_q, int num_samples) {
          postbyte_cycles = -postbyte_cycles;
       }
       cycle_count += postbyte_cycles;
-   } else if (cpu6309 && b0 == 0x11) {
-      // TFM
-      if ((b1 & 0xFC) == 0x38) {
-         int pb = sample_q[2].data;
-         if (((pb & 0xf0) > 0x40) || ((pb & 0x0f) > 0x04)) {
-            // Illegal index register
-            cycle_count = (NM == 1) ? 25 : 23;
+   } else if (instr->op == &op_TFM) {
+      // TFM - cycle count in instruction tables is 6
+      uint8_t postbyte = sample[1].data;
+      if ((opcode & 0xFC) == 0x38) {
+         if (((postbyte & 0xf0) > 0x40) || ((postbyte & 0x0f) > 0x04)) {
+            // Illegal index register takes 25/23 (without additional prefixes)
+            cycle_count += (NM == 1) ? 19 : 17;
          } else {
             int W = pack(ACCE, ACCF);
             if (W >= 0) {
-               cycle_count = 6 + 3 * W;
+               cycle_count += 3 * W;
             } else {
                cycle_count = CYCLES_UNKNOWN; // Can't determine this
             }
@@ -945,9 +975,7 @@ static int get_num_cycles(sample_t *sample_q, int num_samples) {
 static int count_cycles_with_lic(sample_t *sample_q, int num_samples) {
    int expected = get_num_cycles(sample_q, num_samples);
 
-   uint8_t b0 = sample_q[0].data;
-   uint8_t b1 = sample_q[1].data;
-   opcode_t *instr = get_instruction(instr_table, b0, b1);
+   opcode_t *instr = get_instruction(instr_table, sample_q);
 
    // In the case of SYNC when NM=0 then LIC can be set mid-instruction, so is unreliable
    // In the case of HCF, then LIC is never toggled
@@ -1226,13 +1254,9 @@ static inline int offset_address(int base, int offset) {
 }
 
 static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
-
-   int b0 = sample_q[0].data;
-   int b1 = sample_q[1].data;
-   int oi = 0;
    int pb = 0;
    int index = 0;
-   opcode_t *instr = get_instruction(instr_table, b0, b1);
+   opcode_t *instr = get_instruction(instr_table, sample_q);
    int mode = instr->mode;
 
    // Flag that an instruction marked as undocumented has been encoutered
@@ -1240,22 +1264,27 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
       failflag |= FAIL_UNDOC;
    }
 
-   // Memory modelling of the opcode and the prefix
-   memory_read(sample_q + index, offset_address(PC, index), MEM_INSTR);
-   index++;
-
-   // If there is a prefix, skip past it and read the opcode
-   if (b0 == 0x10 || b0 == 0x11) {
+   // Memory modelling of the prefix
+   if (is_prefix(sample_q + index)) {
       memory_read(sample_q + index, offset_address(PC, index), MEM_INSTR);
       index++;
-      // Increment opcode index (oi), which allows the rest of the code to ignore the prefix
-      oi++;
+      // On the 6809, additional prefixes are ignored
+      while (!cpu6309 && is_prefix(sample_q + index)) {
+         memory_read(sample_q + index, offset_address(PC, index), MEM_INSTR);
+         index++;
+      }
    }
 
    sample_q_t sample_ref;
    sample_ref.sample = sample_q;
-   sample_ref.oi = oi; // This is the opcode index after prefixes have been skipped
+   sample_ref.oi = index; // This is the opcode index after prefixes have been skipped
    sample_ref.num_cycles = num_cycles;
+
+   int oi = index;
+
+   // Memory modelling of the opcode
+   memory_read(sample_q + index, offset_address(PC, index), MEM_INSTR);
+   index++;
 
    // If there is an immediate byte (AIM/EIM/OIM/TIM only), skip past it
    if (mode == DIRECTIM || mode == EXTENDEDIM || mode == INDEXEDIM) {

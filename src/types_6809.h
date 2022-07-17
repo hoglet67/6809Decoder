@@ -66,12 +66,5 @@ typedef struct {
    int cycles_native;
 } opcode_t;
 
-static inline opcode_t *get_instruction(opcode_t *instr_table, uint8_t b0, uint8_t b1) {
-   if (b0 == 0x10 || b0 == 0x11) {
-      return instr_table + 0x100 * (1 + (b0 & 1)) + b1;
-   } else {
-      return instr_table + b0;
-   }
-}
 
 #endif

@@ -49,12 +49,25 @@ void dis_6809_init(cpu_t cpu_type, opcode_t *cpu_instr_table) {
    instr_table = cpu_instr_table;
 }
 
+static inline int is_prefix(uint8_t data) {
+   return (data & 0xfe) == 0x10;
+}
 
 int dis_6809_disassemble(char *buffer, instruction_t *instruction) {
-   int b0 = instruction->instr[0];
-   int b1 = instruction->instr[1];
+   int prefix = 0;
+   int oi = 0;
    int pb = 0;
-   opcode_t *instr = get_instruction(instr_table, b0, b1);
+   opcode_t *instr = instr_table;
+   if (is_prefix(instruction->instr[oi])) {
+      prefix = instruction->instr[oi++];
+      instr += 0x100 + 0x100 * (prefix & 1);
+      // On the 6809, additional prefixes are just ignored
+      while (!cpu6309 && is_prefix(instruction->instr[oi])) {
+         oi++;
+      }
+   }
+   int opcode = instruction->instr[oi++];
+   instr += opcode;
    int mode = instr->mode;
 
    /// Output the mnemonic
@@ -66,18 +79,6 @@ int dis_6809_disassemble(char *buffer, instruction_t *instruction) {
       *ptr++ = ' ';
    }
 
-   // Work out where in the instruction the operand is
-   // [Prefix] Opcode [Imbyte] [ Postbyte] Op1 Op2
-   int oi;
-   int opcode;
-   // Extract the prefix/opcode
-   if (b0 == 0x10 || b0 == 0x11) {
-      opcode = (b0 << 8) | b1;
-      oi = 2;
-   } else {
-      opcode = b0;
-      oi = 1;
-   }
    // Handle the immediate operand AIM/EIM/OIM/TIM in as simple way as possible
    if (mode == DIRECTIM || mode == EXTENDEDIM || mode == INDEXEDIM) {
       *ptr++ = '#';
@@ -102,7 +103,7 @@ int dis_6809_disassemble(char *buffer, instruction_t *instruction) {
       break;
    case REGISTER:
       {
-         switch (opcode) {
+         switch ((prefix << 8) | opcode) {
          case 0x001a: // ORC
          case 0x001c: // ANDC
             *ptr++ = '#';
