@@ -47,6 +47,7 @@ typedef enum {
 
 typedef struct {
    sample_t *sample;
+   int oi;
    int num_cycles;
 } sample_q_t;
 

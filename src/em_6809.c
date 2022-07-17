@@ -1055,7 +1055,7 @@ static int interrupt_helper(sample_q_t *sample_q, int offset, int full, int vect
    //
    // Note there is a one cycle offset for SWI2/3 due to the additiona prefix byte
 
-   int i = offset;
+   int i = sample_q->oi + offset;
 
    // The PC is pushed in all cases
    int pc = push16s(sample + i);
@@ -1203,6 +1203,7 @@ static void em_6809_interrupt(sample_t *sample_q, int num_cycles, instruction_t 
    int pc;
    sample_q_t sample_ref;
    sample_ref.sample = sample_q;
+   sample_ref.oi = 0;
    sample_ref.num_cycles = num_cycles;
    if (num_cycles == fast_c) {
       pc = interrupt_helper(&sample_ref, offset, 0, VEC_FIQ);
@@ -1234,10 +1235,6 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
    opcode_t *instr = get_instruction(instr_table, b0, b1);
    int mode = instr->mode;
 
-   sample_q_t sample_ref;
-   sample_ref.sample = sample_q;
-   sample_ref.num_cycles = num_cycles;
-
    // Flag that an instruction marked as undocumented has been encoutered
    if (instr->undocumented) {
       failflag |= FAIL_UNDOC;
@@ -1254,6 +1251,11 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
       // Increment opcode index (oi), which allows the rest of the code to ignore the prefix
       oi++;
    }
+
+   sample_q_t sample_ref;
+   sample_ref.sample = sample_q;
+   sample_ref.oi = oi; // This is the opcode index after prefixes have been skipped
+   sample_ref.num_cycles = num_cycles;
 
    // If there is an immediate byte (AIM/EIM/OIM/TIM only), skip past it
    if (mode == DIRECTIM || mode == EXTENDEDIM || mode == INDEXEDIM) {
@@ -1377,7 +1379,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_cycles, instruction_t *in
          postbyte_cycles = -postbyte_cycles;
          failflag |= FAIL_BADM;
          if (cpu6309) {
-            interrupt_helper(&sample_ref, oi + 5, 1, VEC_IL);
+            interrupt_helper(&sample_ref, 5, 1, VEC_IL);
             return num_cycles;
          }
       }
@@ -2249,14 +2251,6 @@ static int or16_helper(int val, operand_t operand) {
    return val;
 }
 
-static inline sample_t *skip_prefixes(sample_q_t *sample_q) {
-   sample_t *sample = sample_q->sample;
-   while (sample->data == 0x10 || sample->data == 0x11) {
-      sample++;
-   }
-   return sample;
-}
-
 static void push_helper(sample_q_t *sample_q, int system) {
    //  0 opcode
    //  1 postbyte
@@ -2275,7 +2269,7 @@ static void push_helper(sample_q_t *sample_q, int system) {
    // 14 B      skipped if bit 2=0
    // 15 A      skipped if bit 1=0
    // 16 Flags  skipped if bit 0=0
-   sample_t *sample = skip_prefixes(sample_q);
+   sample_t *sample = sample_q->sample + sample_q->oi;
    int *us;
    int (*push8)(sample_t *);
    int (*push16)(sample_t *);
@@ -2376,7 +2370,7 @@ static void pull_helper(sample_q_t *sample_q, int system) {
    // 14 PCH    skipped if bit 7=0
    // 15 PCL    skipped if bit 7=0
    // 16 --
-   sample_t *sample = skip_prefixes(sample_q);
+   sample_t *sample = sample_q->sample + sample_q->oi;
    int *us;
    int (*pop8)(sample_t *);
    int (*pop16)(sample_t *);
@@ -3319,7 +3313,7 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    //  12 PCH
    //  13 PCL
    //  14 ---
-   sample_t *sample = skip_prefixes(sample_q);
+   sample_t *sample = sample_q->sample + sample_q->oi;
 
    int i = 2;
 
@@ -3354,7 +3348,7 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_RTS(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   sample_t *sample = skip_prefixes(sample_q);
+   sample_t *sample = sample_q->sample + sample_q->oi;
    PC = pop16s(sample + 2);
    return -1;
 }
@@ -3454,12 +3448,12 @@ static int op_fn_SWI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_SWI2(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   interrupt_helper(sample_q, 4, 1, VEC_SWI2);
+   interrupt_helper(sample_q, 3, 1, VEC_SWI2);
    return -1;
 }
 
 static int op_fn_SWI3(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   interrupt_helper(sample_q, 4, 1, VEC_SWI3);
+   interrupt_helper(sample_q, 3, 1, VEC_SWI3);
    return -1;
 }
 
@@ -3535,13 +3529,8 @@ static int op_fn_XNCB(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 static int op_fn_XHCF(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    sample_t *samples = sample_q->sample;
    if (PC >= 0) {
-      int i = 0;
-      // Ignore any prefixes
-      while (i < 0x10000 && (samples[i].data == 0x10 || samples[i].data == 0x11)) {
-         i++;
-      }
       // Ignore the opcode
-      i++;
+      int i = sample_q->oi + 1;
       // Set back the PC to the start of the instruction, so HCF re-executes
       PC = (PC - i) & 0xffff;
       // Read 64K - i bytes starting at PC + i
@@ -3608,7 +3597,7 @@ static int op_fn_XRES(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_XFIQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   interrupt_helper(sample_q, 4, 1, VEC_FIQ);
+   interrupt_helper(sample_q, 3, 1, VEC_FIQ);
    return -1;
 }
 
@@ -3795,9 +3784,9 @@ static void set_r1(int pb, int val) {
 
 static void directbit_helper(operand_t operand, sample_q_t *sample_q) {
    // Pickout the opcode and the postbyte from the samples
-   sample_t *sample = sample_q->sample;
-   int opcode = sample[1].data;
-   int postbyte = sample[2].data;
+   sample_t *sample = sample_q->sample + sample_q->oi;
+   int opcode = sample[0].data;
+   int postbyte = sample[1].data;
 
    // Parse the post byte
    int reg_num    = (postbyte >> 6) & 3; // Bits 7..6
@@ -3908,14 +3897,14 @@ static void set_q_nz_unknown() {
 }
 
 static void pushw_helper(sample_q_t *sample_q, int system) {
-   sample_t *sample = sample_q->sample;
+   sample_t *sample = sample_q->sample + sample_q->oi;
    int (*push8)(sample_t *) = system ? push8s : push8u;
-   int f = push8(sample + 4);
+   int f = push8(sample + 3);
    if (ACCF >= 0 && ACCF != f) {
       failflag |= FAIL_ACCF;
    }
    ACCF = f;
-   int e = push8(sample + 5);
+   int e = push8(sample + 4);
    if (ACCE >= 0 && ACCE != e) {
       failflag |= FAIL_ACCE;
    }
@@ -3923,10 +3912,10 @@ static void pushw_helper(sample_q_t *sample_q, int system) {
 }
 
 static void pullw_helper(sample_q_t *sample_q, int system) {
-   sample_t *sample = sample_q->sample;
+   sample_t *sample = sample_q->sample + sample_q->oi;
    int (*pop8)(sample_t *) = system ? pop8s : pop8u;
-   ACCE = pop8(sample + 4);
-   ACCF = pop8(sample + 5);
+   ACCE = pop8(sample + 3);
+   ACCF = pop8(sample + 4);
 }
 
 // ====================================================================
@@ -3986,7 +3975,7 @@ static int op_fn_ADDW(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_AIM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   sample_t *sample = sample_q->sample;
+   sample_t *sample = sample_q->sample + sample_q->oi;
    return and_helper(operand, sample[1].data);
 }
 
@@ -4297,7 +4286,7 @@ static int op_fn_DIVD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // Throw a trap if division by zero
    if (trap) {
       // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
-      interrupt_helper(sample_q, sample_q->num_cycles - ((NM == 1) ? 18 : 16), 1, VEC_DZ);
+      interrupt_helper(sample_q, sample_q->num_cycles - ((NM == 1) ? 18 : 16) - sample_q->oi, 1, VEC_DZ);
    }
    return -1;
 }
@@ -4411,13 +4400,13 @@ static int op_fn_DIVQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // Throw a trap if division by zero
    if (trap) {
       // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
-      interrupt_helper(sample_q, sample_q->num_cycles - ((NM == 1) ? 18 : 16), 1, VEC_DZ);
+      interrupt_helper(sample_q, sample_q->num_cycles - ((NM == 1) ? 18 : 16) - sample_q->oi, 1, VEC_DZ);
    }
    return -1;
 }
 
 static int op_fn_EIM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   sample_t *sample = sample_q->sample;
+   sample_t *sample = sample_q->sample + sample_q->oi;
    return eor_helper(operand, sample[1].data);
 }
 
@@ -4486,7 +4475,7 @@ static int op_fn_LDMD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // then we need to adjust the cycle count to actually by 5 cycles
    if (operand & 1) {
       if (NM != 1 && sample_q->sample->lic >= 0) {
-         if (sample_q->num_cycles == 6) {
+         if (sample_q->num_cycles == sample_q->oi + 5) {
             failflag &= ~FAIL_CYCLES;
          }
          // Could also just do sample_q->num_cycles = 5;
@@ -4495,7 +4484,7 @@ static int op_fn_LDMD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       NM = 1;
    } else {
       if (NM == 1 && sample_q->sample->lic >= 0) {
-         if (sample_q->num_cycles == 4) {
+         if (sample_q->num_cycles == sample_q->oi + 3) {
             failflag &= ~FAIL_CYCLES;
          }
          // Could also just do sample_q->num_cycles = 5;
@@ -4554,7 +4543,7 @@ static int op_fn_NEGD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_OIM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   sample_t *sample = sample_q->sample;
+   sample_t *sample = sample_q->sample + sample_q->oi;
    return or_helper(operand, sample[1].data);
 }
 
@@ -4680,8 +4669,8 @@ static int op_fn_SEXW(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
 static int op_fn_STBT(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // Pickout the postbyte from the samples
-   sample_t *sample = sample_q->sample;
-   int postbyte = sample[2].data;
+   sample_t *sample = sample_q->sample + sample_q->oi;
+   int postbyte = sample[1].data;
 
    // Parse the post byte
    int reg_num    = (postbyte >> 6) & 3; // Bits 7..6
@@ -4786,15 +4775,17 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // 113A TFM r0+, r1
    // 113B TFM r0 , r1+
    sample_t *sample = sample_q->sample;
-   int opcode = sample[1].data;
-   int postbyte = sample[2].data;
+   int opcode = sample[sample_q->oi].data;
+   int postbyte = sample[sample_q->oi + 1].data;
+   sample_t *rd_sample = &sample[sample_q->oi + 5];
+   sample_t *wr_sample = &sample[sample_q->oi + 7];
    int r0 = (postbyte >> 4) & 0xf;
    int r1 = postbyte & 0xf;
 
    // Only D, X, Y, U, S are legal, anything else causes an illegal instruction trap
    if (r0 > 4 || r1 > 4) {
       failflag |= FAIL_BADM;
-      interrupt_helper(sample_q, 7, 1, VEC_IL);
+      interrupt_helper(sample_q, 6, 1, VEC_IL);
       return -1;
    }
 
@@ -4977,7 +4968,6 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
 
    // Update R0, and memory read modelling
-   sample_t *rd_sample = sample + 6;
    if (opcode == 0x38 || opcode == 0x3a) {
       if (num_bytes >= 0) {
          for (int i = 0; i < num_bytes; i++) {
@@ -5008,7 +4998,6 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    }
 
    // Update R0, and memory write modelling
-   sample_t *wr_sample = sample + 8;
    if (opcode == 0x38 || opcode == 0x3b) {
       if (num_bytes >= 0) {
          for (int i = 0; i < num_bytes; i++) {
@@ -5048,19 +5037,14 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_TIM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   sample_t *sample = sample_q->sample;
+   sample_t *sample = sample_q->sample + sample_q->oi;
    set_NZ(operand & sample[1].data);
    V = 0;
    return -1;
 }
 
 static int op_fn_TRAP(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   sample_t *sample = sample_q->sample;
-   if (sample[0].data == 0x10 || sample[0].data == 0x11) {
-      interrupt_helper(sample_q, 5, 1, VEC_IL);
-   } else {
-      interrupt_helper(sample_q, 4, 1, VEC_IL);
-   }
+   interrupt_helper(sample_q, 4, 1, VEC_IL);
    return -1;
 }
 
