@@ -245,6 +245,7 @@ static opcode_t instr_table_6309[];
 
 static operation_t op_CWAI ;
 static operation_t op_MULD ;
+static operation_t op_LDMD ;
 static operation_t op_RTI  ;
 static operation_t op_PSHS ;
 static operation_t op_PSHU ;
@@ -782,251 +783,24 @@ static inline opcode_t *get_instruction(opcode_t *instr_table, sample_t *sample)
    return instr_table + 0x100 * prefix + sample->data;
 }
 
-
-// Return the number of cycles the instruction is expected to take
-//
-// Note: in a small number of cases, this value will be incorrect,
-// because the instruction takes a variable amount of time based
-// on the operand, which is not known at this stage.
-//
-// This includes:
-//   DIVD
-//   DIVQ
-//
-// In addition, it also can't handle the case of TFM being interrupted
-
-static int get_num_cycles(sample_t *sample_q, int num_samples) {
-   opcode_t *instr = get_instruction(instr_table, sample_q);
-   int cycle_count = (NM == 1) ? instr->cycles_native : instr->cycles;
-
-   sample_t *sample = sample_q;
-
-   // Process the prefix bytes
-   uint8_t prefix = 0;
-   if (is_prefix(sample)) {
-      prefix = sample->data;
-      sample++;
-      // On the 6809, additional prefixes are ignored
-      while (!cpu6309 && is_prefix(sample)) {
-         cycle_count++;
-         sample++;
-      }
-   }
-
-   // Sample_q now points to the opcode byte
-   uint8_t opcode = sample->data;
-
-   // Long Branch, one additional cycle if branch taken (unless in native mode)
-   if (NM !=1 && prefix == 0x10) {
-      switch (opcode) {
-      case 0x21: /* LBRN */
-         cycle_count++;
-         break;
-      case 0x22: /* LBHI */
-         if (Z == 0 && C == 0) {
-            cycle_count++;
-         }
-         break;
-      case 0x23: /* LBLS */
-         if (Z == 1 || C == 1) {
-            cycle_count++;
-         }
-         break;
-      case 0x24: /* LBCC */
-         if (C == 0) {
-            cycle_count++;
-         }
-         break;
-      case 0x25: /* LBLO */
-         if (C == 1) {
-            cycle_count++;
-         }
-         break;
-      case 0x26: /* LBNE */
-         if (Z == 0) {
-            cycle_count++;
-         }
-         break;
-      case 0x27: /* LBEQ */
-         if (Z == 1) {
-            cycle_count++;
-         }
-         break;
-      case 0x28: /* LBVC */
-         if (V == 0) {
-            cycle_count++;
-         }
-         break;
-      case 0x29: /* LBVS */
-         if (V == 1) {
-            cycle_count++;
-         }
-         break;
-      case 0x2A: /* LBPL */
-         if (N == 0) {
-            cycle_count++;
-         }
-         break;
-      case 0x2B: /* LBMI */
-         if (N == 1) {
-            cycle_count++;
-         }
-         break;
-      case 0x2C: /* LBGE */
-         if ((N == 0 && V == 0) || (N == 1 && V == 1))  {
-            cycle_count++;
-         }
-         break;
-      case 0x2D: /* LBLT */
-         if ((N == 1 && V == 0) || (N == 0 && V == 1))  {
-            cycle_count++;
-         }
-         break;
-      case 0x2E: /* LBGT */
-         if (Z == 0 && ((N == 0 && V == 0) || (N == 1 && V == 1)))  {
-            cycle_count++;
-         }
-         break;
-      case 0x2F: /* LBLE */
-         if (Z == 1 || (N == 1 && V == 0) || (N == 0 && V == 1))  {
-            cycle_count++;
-         }
-         break;
-      }
-   }
-   if (instr->op == &op_SYNC) {
-      // SYNC, look ahead for sync acknowledge
-      cycle_count = CYCLES_UNKNOWN;
-      if (sample_q[0].ba >= 0) {
-         int i = 0;
-         // Look for Sync acknowledge starting (BA = 1)
-         while (i < num_samples && sample_q[i].ba == 0) {
-            i++;
-         }
-         // Look for Sync acknowledge endingstarting (BA = 0)
-         while (i < num_samples && sample_q[i].ba == 1) {
-            i++;
-         }
-         cycle_count = i + 1;
-      }
-   } else if (instr->op == &op_RTI) {
-      // RTI
-      int stacked_E = sample[2].data & 0x80;
-      if (stacked_E) {
-         // RTI takes 9 additional cycles if E = 1 (and two more if in native mode)
-         cycle_count += (NM == 1) ? 11 : 9;
-      }
-   } else if (instr->op == &op_CWAI) {
-      // CWAIT - cycle count in instruction tables is 20/22
-      // ahead for fector fetch
-      cycle_count = CYCLES_UNKNOWN;
-      if (sample_q[0].bs >= 0) {
-         for (int i = 1; i < num_samples; i++) {
-            if (sample_q[i].bs == 1) {
-               cycle_count = i + 3;
-               break;
-            }
-         }
-      }
-   } else if (instr->op == &op_PSHS || instr->op == &op_PULS || instr->op == &op_PSHU || instr->op == &op_PULU) {
-      // PSHS/PULS/PSHU/PULU
-      uint8_t postbyte = sample[1].data;
-      cycle_count += count_ones_in_nibble[postbyte & 0x0f];            // bits 0..3 are 8 bit registers
-      cycle_count += count_ones_in_nibble[(postbyte >> 4) & 0x0f] * 2; // bits 4..7 are 16 bit registers
-   } else if (instr->mode == INDEXED || instr->mode == INDEXEDIM) {
-      // For INDEXED address, the instruction table cycles
-      // are the minimum the instruction will execute in
-      uint8_t postbyte = sample[instr->mode == INDEXEDIM ? 2 : 1].data;
-      int postbyte_cycles;
-      if (cpu6309) {
-         if (NM == 1) {
-            postbyte_cycles = postbyte_cycles_6309_nat[postbyte];
-         } else {
-            postbyte_cycles = postbyte_cycles_6309_emu[postbyte];
-         }
-      } else {
-         postbyte_cycles = postbyte_cycles_6809[postbyte];
-      }
-      // Negative indicates an illegal index mode
-      if (postbyte_cycles < 0) {
-         postbyte_cycles = -postbyte_cycles;
-      }
-      cycle_count += postbyte_cycles;
-   } else if (instr->op == &op_TFM) {
-      // TFM - cycle count in instruction tables is 6
-      uint8_t postbyte = sample[1].data;
-      if ((opcode & 0xFC) == 0x38) {
-         if (((postbyte & 0xf0) > 0x40) || ((postbyte & 0x0f) > 0x04)) {
-            // Illegal index register takes 25/23 (without additional prefixes)
-            cycle_count += (NM == 1) ? 19 : 17;
-         } else {
-            int W = pack(ACCE, ACCF);
-            if (W >= 0) {
-               cycle_count += 3 * W;
-            } else {
-               cycle_count = CYCLES_UNKNOWN; // Can't determine this
-            }
-         }
-      }
-   }
-   return cycle_count;
-}
-
-static int count_cycles_with_lic(sample_t *sample_q, int num_samples) {
-   int expected = get_num_cycles(sample_q, num_samples);
-
-   opcode_t *instr = get_instruction(instr_table, sample_q);
-
-   // In the case of SYNC when NM=0 then LIC can be set mid-instruction, so is unreliable
-   // In the case of HCF, then LIC is never toggled
-   if (instr->op == &op_SYNC || instr->op == &op_XHCF) {
-      if (expected > num_samples) {
-         return CYCLES_TRUNCATED;
-      } else {
-         return expected;
-      }
-   }
-
+static int count_cycles_with_lic(sample_q_t *sample_q) {
+   sample_t *sample = sample_q->sample;
+   int num_samples = sample_q->num_samples;
    // If NM==0 then LIC set on the last cycle of the instruction
    // If NM==1 then LIC set on the first cycle of the instruction
    int offset = (NM == 1) ? 1 : 0;
    // Search for LIC
    for (int i = offset; i < num_samples; i++) {
-      if (sample_q[i].type == LAST) {
+      if (sample[i].type == LAST) {
          return 0;
       }
-      if (sample_q[i].lic == 1) {
-         i += (1 - offset);
-         // Validate the num_cycles passed in
-         if (show_cycle_errors) {
-            if (expected >= 0) {
-               if (i != expected) {
-                  failflag |= FAIL_CYCLES;
-               }
-            }
-         }
-         return i;
+      if (sample[i].lic == 1) {
+         return i + 1 - offset;
       }
    }
    return CYCLES_TRUNCATED;
 }
 
-static int count_cycles_without_lic(sample_t *sample_q, int num_samples) {
-   int num_cycles = get_num_cycles(sample_q, num_samples);
-   if (num_cycles > num_samples) {
-      return CYCLES_TRUNCATED;
-   } else {
-      return num_cycles;
-   }
-}
-
-static int em_6809_count_cycles(sample_t *sample_q, int num_samples) {
-   if (sample_q[0].lic < 0) {
-      return count_cycles_without_lic(sample_q, num_samples);
-   } else {
-      return count_cycles_with_lic(sample_q, num_samples);
-   }
-}
 
 static void em_6809_reset(sample_t *sample_q, int num_cycles, instruction_t *instruction) {
    instruction->pc = -1;
@@ -1261,6 +1035,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
 
    instruction->intr_seen = 0;
    instruction->rst_seen = 0;
+   instruction->pc = PC;
 
    if ((num_cycles = em_6809_match_reset(sample_q, num_samples)) > 0) {
       em_6809_reset(sample_q, num_cycles, instruction);
@@ -1272,17 +1047,19 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
       return num_cycles;
    }
 
-   // Two cases where num_cycles < 0:
-   //    in non-LIC mode, where the instruction length can't be determined from the know CPU state
-   //    if the final instruction is truncated
-   if ((num_cycles = em_6809_count_cycles(sample_q, num_samples)) < 0) {
-      return num_cycles;
-   }
-
    int pb = 0;
    int index = 0;
    opcode_t *instr = get_instruction(instr_table, sample_q);
    int mode = instr->mode;
+
+   // Start with the base number of cycles from the instruction table
+   num_cycles = (NM == 1) ? instr->cycles_native : instr->cycles;
+
+   // If we have fewer samples that this, then bail early to prevent suprious errors
+   if (num_samples < num_cycles) {
+      failflag = 0;
+      return CYCLES_TRUNCATED;
+   }
 
    // Flag that an instruction marked as undocumented has been encoutered
    if (instr->undocumented) {
@@ -1302,8 +1079,8 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
 
    sample_q_t sample_ref;
    sample_ref.sample = sample_q;
+   sample_ref.num_samples = num_samples;
    sample_ref.oi = index; // This is the opcode index after prefixes have been skipped
-   sample_ref.num_cycles = num_cycles;
 
    int oi = index;
 
@@ -1404,19 +1181,6 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
       }
    }
 
-   // In main, instruction->pc is checked against the emulated PC, so in the case
-   // of JSR/BSR/LBSR this provides a means of sanity checking
-   if (instr->op->type == JSROP) {
-      instruction->pc = ((sample_q[num_cycles - 1].data << 8) + sample_q[num_cycles - 2].data - instruction->length) & 0xffff;
-   } else {
-      instruction->pc = PC;
-   }
-
-   // Update the PC assuming not change of flow takes place
-   if (PC >= 0) {
-      PC = (PC + instruction->length) & 0xffff;
-   }
-
    // In indexed mode, calculate the additional postbyte cycles
    int postbyte_cycles = 0;
    if (mode == INDEXED) {
@@ -1431,12 +1195,32 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
       }
       if (postbyte_cycles < 0) {
          postbyte_cycles = -postbyte_cycles;
+         num_cycles += postbyte_cycles;
          failflag |= FAIL_BADM;
          if (cpu6309) {
+            sample_ref.num_cycles = num_cycles;
             interrupt_helper(&sample_ref, 5, 1, VEC_IL);
             return num_cycles;
          }
+      } else {
+         num_cycles += postbyte_cycles;
       }
+      // Again, if we have fewer samples than num_cycles, then bail early to prevent suprious errors
+      if (num_samples < num_cycles) {
+         failflag = 0;
+         return CYCLES_TRUNCATED;
+      }
+   }
+
+   // In main, instruction->pc is checked against the emulated PC, so in the case
+   // of JSR/BSR/LBSR this provides a means of sanity checking
+   if (instr->op->type == JSROP) {
+      instruction->pc = ((sample_q[num_cycles - 1].data << 8) + sample_q[num_cycles - 2].data - instruction->length) & 0xffff;
+   }
+
+   // Update the PC assuming not change of flow takes place
+   if (PC >= 0) {
+      PC = (PC + instruction->length) & 0xffff;
    }
 
    // Calculate the effective address (for additional memory reads)
@@ -1787,7 +1571,9 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
 
    // Emulate the instruction, and check the result against what was seen on the bus
    if (instr->op->emulate) {
+      sample_ref.num_cycles = num_cycles;
       int result = instr->op->emulate(operand, ea, &sample_ref);
+      num_cycles = sample_ref.num_cycles;
       if (instr->op->type == STOREOP || instr->op->type == RMWOP) {
          // WRTEOP:
          //    8-bit: STA STB
@@ -1803,7 +1589,32 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
       }
    }
 
-   return sample_ref.num_cycles;
+   // At this point num_cycles is the expected number of cycles (ignoring LIC)
+   if (num_cycles > num_samples) {
+      num_cycles = CYCLES_TRUNCATED;
+   }
+
+   // If LIC is available, we return the actual number of cycles, and validate the estimate
+   if (sample_q->lic >= 0 && instr->op != &op_TFM && instr->op != &op_LDMD) {
+      int actual_cycles = count_cycles_with_lic(&sample_ref);
+      // Validate the estimated number of cycles
+      if (show_cycle_errors) {
+         if (actual_cycles >= 0) {
+            if (actual_cycles != num_cycles) {
+               failflag |= FAIL_CYCLES;
+               num_cycles = actual_cycles;
+            }
+         }
+      }
+   }
+
+   // TODO: is this needed?
+   if (num_cycles == CYCLES_TRUNCATED) {
+      failflag = 0;
+   }
+
+   // Return a possibly updates estimate of the number of cycles
+   return num_cycles;
 }
 
 static int em_6809_get_PC() {
@@ -2335,6 +2146,12 @@ static void push_helper(sample_q_t *sample_q, int system) {
       fail_us = FAIL_S;
    }
    int pb = sample[1].data;
+   sample_q->num_cycles += count_ones_in_nibble[pb & 0x0f];            // bits 0..3 are 8 bit registers
+   sample_q->num_cycles += count_ones_in_nibble[(pb >> 4) & 0x0f] * 2; // bits 4..7 are 16 bit registers
+   if (sample_q->num_samples < sample_q->num_cycles) {
+      sample_q->num_cycles = CYCLES_TRUNCATED;
+      return;
+   }
    int tmp;
    int i = (NM == 1) ? 4 : 5;
    if (pb & 0x80) {
@@ -2434,6 +2251,12 @@ static void pull_helper(sample_q_t *sample_q, int system) {
    }
 
    int pb = sample[1].data;
+   sample_q->num_cycles += count_ones_in_nibble[pb & 0x0f];            // bits 0..3 are 8 bit registers
+   sample_q->num_cycles += count_ones_in_nibble[(pb >> 4) & 0x0f] * 2; // bits 4..7 are 16 bit registers
+   if (sample_q->num_samples < sample_q->num_cycles) {
+      sample_q->num_cycles = CYCLES_TRUNCATED;
+      return;
+   }
    int tmp;
    int i = (NM == 1) ? 3 : 4;
    if (pb & 0x01) {
@@ -2738,11 +2561,19 @@ static int op_fn_ASRB(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    return -1;
 }
 
+// On a 6809 or a 6309 in emulated mode, a taken long branch adds one cycle
+static inline void add_branch_taken_penalty(sample_q_t *sample_q) {
+   if (NM !=1 && sample_q->sample->data == 0x10) {
+      sample_q->num_cycles++;
+   }
+}
+
 static int op_fn_BCC(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    if (C < 0) {
       PC = -1;
    } else if (C == 0) {
       PC = ea;
+      add_branch_taken_penalty(sample_q);
    }
    return -1;
 }
@@ -2752,6 +2583,7 @@ static int op_fn_BEQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       PC = -1;
    } else if (Z == 1) {
       PC = ea;
+      add_branch_taken_penalty(sample_q);
    }
    return -1;
 }
@@ -2761,6 +2593,7 @@ static int op_fn_BGE(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       PC = -1;
    } else if (N == V) {
       PC = ea;
+      add_branch_taken_penalty(sample_q);
    }
    return -1;
 }
@@ -2770,6 +2603,7 @@ static int op_fn_BGT(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       PC = -1;
    } else if (Z == 0 && N == V) {
       PC = ea;
+      add_branch_taken_penalty(sample_q);
    }
    return -1;
 }
@@ -2779,6 +2613,7 @@ static int op_fn_BHI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       PC = -1;
    } else if (Z == 0 && C == 0) {
       PC = ea;
+      add_branch_taken_penalty(sample_q);
    }
    return -1;
 }
@@ -2798,6 +2633,7 @@ static int op_fn_BLE(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       PC = -1;
    } else if (Z == 1 || N != V) {
       PC = ea;
+      add_branch_taken_penalty(sample_q);
    }
    return -1;
 }
@@ -2807,6 +2643,7 @@ static int op_fn_BLO(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       PC = -1;
    } else if (C == 1) {
       PC = ea;
+      add_branch_taken_penalty(sample_q);
    }
    return -1;
 }
@@ -2816,6 +2653,7 @@ static int op_fn_BLS(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       PC = -1;
    } else if (Z == 1 || C == 1) {
       PC = ea;
+      add_branch_taken_penalty(sample_q);
    }
    return -1;
 }
@@ -2825,6 +2663,7 @@ static int op_fn_BLT(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       PC = -1;
    } else if (N != V) {
       PC = ea;
+      add_branch_taken_penalty(sample_q);
    }
    return -1;
 }
@@ -2834,6 +2673,7 @@ static int op_fn_BMI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       PC = -1;
    } else if (N == 1) {
       PC = ea;
+      add_branch_taken_penalty(sample_q);
    }
    return -1;
 }
@@ -2843,6 +2683,7 @@ static int op_fn_BNE(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       PC = -1;
    } else if (Z == 0) {
       PC = ea;
+      add_branch_taken_penalty(sample_q);
    }
    return -1;
 }
@@ -2852,6 +2693,7 @@ static int op_fn_BPL(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       PC = -1;
    } else if (N == 0) {
       PC = ea;
+      add_branch_taken_penalty(sample_q);
    }
    return -1;
 }
@@ -2876,6 +2718,7 @@ static int op_fn_BVC(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       PC = -1;
    } else if (V == 0) {
       PC = ea;
+      add_branch_taken_penalty(sample_q);
    }
    return -1;
 }
@@ -2885,6 +2728,7 @@ static int op_fn_BVS(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       PC = -1;
    } else if (V == 1) {
       PC = ea;
+      add_branch_taken_penalty(sample_q);
    }
    return -1;
 }
@@ -2955,8 +2799,23 @@ static int op_fn_COMB(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 static int op_fn_CWAI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // CC = CC & immediate operand
    op_fn_ANDC(operand, ea, sample_q);
-   // Lookhead to the vector fetch to determine what event released CWAI
-   int vec = sample_q->sample[sample_q->num_cycles - 3].addr;
+
+   // Look ahead for the vector fetch
+   sample_t *sample = sample_q->sample;
+   int num_samples = sample_q->num_samples;
+   int num_cycles = CYCLES_UNKNOWN;
+   if (sample[0].bs >= 0) {
+      for (int i = 1; i < num_samples; i++) {
+         if (sample[i].bs == 1) {
+            num_cycles = i + 3;
+            break;
+         }
+      }
+   }
+   sample_q->num_cycles = num_cycles;
+
+   // Look at the vector fetch to determine what event released CWAI
+   int vec = sample[num_cycles - 3].addr;
    // Fallback to IRQ if addr is not being captured
    if (vec < 0) {
       vec = VEC_IRQ;
@@ -3384,6 +3243,8 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       Y |= sample[i++].data;
       U  = sample[i++].data << 8;
       U |= sample[i++].data;
+      // RTI takes 9 additional cycles if E = 1 (and two more if in native mode)
+      sample_q->num_cycles += (NM == 1) ? 11 : 9;
    }
    PC  = sample[i++].data << 8;
    PC |= sample[i++].data;
@@ -3392,7 +3253,6 @@ static int op_fn_RTI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    for (int j = 2; j < i; j++) {
       pop8s(sample + j);
    }
-
    return -1;
 }
 
@@ -3507,6 +3367,23 @@ static int op_fn_SWI3(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_SYNC(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   // SYNC, look ahead for sync acknowledge
+   sample_t *sample = sample_q->sample;
+   int num_samples = sample_q->num_samples;
+   int num_cycles = CYCLES_UNKNOWN;
+   if (sample[0].ba >= 0) {
+      int i = 0;
+      // Look for Sync acknowledge starting (BA = 1)
+      while (i < num_samples && sample[i].ba == 0) {
+         i++;
+      }
+         // Look for Sync acknowledge endingstarting (BA = 0)
+      while (i < num_samples && sample[i].ba == 1) {
+         i++;
+      }
+      num_cycles = i + 1;
+   }
+   sample_q->num_cycles = num_cycles;
    return -1;
 }
 
@@ -4319,19 +4196,7 @@ static int op_fn_DIVD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       }
    }
    // Correct the number of cycles
-   if (cycle_correction) {
-      if (sample_q->sample->lic < 0) {
-         // If LIC unavailable, then we actually need to correct num_cycles or we'll loose sync
-         sample_q->num_cycles += cycle_correction;
-      } else {
-         // If LIC is available, then we chech the expected cycles against the actual cycles
-         if (sample_q->num_cycles == get_num_cycles(sample_q->sample, 0) + cycle_correction) {
-            failflag &= ~FAIL_CYCLES;
-         } else {
-            failflag |= FAIL_CYCLES;
-         }
-      }
-   }
+   sample_q->num_cycles += cycle_correction;
    // Throw a trap if division by zero
    if (trap) {
       // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
@@ -4433,19 +4298,8 @@ static int op_fn_DIVQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       }
    }
    // Correct the number of cycles
-   if (cycle_correction) {
-      if (sample_q->sample->lic < 0) {
-         // If LIC unavailable, then we actually need to correct num_cycles or we'll loose sync
-         sample_q->num_cycles += cycle_correction;
-      } else {
-         // If LIC is available, then we chech the expected cycles against the actual cycles
-         if (sample_q->num_cycles == get_num_cycles(sample_q->sample, 0) + cycle_correction) {
-            failflag &= ~FAIL_CYCLES;
-         } else {
-            failflag |= FAIL_CYCLES;
-         }
-      }
-   }
+   sample_q->num_cycles += cycle_correction;
+
    // Throw a trap if division by zero
    if (trap) {
       // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
@@ -4520,28 +4374,19 @@ static int op_fn_LDF(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_LDMD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   // The position of LIC moves when NM changes state, so if LIC is being used
-   // then we need to adjust the cycle count to actually by 5 cycles
-   if (operand & 1) {
-      if (NM != 1 && sample_q->sample->lic >= 0) {
-         if (sample_q->num_cycles == sample_q->oi + 5) {
-            failflag &= ~FAIL_CYCLES;
-         }
-         // Could also just do sample_q->num_cycles = 5;
-         sample_q->num_cycles--;
+   // The instruction cycle count of LDMD is always 5 cycles. However,
+   // when NM toggles, the position of LIC moves, so the cycle count
+   // inferred from LIC needs to be adjusted. Otherwise we would see
+   // false cycle count errors. Note: emulate() disables the LIC based
+   // cycle count check for LDMD.
+   if (sample_q->sample->lic >= 0 && NM >= 0) {
+      int correction = NM - (operand & 1);
+      if (sample_q->num_cycles != count_cycles_with_lic(sample_q) + correction) {
+         failflag |= FAIL_CYCLES;
       }
-      NM = 1;
-   } else {
-      if (NM == 1 && sample_q->sample->lic >= 0) {
-         if (sample_q->num_cycles == sample_q->oi + 3) {
-            failflag &= ~FAIL_CYCLES;
-         }
-         // Could also just do sample_q->num_cycles = 5;
-         sample_q->num_cycles++;
-      }
-      NM = 0;
    }
    FM = (operand >> 1) & 1;
+   NM =  operand       & 1;
    return -1;
 }
 
@@ -4834,6 +4679,8 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // Only D, X, Y, U, S are legal, anything else causes an illegal instruction trap
    if (r0 > 4 || r1 > 4) {
       failflag |= FAIL_BADM;
+      // Illegal index register takes 25/23 (without additional prefixes)
+      sample_q->num_cycles += (NM == 1) ? 19 : 17;
       interrupt_helper(sample_q, 6, 1, VEC_IL);
       return -1;
    }
@@ -4982,9 +4829,32 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // 1722da    0 ff  1 1 10 9
    // 1722db    0 ff  1 1 00 F
 
-
    // The number of bytes expected to be transferred is in W
    int W = pack(ACCE, ACCF);
+
+   // TFM - cycle count in instruction tables is 6
+   if (W >= 0) {
+      sample_q->num_cycles += 3 * W;
+   } else {
+      sample_q->num_cycles = CYCLES_UNKNOWN; // Can't determine this
+   }
+
+   // TODO: Is there a better way to detect an interrupted TFM?
+   // - a missing write cycle
+   // - two consecutive write cycles
+   // - the address pattern
+   // - the vector fetch
+
+   // If LIC is available, then using the actual cycles allows us to detect being interrupted
+   if (sample_q->sample->lic >= 0) {
+      int actual_cycles = count_cycles_with_lic(sample_q);
+      if (sample_q->num_cycles > 0 && actual_cycles != sample_q->num_cycles) {
+         // This will be canceled later, if the mismatch is due to being interupted
+         failflag |= FAIL_CYCLES;
+      }
+      sample_q->num_cycles = actual_cycles;
+   }
+
    // Assume we are not interrupted
    int interrupted = 0;
    int num_bytes = W;
