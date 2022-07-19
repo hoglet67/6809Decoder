@@ -1074,6 +1074,8 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
       while (!cpu6309 && is_prefix(sample_q + index)) {
          memory_read(sample_q + index, offset_address(PC, index), MEM_INSTR);
          index++;
+         // But they do take an additional cycle
+         num_cycles++;
       }
    }
 
@@ -1595,16 +1597,18 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
    }
 
    // If LIC is available, we return the actual number of cycles, and validate the estimate
-   if (sample_q->lic >= 0 && instr->op != &op_TFM && instr->op != &op_LDMD) {
+   if (sample_q->lic >= 0 && instr->op != &op_TFM && instr->op != &op_LDMD && instr->op != &op_SYNC) {
+      // Certain instruction need to be excluded, because LIC is an unreliable indication of length
+      // - TFM, when interrupted
+      // - LDMD, when changing mode
+      // - SYNC, because LIC occurs in the middle of the instruction
       int actual_cycles = count_cycles_with_lic(&sample_ref);
       // Validate the estimated number of cycles
-      if (show_cycle_errors) {
-         if (actual_cycles >= 0) {
-            if (actual_cycles != num_cycles) {
-               failflag |= FAIL_CYCLES;
-               num_cycles = actual_cycles;
-            }
+      if (actual_cycles >= 0) {
+         if (show_cycle_errors && actual_cycles != num_cycles) {
+            failflag |= FAIL_CYCLES;
          }
+         num_cycles = actual_cycles;
       }
    }
 
