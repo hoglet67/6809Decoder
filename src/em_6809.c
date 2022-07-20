@@ -3447,19 +3447,20 @@ static int op_fn_XNCB(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
 static int op_fn_XHCF(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    sample_t *samples = sample_q->sample;
+   // Ignore the opcode
+   int i = sample_q->oi + 1;
    if (PC >= 0) {
-      // Ignore the opcode
-      int i = sample_q->oi + 1;
       // Set back the PC to the start of the instruction, so HCF re-executes
       PC = (PC - i) & 0xffff;
-      // Read 64K - i bytes starting at PC + i
-      while (i < 0x10000) {
-         memory_read(samples + i, (PC + i) & 0xffff, MEM_DATA);
-         i++;
-      }
-      // Force the number of cycles to 64K
-      sample_q->num_cycles = 0x10000;
    }
+   // Read 64K - i bytes starting at PC + i
+   while (i < 0x10000) {
+      int addr = (PC >= 0) ? ((PC + i) & 0xffff) : -1;
+      memory_read(samples + i, addr, MEM_DATA);
+      i++;
+   }
+   // Force the number of cycles to 64K
+   sample_q->num_cycles = 0x10000;
    return -1;
 }
 
