@@ -705,6 +705,7 @@ int run_emulation_for_n_cycles(sample_t *sample, int num_samples, int run_cycles
 
    // Run the emulator for SYNC_WINDOWS cycles
    int error_count = 0;
+   int instr_count = 0;
    sample_t *sample_tmp = sample;
    while (sample_tmp < sample + run_cycles ) {
       instruction_t instruction;
@@ -720,6 +721,7 @@ int run_emulation_for_n_cycles(sample_t *sample, int num_samples, int run_cycles
          error_count++;
          failflag = 0;
       }
+      instr_count++;
    }
 
    // Tear down the memory model
@@ -732,6 +734,13 @@ int run_emulation_for_n_cycles(sample_t *sample, int num_samples, int run_cycles
 
    // Restore the original value of NM
    arguments.reg_nm = saved_nm;
+
+   // If we get a very small number of instructions, artificially
+   // boost the error count. This prevents incorrectly syncing to a HCF
+   // instruction that is actually data.
+   if (instr_count < 10) {
+      error_count += 10 - instr_count;
+   }
 
    // Return the error count
    return error_count;
