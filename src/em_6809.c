@@ -243,18 +243,11 @@ static const char * fail_hints[32] = {
 static opcode_t instr_table_6809[];
 static opcode_t instr_table_6309[];
 
-static operation_t op_CWAI ;
 static operation_t op_MULD ;
 static operation_t op_LDMD ;
-static operation_t op_RTI  ;
-static operation_t op_PSHS ;
-static operation_t op_PSHU ;
-static operation_t op_PULS ;
-static operation_t op_PULU ;
 static operation_t op_SYNC ;
 static operation_t op_TST  ;
 static operation_t op_TFM  ;
-static operation_t op_XHCF ;
 static operation_t op_XSTX ;
 static operation_t op_XSTY ;
 static operation_t op_XSTU ;
@@ -3376,12 +3369,8 @@ static int op_fn_SYNC(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    int num_samples = sample_q->num_samples;
    int num_cycles = CYCLES_UNKNOWN;
    if (sample[0].ba >= 0) {
-      int i = 0;
-      // Look for Sync acknowledge starting (BA = 1)
-      while (i < num_samples && sample[i].ba == 0) {
-         i++;
-      }
-         // Look for Sync acknowledge endingstarting (BA = 0)
+      int i = sample_q->oi + 2;
+      // Look for Sync acknowledge ending (BA = 0) or the address bus changing
       while (i < num_samples && sample[i].ba == 1) {
          i++;
       }
