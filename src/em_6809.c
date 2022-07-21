@@ -599,7 +599,7 @@ static void set_regp_6309(int i, int val) {
    case  7: TV = val;                  break;
    case  8: unpack(val, &ACCA,  NULL); break;
    case  9: unpack(val,  NULL, &ACCB); break;
-   case 10: set_FLAGS(val & 0xff);     break;
+   case 10: set_FLAGS(val);            break;
    case 11: DP = (val >> 8) & 0xff;    break;
    case 14: unpack(val, &ACCE,  NULL); break;
    case 15: unpack(val,  NULL, &ACCF); break;
