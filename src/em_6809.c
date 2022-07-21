@@ -2729,6 +2729,7 @@ static int op_fn_BPL(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
 static int op_fn_BRA(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    PC = ea;
+   add_branch_taken_penalty(sample_q);
    return -1;
 }
 
