@@ -1228,7 +1228,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
             // 21/23 cycles
             num_cycles = oi + postbyte_cycles;
             sample_ref.num_cycles = num_cycles;
-            interrupt_helper(&sample_ref, 5, 1, VEC_IL);
+            interrupt_helper(&sample_ref, oi + 5, 1, VEC_IL);
             // TODO: validate actual
             return num_cycles;
          }
