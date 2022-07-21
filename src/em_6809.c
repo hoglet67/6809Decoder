@@ -70,13 +70,13 @@ static int postbyte_cycles_6309_emu[0x100] = {
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 6x
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 7x
    2,  3,  2,  3,  0,  1,  1,  1,  1,  4,  1,  4,  1,  5,  1,  0,  // 8x
-   3,  6,-17,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4,  5,  // 9x
+   3,  6,-21,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4,  5,  // 9x
    2,  3,  2,  3,  0,  1,  1,  1,  1,  4,  1,  4,  1,  5,  1,  2,  // Ax
-   5,  6,-17,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4,-17,  // Bx
+   5,  6,-21,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4,-21,  // Bx
    2,  3,  2,  3,  0,  1,  1,  1,  1,  4,  1,  4,  1,  5,  1,  1,  // Cx
-   4,  6,-17,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4,-17,  // Dx
+   4,  6,-21,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4,-21,  // Dx
    2,  3,  2,  3,  0,  1,  1,  1,  1,  4,  1,  4,  1,  5,  1,  1,  // Ex
-   4,  6,-17,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4,-17   // Fx
+   4,  6,-21,  6,  3,  4,  4,  4,  4,  7,  4,  7,  4,  8,  4,-21   // Fx
 };
 
 // From Addendum to The 6309 Book
@@ -94,13 +94,13 @@ static int postbyte_cycles_6309_nat[0x100] = {
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 6x
    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  // 7x
    1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  0,  // 8x
-   3,  5,-19,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4,  4,  // 9x
+   3,  5,-23,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4,  4,  // 9x
    1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  2,  // Ax
-   5,  5,-19,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4,-19,  // Bx
+   5,  5,-23,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4,-23,  // Bx
    1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  1,  // Cx
-   4,  5,-19,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4,-19,  // Dx
+   4,  5,-23,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4,-23,  // Dx
    1,  2,  1,  2,  0,  1,  1,  1,  1,  3,  1,  2,  1,  3,  1,  1,  // Ex
-   4,  5,-19,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4,-19   // Fx
+   4,  5,-23,  5,  3,  4,  4,  4,  4,  6,  4,  5,  4,  6,  4,-23   // Fx
 };
 
 // In PSHS/PSHU/PULS/PULU, the postbyte controls which registers are pulled
@@ -1225,8 +1225,11 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
          num_cycles += postbyte_cycles;
          failflag |= FAIL_BADM;
          if (cpu6309) {
+            // 21/23 cycles
+            num_cycles = oi + postbyte_cycles;
             sample_ref.num_cycles = num_cycles;
             interrupt_helper(&sample_ref, 5, 1, VEC_IL);
+            // TODO: validate actual
             return num_cycles;
          }
       } else {
@@ -6071,7 +6074,7 @@ static opcode_t instr_table_6309[] = {
    /* 11 */    { &op_UU   , INHERENT     , 0, 1, 1 },
    /* 12 */    { &op_NOP  , INHERENT     , 0, 2, 1 },
    /* 13 */    { &op_SYNC , INHERENT     , 0, 4, 3 },
-   /* 14 */    { &op_SEXW , INHERENT     , 0, 2, 1 },
+   /* 14 */    { &op_SEXW , INHERENT     , 0, 4, 4 },
    /* 15 */    { &op_TRAP , ILLEGAL      , 1,20,22 },
    /* 16 */    { &op_LBRA , RELATIVE_16  , 0, 5, 4 },
    /* 17 */    { &op_LBSR , RELATIVE_16  , 0, 9, 7 },
@@ -6148,11 +6151,11 @@ static opcode_t instr_table_6309[] = {
    /* 5E */    { &op_TRAP , ILLEGAL      , 1,20,22 },
    /* 5F */    { &op_CLRB , INHERENT     , 0, 2, 1 },
    /* 60 */    { &op_NEG  , INDEXED      , 0, 6, 6 },
-   /* 61 */    { &op_OIM  , INDEXEDIM    , 0, 6, 6 },
-   /* 62 */    { &op_AIM  , INDEXEDIM    , 0, 6, 6 },
+   /* 61 */    { &op_OIM  , INDEXEDIM    , 0, 7, 6 },
+   /* 62 */    { &op_AIM  , INDEXEDIM    , 0, 7, 6 },
    /* 63 */    { &op_COM  , INDEXED      , 0, 6, 6 },
    /* 64 */    { &op_LSR  , INDEXED      , 0, 6, 6 },
-   /* 65 */    { &op_EIM  , INDEXEDIM    , 0, 6, 6 },
+   /* 65 */    { &op_EIM  , INDEXEDIM    , 0, 7, 6 },
    /* 66 */    { &op_ROR  , INDEXED      , 0, 6, 6 },
    /* 67 */    { &op_ASR  , INDEXED      , 0, 6, 6 },
    /* 68 */    { &op_ASL  , INDEXED      , 0, 6, 6 },
