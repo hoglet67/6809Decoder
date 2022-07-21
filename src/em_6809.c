@@ -489,25 +489,57 @@ static int get_regp_6809(int i) {
    i &= 15;
    int ret;
    switch(i) {
-   case  0: ret = pack(ACCA, ACCB); break;
-   case  1: ret = X;                break;
-   case  2: ret = Y;                break;
-   case  3: ret = U;                break;
-   case  4: ret = S;                break;
-   case  5: ret = PC;               break;
-   case  8: ret = ACCA;             break;
-   case  9: ret = ACCB;             break;
-   case 10: ret = get_FLAGS();      break;
-   case 11: ret = DP;               break;
-   default: ret = 0xffff;           break;
+   case  0:
+      ret = pack(ACCA, ACCB);
+      break;
+   case  1:
+      ret = X;
+      break;
+   case  2:
+      ret = Y;
+      break;
+   case  3:
+      ret = U;
+      break;
+   case  4:
+      ret = S;
+      break;
+   case  5:
+      ret = PC;
+      break;
+   case  8:
+      // Extend ACCA value to 16 bits by padding with FF
+      ret = ACCA;
+      if (ret >= 0) {
+         ret |= 0xff00;
+      }
+      break;
+   case  9:
+      // Extend ACCB value to 16 bits by padding with FF
+      ret = ACCB;
+      if (ret >= 0) {
+         ret |= 0xff00;
+      }
+      break;
+   case 10:
+      // Extend CC value to 16 bits by replicating
+      ret = get_FLAGS();
+      if (ret >= 0) {
+         ret |= ret << 8;
+      }
+      break;
+   case 11:
+      // Extend DP value to 16 bits by replicating
+      ret = DP;
+      if (ret >= 0) {
+         ret |= ret << 8;
+      }
+      break;
+   default:
+      ret = 0xffff;
+      break;
    }
-   if (ret >= 0 && i >= 8) {
-      // Extend 8-bit values to 16 bits by padding with FF
-      return ret | 0xff00;
-   } else {
-      // Return 16-bit and undefined values as-is
-      return ret;
-   }
+   return ret;
 }
 
 // Used in EXN/TRV on the 6809
