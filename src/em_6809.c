@@ -2742,7 +2742,7 @@ static int op_fn_BRN(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
 static int op_fn_BSR(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    push16s(sample_q->sample + sample_q->num_cycles - 2);
-   PC = ea & 0xffff;
+   PC = ea;
    return -1;
 }
 
@@ -3031,7 +3031,7 @@ static int op_fn_JMP(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
 static int op_fn_JSR(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    push16s(sample_q->sample + sample_q->num_cycles - 2);
-   PC = ea & 0xffff;
+   PC = ea;
    return -1;
 }
 
