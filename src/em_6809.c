@@ -1316,6 +1316,16 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
                      unpack(W, &ACCE, &ACCF);
                      break;
                   }
+               } else if (ACCF >= 0) {
+                  // If ACCF is defined (but ACCE is undefined) we can still correctly update ACCF
+                  switch ((pb >> 5) & 3) {
+                  case 2:           /* ,W++ */
+                     ACCF = (ACCF + 2) & 0xff;
+                     break;
+                  case 3:           /* ,--W */
+                     ACCF = (ACCF - 2) & 0xff;
+                     break;
+                  }
                }
 
             } else {
