@@ -1104,11 +1104,6 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
       }
    }
 
-   sample_q_t sample_ref;
-   sample_ref.sample = sample_q;
-   sample_ref.num_samples = num_samples;
-   sample_ref.oi = index; // This is the opcode index after prefixes have been skipped
-
    int oi = index;
 
    // Memory modelling of the opcode
@@ -1125,6 +1120,11 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
       // Increment opcode index (oi), which allows the rest of the code to ignore the immediate byte
       oi++;
    }
+
+   sample_q_t sample_ref;
+   sample_ref.sample = sample_q;
+   sample_ref.num_samples = num_samples;
+   sample_ref.oi = oi; // This is the opcode index after prefixes have been skipped
 
    // If there is a post byte, skip past it
    if (mode == REGISTER || mode == INDEXED || mode == DIRECTBIT) {
@@ -1228,7 +1228,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
             // 21/23 cycles
             num_cycles = oi + postbyte_cycles;
             sample_ref.num_cycles = num_cycles;
-            interrupt_helper(&sample_ref, oi + 5, 1, VEC_IL);
+            interrupt_helper(&sample_ref, 5, 1, VEC_IL);
             // TODO: validate actual
             return num_cycles;
          }
@@ -3941,8 +3941,9 @@ static int op_fn_ADDW(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_AIM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   // oi points to the immediate byte
    sample_t *sample = sample_q->sample + sample_q->oi;
-   return and_helper(operand, sample[1].data);
+   return and_helper(operand, sample->data);
 }
 
 static int op_fn_ANDD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
@@ -4349,8 +4350,9 @@ static int op_fn_DIVQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_EIM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   // oi points to the immediate byte
    sample_t *sample = sample_q->sample + sample_q->oi;
-   return eor_helper(operand, sample[1].data);
+   return eor_helper(operand, sample->data);
 }
 
 static int op_fn_EORD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
@@ -4477,8 +4479,9 @@ static int op_fn_NEGD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_OIM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   // oi points to the immediate byte
    sample_t *sample = sample_q->sample + sample_q->oi;
-   return or_helper(operand, sample[1].data);
+   return or_helper(operand, sample->data);
 }
 
 static int op_fn_ORD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
@@ -4996,8 +4999,9 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_TIM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   // oi points to the immediate byte
    sample_t *sample = sample_q->sample + sample_q->oi;
-   set_NZ(operand & sample[1].data);
+   set_NZ(operand & sample->data);
    V = 0;
    return -1;
 }
