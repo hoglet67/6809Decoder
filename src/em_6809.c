@@ -544,18 +544,19 @@ static int get_regp_6809(int i) {
 
 // Used in EXN/TRV on the 6809
 static void set_regp_6809(int i, int val) {
+   // Must correctly handle case where val<0 (undefined)
    i &= 15;
    switch(i) {
-   case  0: unpack(val, &ACCA, &ACCB); break;
-   case  1: X  = val;                  break;
-   case  2: Y  = val;                  break;
-   case  3: U  = val;                  break;
-   case  4: S  = val;                  break;
-   case  5: PC = val;                  break;
-   case  8: ACCA  = val & 0xff;        break;
-   case  9: ACCB  = val & 0xff;        break;
-   case 10: set_FLAGS(val);            break;
-   case 11: DP = val & 0xff;           break;
+   case  0: unpack(val, &ACCA, &ACCB);         break;
+   case  1: X  = val;                          break;
+   case  2: Y  = val;                          break;
+   case  3: U  = val;                          break;
+   case  4: S  = val;                          break;
+   case  5: PC = val;                          break;
+   case  8: ACCA = val < 0 ? val : val & 0xff; break;
+   case  9: ACCB = val < 0 ? val : val & 0xff; break;
+   case 10: set_FLAGS(val);                    break;
+   case 11: DP = val < 0 ? val : val & 0xff;   break;
    }
 }
 
@@ -586,6 +587,7 @@ static int get_regp_6309(int i) {
 
 // Used in EXN/TRV on the 6309
 static void set_regp_6309(int i, int val) {
+   // Must correctly handle case where val<0 (undefined)
    i &= 15;
    // cases 12 and 13 (writing back to the 0 register) are NOPs (they don't trap)
    switch(i) {
@@ -600,7 +602,7 @@ static void set_regp_6309(int i, int val) {
    case  8: unpack(val, &ACCA,  NULL); break;
    case  9: unpack(val,  NULL, &ACCB); break;
    case 10: set_FLAGS(val);            break;
-   case 11: DP = (val >> 8) & 0xff;    break;
+   case 11: DP = (val < 0) ? val : (val >> 8) & 0xff; break;
    case 14: unpack(val, &ACCE,  NULL); break;
    case 15: unpack(val,  NULL, &ACCF); break;
    }
