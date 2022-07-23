@@ -19,11 +19,37 @@ RESET  LDS   #$200
        LDA   #$00
        STA   $FE30
 
-       ;; Write protect 8000-FFFF
+       ;; Test if we are already write protected
        LDA   $FE31
-       ORA   #$11
+       BITA  #$10
+       BNE   PROT
+
+       ;; Set the write protect bit (just once!)
+       ORA   #$10
        STA   $FE31
 
+       ;; Clear unused regsters to avoid false memory errors
+       LDU   #$4000
+       LDW   #$0000
+       LDY   #$0000
+       CLR   A
+       TFR   A,DP
+       TFR   Y,V
+
+       ;; Clear the screen and set the counter
+       LDX   #$7C00
+       LDA   #'0'
+CLEAR1
+       STA   ,X+
+       CMPX  #$7C08
+       BNE   CLEAR1
+       CLRA
+CLEAR2
+       STA   ,X+
+       CMPX  #$8000
+       BNE   CLEAR2
+
+PROT
        JSR   ctrInc
 
        ;; Seed the random number generator from VIA T1C
@@ -47,6 +73,7 @@ writeLoop
        STA  ,X+
        CMPX #TEST+$80
        BNE  writeLoop
+
 
        JMP  TEST
 

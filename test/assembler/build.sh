@@ -11,7 +11,7 @@ do
     bin=${i%.asm}
     bin=${bin^^}
     lst=${bin}.lst
-    asm6809 -l $lst $i -o $DIR/$bin
+    asm6809 -3 -l $lst $i -o $DIR/$bin
 done
 
 for i in `ls *.bas`
