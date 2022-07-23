@@ -4466,6 +4466,8 @@ static int op_fn_MULD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       int16_t a = (int16_t)D;
       int16_t b = (int16_t)operand;
       set_q_nz((uint32_t)(a * b));
+      // 6309 bug: Z is set based only on the top 16 bits
+      Z = (ACCA == 0 && ACCB == 0);
    } else {
       set_q_nz_unknown();
    }
