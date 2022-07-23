@@ -4434,7 +4434,8 @@ static int op_fn_LDMD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
 static int op_fn_LDQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    set_q_nz((uint32_t) operand);
-   V = 0;
+   // Random testing showed V is not cleared
+   // V = 0;
    return -1;
 }
 
