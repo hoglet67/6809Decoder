@@ -4461,16 +4461,40 @@ static int op_fn_LSRW(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
 static int op_fn_MULD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // Q = D * imm16 (signed)
-   int D = pack(ACCA, ACCB);
-   if (D >= 0) {
-      int16_t a = (int16_t)D;
-      int16_t b = (int16_t)operand;
-      set_q_nz((uint32_t)(a * b));
+   int cycle_correction = 0;
+   int sign = 0; // Set if the result will be negative
+   if (ACCA >= 0 && ACCB >= 0) {
+      int a = (ACCA << 8) + ACCB; // 0x0000-0xFFFF
+      int b = operand;            // 0x0000-0xFFFF
+      // Twos-complement the first operand
+      if (a >= 0x8000) {
+         a = 0x10000 - a;
+         sign ^= 1;
+         // There is a one cycle penatly here
+         cycle_correction++;
+      }
+      // Twos-complement the second operand
+      if (b >= 0x8000) {
+         b = 0x10000 - b;
+         sign ^= 1;
+         // There is a one cycle penatly here
+         cycle_correction++;
+      }
+      // This cannot overflow because the range of a,b is 0x0000-0x7FFF
+      uint32_t result = (uint32_t)(a * b);
+      if (sign) {
+         result = -result;
+         // There is a one cycle penatly here
+         cycle_correction++;
+      }
+      set_q_nz(result);
       // 6309 bug: Z is set based only on the top 16 bits
       Z = (ACCA == 0 && ACCB == 0);
    } else {
       set_q_nz_unknown();
    }
+   // Correct the number of cycles
+   sample_q->num_cycles += cycle_correction;
    return -1;
 }
 
