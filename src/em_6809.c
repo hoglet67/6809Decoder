@@ -4748,6 +4748,8 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
    // Only D, X, Y, U, S are legal, anything else causes an illegal instruction trap
    if (r0 > 4 || r1 > 4) {
+      // Random testing showed Z=0 in the failed case
+      Z = 0;
       failflag |= FAIL_BADM;
       // Illegal index register takes 25/23 (without additional prefixes)
       sample_q->num_cycles += (NM == 1) ? 19 : 17;
