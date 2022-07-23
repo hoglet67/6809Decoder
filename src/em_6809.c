@@ -4759,24 +4759,26 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       return -1;
    }
 
+   int D = pack(ACCA, ACCB);
+
    // Get reg0 (the source address)
-   int reg0;
+   int *reg0;
    switch (r0) {
-   case 1:  reg0 = X;                break;
-   case 2:  reg0 = Y;                break;
-   case 3:  reg0 = U;                break;
-   case 4:  reg0 = S;                break;
-   default: reg0 = pack(ACCA, ACCB); break;
+   case 1:  reg0 = &X;  break;
+   case 2:  reg0 = &Y;  break;
+   case 3:  reg0 = &U;  break;
+   case 4:  reg0 = &S;  break;
+   default: reg0 = &D;  break;
    }
 
-   // Get reg1 (the destination address)
-   int reg1;
+   // Get reg1 (the destination address) [ which may be the same as the source! ]
+   int *reg1;
    switch (r1) {
-   case 1:  reg1 = X;                break;
-   case 2:  reg1 = Y;                break;
-   case 3:  reg1 = U;                break;
-   case 4:  reg1 = S;                break;
-   default: reg1 = pack(ACCA, ACCB); break;
+   case 1:  reg1 = &X;  break;
+   case 2:  reg1 = &Y;  break;
+   case 3:  reg1 = &U;  break;
+   case 4:  reg1 = &S;  break;
+   default: reg1 = &D;  break;
    }
 
    // The number of bytes actually transferred (less if TFR was)
@@ -4959,66 +4961,36 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       failflag &= ~FAIL_CYCLES;
    }
 
-
-   // Update R0, and memory read modelling
-   if (opcode == 0x38 || opcode == 0x3a) {
-      if (num_bytes >= 0) {
-         for (int i = 0; i < num_bytes; i++) {
-            memory_read(rd_sample, reg0, MEM_DATA);
-            reg0 = offset_address(reg0, 1);
-            rd_sample += 3;
-         }
-      } else {
-         reg0 = -1;
-      }
-   } else if (opcode == 0x39) {
-      if (num_bytes >= 0) {
-         for (int i = 0; i < num_bytes; i++) {
-            memory_read(rd_sample, reg0, MEM_DATA);
-            reg0 = offset_address(reg0, -1);
-            rd_sample += 3;
-         }
-      } else {
-         reg0 = -1;
-      }
-   }
-   switch (r0) {
-   case 1:  X = reg0;                   break;
-   case 2:  Y = reg0;                   break;
-   case 3:  U = reg0;                   break;
-   case 4:  S = reg0;                   break;
-   default: unpack(reg0, &ACCA, &ACCB); break;
+   // Memory modelling of reads and writes
+   int r0inc = 0;
+   int r1inc = 0;
+   switch (opcode) {
+   case 0x38: r0inc =  1; r1inc =  1; break; // 1138 TFM r0+, r1+
+   case 0x39: r0inc = -1; r1inc = -1; break; // 1139 TFM r0-, r1-
+   case 0x3A: r0inc =  1; r1inc =  0; break; // 113A TFM r0+, r1
+   case 0x3B: r0inc =  0; r1inc =  1; break; // 113B TFM r0 , r1+
    }
 
-   // Update R0, and memory write modelling
-   if (opcode == 0x38 || opcode == 0x3b) {
-      if (num_bytes >= 0) {
-         for (int i = 0; i < num_bytes; i++) {
-            memory_write(wr_sample, reg1, MEM_DATA);
-            reg1 = offset_address(reg1, 1);
-            wr_sample += 3;
-         }
-      } else {
-         reg1 = -1;
+   if (num_bytes >= 0) {
+      for (int i = 0; i < num_bytes; i++) {
+         memory_read(rd_sample, *reg0, MEM_DATA);
+         rd_sample += 3;
+         *reg0 = offset_address(*reg0, r0inc);
+         memory_write(wr_sample, *reg1, MEM_DATA);
+         wr_sample += 3;
+         *reg1 = offset_address(*reg1, r1inc);
       }
-   } else if (opcode == 0x39) {
-      if (num_bytes >= 0) {
-         for (int i = 0; i < num_bytes; i++) {
-            memory_write(wr_sample, reg1, MEM_DATA);
-            reg1 = offset_address(reg1, -1);
-            wr_sample += 3;
-         }
-      } else {
-         reg1 = -1;
+   } else {
+      if (r0inc) {
+         *reg0 = -1;
+      }
+      if (r1inc) {
+         *reg1 = -1;
       }
    }
-   switch (r1) {
-   case 1:  X = reg1;                   break;
-   case 2:  Y = reg1;                   break;
-   case 3:  U = reg1;                   break;
-   case 4:  S = reg1;                   break;
-   default: unpack(reg1, &ACCA, &ACCB); break;
-   }
+
+   // In case D has been involved, we push the value back to ACCA/B
+   unpack(D, &ACCA, &ACCB);
 
    // Update the final value of W
    if (W >= 0 && num_bytes >= 0) {
