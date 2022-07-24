@@ -5012,7 +5012,7 @@ static int op_fn_TSTF(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_TSTW(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   int W = pack(ACCA, ACCB);
+   int W = pack(ACCE, ACCF);
    set_NZ16(W);
    V = 0;
    return -1;
