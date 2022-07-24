@@ -4974,6 +4974,7 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    if (W >= 0 && num_bytes >= 0) {
       W -= num_bytes;
       unpack(W, &ACCE, &ACCF);
+      Z = (W == 0);
    }
 
    return -1;
