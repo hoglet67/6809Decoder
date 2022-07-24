@@ -3,15 +3,37 @@
 
 #include <inttypes.h>
 
-// Standard failures
-
-#define FAIL_ADDR_INSTR 0x00000001
-#define FAIL_ADDR_PTR   0x00000002
-#define FAIL_ADDR_DATA  0x00000004
-#define FAIL_ADDR_STACK 0x00000008
-#define FAIL_RNW        0x00000010
-#define FAIL_MEMORY     0x00000020
-#define FAIL_PC         0x00000040
+enum {
+   FAIL_ADDR_INSTR = 0x00000001,
+   FAIL_ADDR_PTR   = 0x00000002,
+   FAIL_ADDR_DATA  = 0x00000004,
+   FAIL_ADDR_STACK = 0x00000008,
+   FAIL_RNW        = 0x00000010,
+   FAIL_MEMORY     = 0x00000020,
+   FAIL_PC         = 0x00000040,
+   FAIL_ACCA       = 0x00000100,
+   FAIL_ACCB       = 0x00000200,
+   FAIL_ACCE       = 0x00000400,
+   FAIL_ACCF       = 0x00000800,
+   FAIL_X          = 0x00001000,
+   FAIL_Y          = 0x00002000,
+   FAIL_U          = 0x00004000,
+   FAIL_S          = 0x00008000,
+   FAIL_DP         = 0x00010000,
+   FAIL_E          = 0x00020000,
+   FAIL_F          = 0x00040000,
+   FAIL_H          = 0x00080000,
+   FAIL_I          = 0x00100000,
+   FAIL_N          = 0x00200000,
+   FAIL_Z          = 0x00400000,
+   FAIL_V          = 0x00800000,
+   FAIL_C          = 0x01000000,
+   FAIL_RESULT     = 0x02000000,
+   FAIL_VECTOR     = 0x04000000,
+   FAIL_CYCLES     = 0x08000000,
+   FAIL_UNDOC      = 0x10000000,
+   FAIL_BADM       = 0x20000000
+};
 
 typedef enum {
    MACHINE_DEFAULT,
@@ -82,6 +104,7 @@ typedef struct {
    int show_cycles;
    int show_samplenums;
    int show_something;
+   uint32_t fail_mask;
    int reg_s;
    int reg_u;
    int reg_pc;

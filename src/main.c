@@ -156,6 +156,8 @@ enum {
    KEY_REG_NM,
    KEY_REG_FM,
    KEY_ROM_LAT,
+   KEY_FUNDOC,
+   KEY_FBADMODE,
    KEY_SKIP,
    KEY_SKEW,
    KEY_DATA,
@@ -224,6 +226,8 @@ static struct argp_option options[] = {
    { "cycles",      KEY_CYCLES,         0,                   0, "Show instruction cycles",                           GROUP_OUTPUT},
    { "samplenum",  KEY_SAMPLES,         0,                   0, "Show bus cycle numbers",                            GROUP_OUTPUT},
    { "showromno",  KEY_SHOWROM,         0,                   0, "Show BBC rom no for address 8000..BFFF",            GROUP_OUTPUT},
+   { "fundoc",     KEY_FUNDOC,          0,                   0, "Fail on undocumented instruction",                  GROUP_OUTPUT},
+   { "fbadmode", KEY_FBADMODE,          0,                   0, "Fail on undefined index addressing mode",           GROUP_OUTPUT},
 
    { 0, 0, 0, 0, "Signal defintion options:", GROUP_SIGDEFS},
 
@@ -427,6 +431,12 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
    case KEY_SHOWROM:
       arguments->show_romno = 1;
       break;
+   case KEY_FUNDOC:
+      arguments->fail_mask |= FAIL_UNDOC;
+      break;
+   case KEY_FBADMODE:
+      arguments->fail_mask |= FAIL_BADM;
+      break;
    case KEY_TRIGGER:
       if (arg && strlen(arg) > 0) {
          char *start   = strtok(arg, ",");
@@ -583,7 +593,7 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
       }
    }
 
-   int fail = em->get_and_clear_fail();
+   int fail = em->get_and_clear_fail() & arguments.fail_mask;
 
    // Try to minimise the calls to printf as these are quite expensive
 
@@ -717,7 +727,7 @@ int run_emulation_for_n_cycles(sample_t *sample, int num_samples, int run_cycles
          num_cycles = 1;
       }
       sample_tmp += num_cycles;
-      if (failflag) {
+      if (failflag & arguments.fail_mask) {
          error_count++;
          failflag = 0;
       }
@@ -1130,6 +1140,7 @@ int main(int argc, char *argv[]) {
    arguments.show_state       = 0;
    arguments.show_cycles      = 0;
    arguments.show_samplenums  = 0;
+   arguments.fail_mask        = 0xFFFFFFFF - FAIL_BADM - FAIL_UNDOC;
 
    // Signal definition options
    arguments.idx_data         = UNSPECIFIED;
