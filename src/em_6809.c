@@ -3826,8 +3826,9 @@ static void set_q_nz(uint32_t val) {
    ACCB = (val >> 16) & 0xff;
    ACCE = (val >>  8) & 0xff;
    ACCF =  val        & 0xff;
-      N = (val >> 31) & 1;
-      Z = (val == 0);
+   N    = (val >> 31) & 1;
+   // 6309 bug: Z is set based only on the top 16 bits
+   Z    = (ACCA == 0 && ACCB == 0);
 }
 
 static void set_q_nz_unknown() {
@@ -4465,8 +4466,6 @@ static int op_fn_MULD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
          cycle_correction++;
       }
       set_q_nz(result);
-      // 6309 bug: Z is set based only on the top 16 bits
-      Z = (ACCA == 0 && ACCB == 0);
    } else {
       set_q_nz_unknown();
    }
