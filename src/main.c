@@ -572,6 +572,7 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
    if (pc >= 0 && pc == arguments.trigger_start) {
       triggered = 1;
       printf("start trigger hit at cycle %d\n", total_cycles);
+      memory_set_modelling ( arguments.mem_model       & 0x0f);
       memory_set_rd_logging((arguments.mem_model >> 4) & 0x0f);
       memory_set_wr_logging((arguments.mem_model >> 8) & 0x0f);
    }
@@ -1240,10 +1241,10 @@ int main(int argc, char *argv[]) {
       arguments.mem_model |= (1 << MEM_DATA);
    }
 
-   memory_set_modelling(  arguments.mem_model       & 0x0f);
    if (triggered) {
-      memory_set_rd_logging  ((arguments.mem_model >> 4) & 0x0f);
-      memory_set_wr_logging  ((arguments.mem_model >> 8) & 0x0f);
+      memory_set_modelling ( arguments.mem_model       & 0x0f);
+      memory_set_rd_logging((arguments.mem_model >> 4) & 0x0f);
+      memory_set_wr_logging((arguments.mem_model >> 8) & 0x0f);
    }
 
    // Implement default pins mapping for unspecified pins
