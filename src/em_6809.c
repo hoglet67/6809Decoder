@@ -3902,11 +3902,15 @@ static int op_fn_ADDR(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    int r0 = get_r0(operand);
    int r1 = get_r1(operand);
    int result;
+   // Save H, as it's not affected by ADDR
+   int tmpH = H;
    if ((operand & 0x0f) < 8) {
       result = add16_helper(r1, 0, r0);
    } else {
       result = add_helper(r1, 0, r0);
    }
+   // Restore H
+   H = tmpH;
    set_r1(operand, result);
    return -1;
 }
