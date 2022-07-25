@@ -3622,6 +3622,13 @@ static int op_fn_XADDU(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 // 6309 Helpers
 // ====================================================================
 
+
+// The value of the PC seen in the register addressing is one cycle
+// ahead due to pipelining (even in emulation mode)
+static inline int get_r_pc() {
+   return PC < 0 ? -1 : (PC + 1) & 0xFFFF;
+}
+
 // Used in ADCR/ADDR/ANDR/CMPR/EORR/ORRR/SBCR/SUBR on the 6309 only
 //
 // 8->16 requires promotion to D or W
@@ -3643,7 +3650,7 @@ static int get_r0(int pb) {
       case  2: ret = ( Y < 0) ? -1 : ( Y & 0xff); break;
       case  3: ret = ( U < 0) ? -1 : ( U & 0xff); break;
       case  4: ret = ( S < 0) ? -1 : ( S & 0xff); break;
-      case  5: ret = (PC < 0) ? -1 : (PC & 0xff); break;
+      case  5: ret = get_r_pc() & 0xff;           break;
       case  6: ret = ACCF;                        break;
       case  7: ret = (TV < 0) ? -1 : (TV & 0xff); break;
          // src is 8 bits
@@ -3664,7 +3671,7 @@ static int get_r0(int pb) {
       case  2: ret = Y;                           break;
       case  3: ret = U;                           break;
       case  4: ret = S;                           break;
-      case  5: ret = PC;                          break;
+      case  5: ret = get_r_pc();                  break;
       case  6: ret = pack(ACCE, ACCF);            break;
       case  7: ret = TV;                          break;
          // src is 8 bits, promote to 16 bits
@@ -3690,7 +3697,7 @@ static int get_r1(int pb) {
    case  2: ret = Y;                           break;
    case  3: ret = U;                           break;
    case  4: ret = S;                           break;
-   case  5: ret = PC;                          break;
+   case  5: ret = get_r_pc();                  break;
    case  6: ret = pack(ACCE, ACCF);            break;
    case  7: ret = TV;                          break;
    case  8: ret = ACCA;                        break;
@@ -3726,6 +3733,51 @@ static void set_r1(int pb, int val) {
    case 11: DP = val;                  break;
    case 14: ACCE = val;                break;
    case 15: ACCF = val;                break;
+   }
+}
+
+static void set_Arithmetic_R_result(operand_t operand, int result) {
+   // See page 143 of Atkinson
+   int tmpC = C;
+   int tmpN = N;
+   int tmpV = V;
+   int tmpZ = Z;
+   C = 0;
+   N = 0;
+   V = 0;
+   Z = 0;
+   set_r1(operand, result);
+   if (tmpC == 1) {
+      C = 1;
+   }
+   if (tmpN == 1) {
+      N = 1;
+   }
+   if (tmpV == 1) {
+      V = 1;
+   }
+   if (tmpZ == 1) {
+      Z = 1;
+   }
+}
+
+static void set_Logical_R_result(operand_t operand, int result) {
+   // See page 143 of Atkinson
+   int tmpN = N;
+   int tmpV = V;
+   int tmpZ = Z;
+   N = 0;
+   V = 0;
+   Z = 0;
+   set_r1(operand, result);
+   if (tmpN == 1) {
+      N = 1;
+   }
+   if (tmpV == 1) {
+      V = 1;
+   }
+   if (tmpZ == 1) {
+      Z = 1;
    }
 }
 
@@ -3882,12 +3934,16 @@ static int op_fn_ADCR(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    int r0 = get_r0(operand);
    int r1 = get_r1(operand);
    int result;
+   // Save H, as it's not affected by ADDR
+   int tmpH = H;
    if ((operand & 0x0f) < 8) {
       result = add16_helper(r1, C, r0);
    } else {
       result = add_helper(r1, C, r0);
    }
-   set_r1(operand, result);
+   // Restore H
+   H = tmpH;
+   set_Arithmetic_R_result(operand, result);
    return -1;
 }
 
@@ -3915,7 +3971,7 @@ static int op_fn_ADDR(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    }
    // Restore H
    H = tmpH;
-   set_r1(operand, result);
+   set_Arithmetic_R_result(operand, result);
    return -1;
 }
 
@@ -3949,7 +4005,7 @@ static int op_fn_ANDR(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    } else {
       result = and_helper(r1, r0);
    }
-   set_r1(operand, result);
+   set_Logical_R_result(operand, result);
    return -1;
 }
 
@@ -4358,7 +4414,7 @@ static int op_fn_EORR(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    } else {
       result = eor_helper(r1, r0);
    }
-   set_r1(operand, result);
+   set_Logical_R_result(operand, result);
    return -1;
 }
 
@@ -4512,7 +4568,7 @@ static int op_fn_ORR(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    } else {
       result = or_helper(r1, r0);
    }
-   set_r1(operand, result);
+   set_Logical_R_result(operand, result);
    return -1;
 }
 
@@ -4581,7 +4637,7 @@ static int op_fn_SBCR(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    } else {
       result = sub_helper(r1, C, r0);
    }
-   set_r1(operand, result);
+   set_Arithmetic_R_result(operand, result);
    return -1;
 }
 
@@ -4698,7 +4754,7 @@ static int op_fn_SUBR(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    } else {
       result = sub_helper(r1, 0, r0);
    }
-   set_r1(operand, result);
+   set_Arithmetic_R_result(operand, result);
    return -1;
 }
 
