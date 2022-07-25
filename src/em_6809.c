@@ -3705,6 +3705,10 @@ static int get_r1(int pb) {
 }
 
 // r1 is the where the result will be written
+//
+// The register addressing mode instructions cannot safely write to
+// the PC. What seem to happen in practice is the PC is updated on the
+// 2nd byte of the next instruction.
 static void set_r1(int pb, int val) {
    int dst = pb & 0xf;
    switch(dst) {
@@ -3713,7 +3717,7 @@ static void set_r1(int pb, int val) {
    case  2: Y  = val;                  break;
    case  3: U  = val;                  break;
    case  4: S  = val;                  break;
-   case  5: PC = val;                  break;
+   case  5: PC = -1;                   break;
    case  6: unpack(val, &ACCE, &ACCF); break;
    case  7: TV = val;                  break;
    case  8: ACCA = val;                break;
