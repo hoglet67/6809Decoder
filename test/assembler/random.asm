@@ -7,7 +7,9 @@ TEST      EQU $7E00
 
 BEGIN
 
-RESET  LDS   #$200
+RESET  ;; Push all the registers so we expose state
+       PSHS  CC,A,B,DP,X,Y,U
+       LDS   #$200
        ORCC  #$50
 
        ;; Disable all interrupts
@@ -32,8 +34,6 @@ RESET  LDS   #$200
        LDU   #$4000
        LDW   #$0000
        LDY   #$0000
-       CLR   A
-       TFR   A,DP
        TFR   Y,V
 
        ;; Clear the screen and set the counter
@@ -50,26 +50,29 @@ CLEAR2
        BNE   CLEAR2
 
 PROT
+       ;; Clear the data pointer, so the PRBS seed is accessible
+       CLR   A
+       TFR   A,DP
        JSR   ctrInc
 
        ;; Seed the random number generator from VIA T1C
        LDD   $fe44
-       STD   ZP_RND_WA
+       STD   <ZP_RND_WA
 ;;       LDD   $fe44
-;;       STD   ZP_RND_WA + 2
+;;       STD   <ZP_RND_WA + 2
 ;;       LDA   $fe44
-;;       STA   ZP_RND_WA + 4
+;;       STA   <ZP_RND_WA + 4
 
        LDX  #TEST
 writeLoop
        BSR  rndNext
-       LDA  ZP_RND_WA + 0
+       LDA  <ZP_RND_WA + 0
        STA  ,X+
-       LDA  ZP_RND_WA + 1
+       LDA  <ZP_RND_WA + 1
        STA  ,X+
-       LDA  ZP_RND_WA + 2
+       LDA  <ZP_RND_WA + 2
        STA  ,X+
-       LDA  ZP_RND_WA + 3
+       LDA  <ZP_RND_WA + 3
        STA  ,X+
        CMPX #TEST+$80
        BNE  writeLoop
@@ -80,31 +83,31 @@ writeLoop
        ;; 32-bit PRBS from BBC Basic
 rndNext
 		LDB	#4
-		STB	ZP_FP_TMP
+		STB	<ZP_FP_TMP
 rndLoop
-		ROR	ZP_RND_WA + 4
-		LDA	ZP_RND_WA + 0
+		ROR	<ZP_RND_WA + 4
+		LDA	<ZP_RND_WA + 0
 		TFR	A,B
 		RORA
-		STA 	ZP_RND_WA + 4
-		LDA 	ZP_RND_WA + 1
-		STA 	ZP_RND_WA + 0
+		STA 	<ZP_RND_WA + 4
+		LDA 	<ZP_RND_WA + 1
+		STA 	<ZP_RND_WA + 0
 		LSRA
-		EORA	ZP_RND_WA + 2
+		EORA	<ZP_RND_WA + 2
 		ANDA	#$0F
-		EORA	ZP_RND_WA + 2
+		EORA	<ZP_RND_WA + 2
 		RORA
 		RORA
 		RORA
 		RORA
-		EORA	ZP_RND_WA + 4
-		STB	ZP_RND_WA + 4
-		LDB	ZP_RND_WA + 2
-		STB	ZP_RND_WA + 1
-		LDB	ZP_RND_WA + 3
-		STB	ZP_RND_WA + 2
-		STA	ZP_RND_WA + 3
-		DEC	ZP_FP_TMP
+		EORA	<ZP_RND_WA + 4
+		STB	<ZP_RND_WA + 4
+		LDB	<ZP_RND_WA + 2
+		STB	<ZP_RND_WA + 1
+		LDB	<ZP_RND_WA + 3
+		STB	<ZP_RND_WA + 2
+		STA	<ZP_RND_WA + 3
+		DEC	<ZP_FP_TMP
 		BNE	rndLoop
 		RTS
 
