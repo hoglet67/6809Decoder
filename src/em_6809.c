@@ -4658,24 +4658,16 @@ static int op_fn_STQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    if (ACCF >= 0 && (uint32_t)ACCF != (result & 0xff)) {
       failflag |= FAIL_ACCF;
    }
-   ACCF = result & 0xff;
-   result >>= 8;
-   if (ACCE >= 0 && (uint32_t)ACCE != (result & 0xff)) {
+   if (ACCE >= 0 && (uint32_t)ACCE != ((result >> 8) & 0xff)) {
       failflag |= FAIL_ACCE;
    }
-   ACCE = result & 0xff;
-   result >>= 8;
-   if (ACCB >= 0 && (uint32_t)ACCB != (result & 0xff)) {
+   if (ACCB >= 0 && (uint32_t)ACCB != ((result >> 16) & 0xff)) {
       failflag |= FAIL_ACCB;
    }
-   ACCB = result & 0xff;
-   result >>= 8;
-   if (ACCA >= 0 && (uint32_t)ACCA != (result & 0xff)) {
+   if (ACCA >= 0 && (uint32_t)ACCA != ((result >> 24) & 0xff)) {
       failflag |= FAIL_ACCA;
    }
-   ACCA = result & 0xff;
-   Z = (ACCA == 0 && ACCB == 0 && ACCE == 0 && ACCF == 0);
-   N = (ACCA >> 7) & 1;
+   set_q_nz(result);
    return -1;
 }
 
