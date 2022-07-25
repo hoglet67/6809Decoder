@@ -4622,8 +4622,8 @@ static int op_fn_STBT(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
    // Parse the post byte
    int reg_num    = (postbyte >> 6) & 3; // Bits 7..6
-   int mem_bitnum = (postbyte >> 3) & 7; // Bits 5..3
-   int reg_bitnum = (postbyte     ) & 7; // Bits 2..0
+   int reg_bitnum = (postbyte >> 3) & 7; // Bits 5..3
+   int mem_bitnum = (postbyte     ) & 7; // Bits 2..0
 
    // Extract register bit, which can be 0, 1 or -1
    int reg_bit;
