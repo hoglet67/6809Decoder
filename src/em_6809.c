@@ -4692,9 +4692,12 @@ static int op_fn_STBT(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
    if (reg_bit >= 0) {
       // Calculate the value that is expected to be written back
-      return (operand & (0xff ^ (1 << mem_bitnum))) | (reg_bit << mem_bitnum);
+      int ret = (operand & (0xff ^ (1 << mem_bitnum))) | (reg_bit << mem_bitnum);
+      set_NZ(ret);
+      return ret;
    } else {
       // No memory modelling is possible
+      set_NZ_unknown();
       return -1;
    }
 }
