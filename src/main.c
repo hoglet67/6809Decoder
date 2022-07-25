@@ -477,20 +477,30 @@ static struct argp argp = { options, parse_opt, args_doc, doc, 0, 0, 0 };
 
 
 static void dump_samples(sample_t *sample_q, int n) {
-      for (int i = 0; i < n; i++) {
-         sample_t *sample = sample_q + i;
-         printf("%8x %2d %02x ", sample->sample_count, i, sample->data);
-         putchar(' ');
-         putchar(sample->rnw >= 0 ? '0' + sample->rnw : '?');
-         putchar(' ');
-         putchar(sample->lic >= 0 ? '0' + sample->lic : '?');
-         putchar(' ');
-         putchar(sample->bs >= 0 ? '0' + sample->bs : '?');
-         putchar(sample->ba >= 0 ? '0' + sample->ba : '?');
-         putchar(' ');
-         putchar(sample->addr >= 0 ? sample->addr + (sample->addr < 10 ? '0' : 'A' - 10) : '?');
-         putchar('\n');
-      }
+   char buffer[100];
+   for (int i = 0; i < n; i++) {
+      sample_t *sample = sample_q + i;
+      char *bp = buffer;
+      write_hex8(bp, sample->sample_count);
+      bp += 8;
+      *bp++ = ' ';
+      write_hex2(bp, i);
+      bp += 2;
+      *bp++ = ' ';
+      write_hex2(bp, sample->data);
+      bp += 2;
+      *bp++ = ' ';
+      *bp++ = sample->rnw >= 0 ? '0' + sample->rnw : '?';
+      *bp++ = ' ';
+      *bp++ = sample->lic >= 0 ? '0' + sample->lic : '?';
+      *bp++ = ' ';
+      *bp++ = sample->bs >= 0 ? '0' + sample->bs : '?';
+      *bp++ = sample->ba >= 0 ? '0' + sample->ba : '?';
+      *bp++ = ' ';
+      *bp++ = sample->addr >= 0 ? sample->addr + (sample->addr < 10 ? '0' : 'A' - 10) : '?';
+      *bp++ = 0;
+      puts(buffer);
+   }
 }
 
 void write_hex1(char *buffer, int value) {

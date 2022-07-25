@@ -84,6 +84,7 @@ void write_hex1(char *buffer, int value);
 void write_hex2(char *buffer, int value);
 void write_hex4(char *buffer, int value);
 void write_hex6(char *buffer, int value);
+void write_hex8(char *buffer, uint32_t value);
 int  write_s   (char *buffer, const char *s);
 
 typedef struct {
