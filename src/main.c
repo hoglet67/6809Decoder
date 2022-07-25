@@ -569,7 +569,7 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
       }
    }
 
-   if (pc >= 0 && pc == arguments.trigger_start) {
+   if (!triggered && pc >= 0 && pc == arguments.trigger_start) {
       triggered = 1;
       printf("start trigger hit at cycle %d\n", total_cycles);
       memory_set_modelling ( arguments.mem_model       & 0x0f);
@@ -682,7 +682,7 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
 
    }
 
-   if (pc >= 0 && pc == arguments.trigger_stop) {
+   if (triggered && pc >= 0 && pc == arguments.trigger_stop) {
       triggered = 0;
       printf("stop trigger hit at cycle %d\n", total_cycles);
       memory_set_rd_logging(0);
