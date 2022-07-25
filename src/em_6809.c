@@ -4778,10 +4778,13 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    int r0 = (postbyte >> 4) & 0xf;
    int r1 = postbyte & 0xf;
 
+   // The number of bytes expected to be transferred is in W
+   int W = pack(ACCE, ACCF);
+
    // Only D, X, Y, U, S are legal, anything else causes an illegal instruction trap
    if (r0 > 4 || r1 > 4) {
-      // Random testing showed Z=0 in the failed case
-      Z = 0;
+      // Random testing showed Z set based on W even in the failed case=0 in the failed case
+      Z = (W < 0) ? -1 : (W == 0);
       failflag |= FAIL_BADM;
       // Illegal index register takes 25/23 (without additional prefixes)
       sample_q->num_cycles += (NM == 1) ? 19 : 17;
@@ -4934,9 +4937,6 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // 1722d9    0 d8  1 1 10 8 <<<< Vector
    // 1722da    0 ff  1 1 10 9
    // 1722db    0 ff  1 1 00 F
-
-   // The number of bytes expected to be transferred is in W
-   int W = pack(ACCE, ACCF);
 
    // TFM - cycle count in instruction tables is 6
    if (W >= 0) {
