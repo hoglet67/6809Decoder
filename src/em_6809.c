@@ -160,6 +160,9 @@ static int show_cycle_errors = 0;
 // Vector base (which might change on a machine-by-machine basis)
 static int vector_base = 0xfff0;
 
+// Used to supress errors in the instruction following xxxR reg,PC
+static int async_pc_write = 0;
+
 enum {
    VEC_IL   = 0x00,
    VEC_DZ   = 0x01, // the LSB ends up being masked off
@@ -1186,7 +1189,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
 
    // Sanity check the instruction bytes have sequential addresses
    // which can help to avoid incorrect synchronization to the instruction stream
-   if (sample_q[0].addr >= 0) {
+   if (sample_q[0].addr >= 0 && async_pc_write == 0) {
       for (int i = 1; i < instruction->length; i++) {
          if (sample_q[i].addr != ((sample_q[0].addr + i) & 15)) {
             failflag |= FAIL_ADDR_INSTR;
@@ -1194,6 +1197,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
          }
       }
    }
+   async_pc_write = 0;
 
    // In indexed mode, calculate the additional postbyte cycles
    int postbyte_cycles = 0;
@@ -3729,20 +3733,20 @@ static int get_r1(int pb) {
 static void set_r1(int pb, int val) {
    int dst = pb & 0xf;
    switch(dst) {
-   case  0: unpack(val, &ACCA, &ACCB); break;
-   case  1: X  = val;                  break;
-   case  2: Y  = val;                  break;
-   case  3: U  = val;                  break;
-   case  4: S  = val;                  break;
-   case  5: PC = -1;                   break;
-   case  6: unpack(val, &ACCE, &ACCF); break;
-   case  7: TV = val;                  break;
-   case  8: ACCA = val;                break;
-   case  9: ACCB = val;                break;
-   case 10: set_FLAGS(val);            break;
-   case 11: DP = val;                  break;
-   case 14: ACCE = val;                break;
-   case 15: ACCF = val;                break;
+   case  0: unpack(val, &ACCA, &ACCB);   break;
+   case  1: X  = val;                    break;
+   case  2: Y  = val;                    break;
+   case  3: U  = val;                    break;
+   case  4: S  = val;                    break;
+   case  5: PC = -1; async_pc_write = 1; break;
+   case  6: unpack(val, &ACCE, &ACCF);   break;
+   case  7: TV = val;                    break;
+   case  8: ACCA = val;                  break;
+   case  9: ACCB = val;                  break;
+   case 10: set_FLAGS(val);              break;
+   case 11: DP = val;                    break;
+   case 14: ACCE = val;                  break;
+   case 15: ACCF = val;                  break;
    }
 }
 
