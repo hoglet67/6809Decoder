@@ -692,6 +692,16 @@ static void em_6809_init(arguments_t *args) {
 }
 
 static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
+   // An interrupt always starts with the current PC being pushed to the stack
+   // so check for this. This conveniently excludes CWAI, where PC+1 will be
+   // pushed to the stack, to prevent the CWAI being endlessly executed.
+   if (PC >= 0) {
+      int offset = (NM == 1) ?  4 : 3;
+      int pushedPC = sample_q[offset].data + (sample_q[offset + 1].data << 8);
+      if (PC != pushedPC) {
+         return 0;
+      }
+   }
    // Calculate expected offset to vector fetch taking account of
    // native mode on the 6309 pushing two extra bytes (ACCE/ACCF)
    // (and one pipeline stall cycle ??)
