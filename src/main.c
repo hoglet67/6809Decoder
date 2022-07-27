@@ -973,7 +973,7 @@ void decode(FILE *stream) {
 
    // Common to all sampling modes
    s.type = NORMAL;
-   s.sample_count = 0;
+   s.sample_count = arguments.skip;
    s.rnw  = -1;
    s.lic  = -1;
    s.bs   = -1;
