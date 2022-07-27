@@ -170,7 +170,7 @@ static int memory_write_beeb(int data, int ea) {
    if (ea == 0xfe30) {
       set_rom_latch(data & 0xf);
    }
-   if ((ea >= 0xc000 && ea < 0xfc00) || (ea >= 0xff00)) {
+   if ((ea >= 0x8000 && ea < 0xfc00) || (ea >= 0xff00)) {
       return 1;
    }
    int *memptr = get_memptr_beeb(ea);
