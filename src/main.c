@@ -25,10 +25,12 @@
 //
 // There is no reason BLOCK couldn't be increased further, if needed
 
-#define BLOCK (8*1024*1024)
+#define DEFAULT_BLOCK (8*1024*1024)
 
-// Queue three blocks
-static sample_t sample_q[BLOCK * 3];
+// Sample buffer base and rd/wr pointers
+static sample_t *sample_q;
+static sample_t *sample_wr;
+static sample_t *sample_rd;
 
 // Small skew buffer to allow the data bus samples to be taken early or late
 
@@ -160,6 +162,7 @@ enum {
    KEY_FBADMODE,
    KEY_FSYNCBUG,
    KEY_SKIP,
+   KEY_BLOCK,
    KEY_SKEW,
    KEY_DATA,
    KEY_RNW,
@@ -206,6 +209,7 @@ static struct argp_option options[] = {
    { "trigger",    KEY_TRIGGER, "ADDRESS",                   0, "Trigger on address",                                GROUP_GENERAL},
    { "mem",            KEY_MEM,     "HEX", OPTION_ARG_OPTIONAL, "Memory modelling (see above)",                      GROUP_GENERAL},
    { "skip",          KEY_SKIP,     "HEX", OPTION_ARG_OPTIONAL, "Skip the first n samples",                          GROUP_GENERAL},
+   { "block",        KEY_BLOCK,     "HEX", OPTION_ARG_OPTIONAL, "Set the buffer block size (default=800000)",        GROUP_GENERAL},
    { "skew",          KEY_SKEW,    "SKEW", OPTION_ARG_OPTIONAL, "Skew the data bus by +/- n samples",                GROUP_GENERAL},
 
    { 0, 0, 0, 0, "Register options:", GROUP_REGISTER},
@@ -306,6 +310,13 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
          arguments->skip = strtol(arg, (char **)NULL, 16);
       } else {
          arguments->skip = 0;
+      }
+      break;
+   case KEY_BLOCK:
+      if (arg && strlen(arg) > 0) {
+         arguments->block = strtol(arg, (char **)NULL, 16);
+      } else {
+         arguments->block = DEFAULT_BLOCK;
       }
       break;
    case KEY_SKEW:
@@ -893,8 +904,7 @@ sample_t *synchronize_to_stream(sample_t *sample, int num_samples) {
 
 void queue_sample(sample_t *sample) {
    static int synced = 0;
-   static sample_t *sample_wr = sample_q;
-   static sample_t *sample_rd = sample_q;
+   int block = arguments.block;
 
    // At the end of the stream, allow the buffered samples to drain
    if (sample->type == LAST) {
@@ -916,22 +926,22 @@ void queue_sample(sample_t *sample) {
    //
    // When we have two full blocks, we can start to consume the first. Once the first is
    // consumed, we can move everything back in the block.
-   if (sample_wr > sample_q + 2 * BLOCK) {
+   if (sample_wr > sample_q + 2 * block) {
       // Try to synchronize to the instruction stream
       if (!synced) {
          sample_rd = synchronize_to_stream(sample_rd, sample_wr - sample_rd);
          synced = 1;
       }
-      while (sample_rd < sample_q + BLOCK) {
+      while (sample_rd < sample_q + block) {
          sample_rd += analyze_instruction(sample_rd, sample_wr - sample_rd);
       }
       // The first block has been processed, so move everything down a block
       //printf("Block processed\n");
       //printf("  sample_wr = %ld\n", sample_wr - sample_q);
       //printf("  sample_rd = %ld\n", sample_rd - sample_q);
-      memmove(sample_q, sample_q + BLOCK, sizeof(sample_t) * (sample_wr - sample_q - BLOCK));
-      sample_rd -= BLOCK;
-      sample_wr -= BLOCK;
+      memmove(sample_q, sample_q + block, sizeof(sample_t) * (sample_wr - sample_q - block));
+      sample_rd -= block;
+      sample_wr -= block;
       //printf("Block consumed\n");
       //printf("  sample_wr = %ld\n", sample_wr - sample_q);
       //printf("  sample_rd = %ld\n", sample_rd - sample_q);
@@ -1134,6 +1144,7 @@ int main(int argc, char *argv[]) {
    arguments.debug            = 0;
    arguments.mem_model        = 0;
    arguments.skip             = 0;
+   arguments.block            = DEFAULT_BLOCK;
    arguments.skew             = 0;
    arguments.trigger_start    = UNSPECIFIED;
    arguments.trigger_stop     = UNSPECIFIED;
@@ -1175,6 +1186,11 @@ int main(int argc, char *argv[]) {
    }
 
    arguments.show_something = arguments.show_samplenums | arguments.show_address | arguments.show_hex | arguments.show_instruction | arguments.show_state | arguments.show_cycles ;
+
+   // Allocate sample buffer (3 blocks)
+   sample_q = malloc(arguments.block * sizeof(sample_t) * 3);
+   sample_rd = sample_q;
+   sample_wr = sample_q;
 
    // Normally the data file should be 16 bit samples. In byte mode
    // the data file is 8 bit samples, and all the control signals are
