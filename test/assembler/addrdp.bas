@@ -10,7 +10,7 @@ BEQ done
 PSHS A
 LDB #&00
 .loop2
-LDY #&55AA
+LDY #&FFFF
 TFR B,DP
 PULS CC
 PSHS CC
