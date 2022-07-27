@@ -106,6 +106,7 @@ typedef struct {
    int show_samplenums;
    int show_something;
    uint32_t fail_mask;
+   int fail_syncbug;
    int reg_s;
    int reg_u;
    int reg_pc;

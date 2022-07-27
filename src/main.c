@@ -158,6 +158,7 @@ enum {
    KEY_ROM_LAT,
    KEY_FUNDOC,
    KEY_FBADMODE,
+   KEY_FSYNCBUG,
    KEY_SKIP,
    KEY_SKEW,
    KEY_DATA,
@@ -226,8 +227,9 @@ static struct argp_option options[] = {
    { "cycles",      KEY_CYCLES,         0,                   0, "Show instruction cycles",                           GROUP_OUTPUT},
    { "samplenum",  KEY_SAMPLES,         0,                   0, "Show bus cycle numbers",                            GROUP_OUTPUT},
    { "showromno",  KEY_SHOWROM,         0,                   0, "Show BBC rom no for address 8000..BFFF",            GROUP_OUTPUT},
-   { "fundoc",     KEY_FUNDOC,          0,                   0, "Fail on undocumented instruction",                  GROUP_OUTPUT},
-   { "fbadmode", KEY_FBADMODE,          0,                   0, "Fail on undefined index addressing mode",           GROUP_OUTPUT},
+   { "fundoc",      KEY_FUNDOC,         0,                   0, "Fail on undocumented instruction",                  GROUP_OUTPUT},
+   { "fbadmode",  KEY_FBADMODE,         0,                   0, "Fail on undefined index addressing mode",           GROUP_OUTPUT},
+   { "fsyncbug",  KEY_FSYNCBUG,         0,                   0, "Fail on incorrect flags after sync bug",            GROUP_OUTPUT},
 
    { 0, 0, 0, 0, "Signal defintion options:", GROUP_SIGDEFS},
 
@@ -436,6 +438,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
       break;
    case KEY_FBADMODE:
       arguments->fail_mask |= FAIL_BADM;
+      break;
+   case KEY_FSYNCBUG:
+      arguments->fail_syncbug = 1;
       break;
    case KEY_TRIGGER:
       if (arg && strlen(arg) > 0) {
@@ -1152,6 +1157,7 @@ int main(int argc, char *argv[]) {
    arguments.show_cycles      = 0;
    arguments.show_samplenums  = 0;
    arguments.fail_mask        = 0xFFFFFFFF - FAIL_BADM - FAIL_UNDOC;
+   arguments.fail_syncbug     = 0;
 
    // Signal definition options
    arguments.idx_data         = UNSPECIFIED;

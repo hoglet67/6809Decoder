@@ -162,6 +162,7 @@ static int vector_base = 0xfff0;
 
 // Used to supress errors in the instruction following xxxR reg,PC
 static int async_pc_write = 0;
+static int fail_syncbug = 0;
 
 enum {
    VEC_IL   = 0x00,
@@ -657,6 +658,7 @@ static void em_6809_init(arguments_t *args) {
       vector_base = 0xf7f0; // A11 is inverted in vector pull
    }
    cpu6309 = args->cpu_type == CPU_6309 || args->cpu_type == CPU_6309E;
+   fail_syncbug = args->fail_syncbug && cpu6309;
 
    if (cpu6309) {
       cpu_state = cpu_6309_state;
@@ -1623,6 +1625,15 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
    // At this point num_cycles is the expected number of cycles (ignoring LIC)
    if (num_cycles > num_samples) {
       num_cycles = CYCLES_TRUNCATED;
+   }
+
+   // The SYNC bug occurs on the 6309 in native-mode where a single
+   // cycle instruction (e.g. CLRA) is followed immediately by a
+   // SYNC. It causes the flags to be set incorrectly.
+   //
+   // If fail_syncbug=0 then we suppress the bug setting the flags to undefined
+   if (NM == 1 && !fail_syncbug && num_cycles == 1 && sample_q[1].data == 0x13) {
+      set_NZVC_unknown();
    }
 
    // If LIC is available, we return the actual number of cycles, and validate the estimate
