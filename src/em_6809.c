@@ -696,14 +696,14 @@ static void em_6809_init(arguments_t *args) {
    }
 }
 
-static int em_6809_match_interrupt(sample_t *sample_q, int num_samples) {
+static int em_6809_match_interrupt(sample_t *sample_q, int num_samples, int pc) {
    // An interrupt always starts with the current PC being pushed to the stack
    // so check for this. This conveniently excludes CWAI, where PC+1 will be
    // pushed to the stack, to prevent the CWAI being endlessly executed.
-   if (PC >= 0) {
+   if (pc >= 0) {
       int offset = (NM == 1) ?  4 : 3;
       int pushedPC = sample_q[offset].data + (sample_q[offset + 1].data << 8);
-      if (PC != pushedPC) {
+      if (pc != pushedPC) {
          return 0;
       }
    }
@@ -1059,7 +1059,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
       return num_cycles;
    }
 
-   if ((num_cycles = em_6809_match_interrupt(sample_q, num_samples)) > 0) {
+   if ((num_cycles = em_6809_match_interrupt(sample_q, num_samples, PC)) > 0) {
       em_6809_interrupt(sample_q, num_cycles, instruction);
       return num_cycles;
    }
@@ -4995,14 +4995,14 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // Now look for an interrupt sequence in the expected place for each mode
    if (NM == 1) {
       // In native mode an interrupt is normally 22 cycles
-      if (em_6809_match_interrupt(sample + sample_q->num_cycles - 22, 22)) {
+      if (em_6809_match_interrupt(sample + sample_q->num_cycles - 22, 22, PC - 3)) {
          num_bytes = (sample_q->num_cycles - 27) / 3;
          sample_q->num_cycles -= 22;
          interrupted = 1;
       }
    } else {
       // In emulated mode an interrupt is normally 19 cycles
-      if (em_6809_match_interrupt(sample + sample_q->num_cycles - 2, 19)) {
+      if (em_6809_match_interrupt(sample + sample_q->num_cycles - 2, 19, PC - 3)) {
          num_bytes = (sample_q->num_cycles - 8) / 3;
          sample_q->num_cycles -= 2;
          interrupted = 1;
