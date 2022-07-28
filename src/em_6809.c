@@ -1640,7 +1640,7 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
    // SYNC. It causes the flags to be set incorrectly.
    //
    // If fail_syncbug=0 then we suppress the bug setting the flags to undefined
-   if (NM == 1 && !fail_syncbug && num_cycles == 1 && sample_q[1].data == 0x13) {
+   if (NM == 1 && !fail_syncbug && num_cycles == sample_ref.oi + 1 && sample_q[num_cycles].data == 0x13) {
       set_NZVC_unknown();
    }
 
