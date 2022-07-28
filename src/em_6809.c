@@ -21,7 +21,7 @@
 
 static const char cpu_6809_state[] = "A=?? B=?? X=???? Y=???? U=???? S=???? DP=?? E=? F=? H=? I=? N=? Z=? V=? C=?";
 
-static const char cpu_6309_state[] = "A=?? B=?? E=?? F=?? X=???? Y=???? U=???? S=???? DP=?? T=???? E=? F=? H=? I=? N=? Z=? V=? C=? DZ=? IL=? FM=? NM=?";
+static const char cpu_6309_state[] = "A=?? B=?? E=?? F=?? X=???? Y=???? U=???? S=???? DP=?? M=?? T=???? E=? F=? H=? I=? N=? Z=? V=? C=? DZ=? IL=? FM=? NM=?";
 
 // ====================================================================
 // Instruction cycle extras
@@ -132,6 +132,7 @@ static int S    = -1;
 static int U    = -1;
 static int DP   = -1;
 static int PC   = -1;
+static int M    = -1;
 
 // 6809 flags: -1 means unknown
 static int E    = -1;
@@ -1104,7 +1105,9 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
 
    // If there is an immediate byte (AIM/EIM/OIM/TIM only), skip past it
    if (mode == DIRECTIM || mode == EXTENDEDIM || mode == INDEXEDIM) {
-      // The byte doesn't need to be saved, because it's always read from sample_q[1]
+      // The immediate constant is held in the M register
+      M = sample_q[index].data;
+      // Memory modelling
       memory_read(sample_q + index, offset_address(PC, index), MEM_INSTR);
       index++;
       // Decrement the mode to get back to the base addressing mode
@@ -1622,6 +1625,11 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
       }
    }
 
+   if (instr->op->type == RMWOP && (instr->mode != DIRECTIM && instr->mode != EXTENDEDIM && instr->mode != INDEXEDIM)) {
+      // M register usef for the result of the RMW operation
+      M = operand2;
+   }
+
    // At this point num_cycles is the expected number of cycles (ignoring LIC)
    if (num_cycles > num_samples) {
       num_cycles = CYCLES_TRUNCATED;
@@ -1718,6 +1726,10 @@ static char *em_6809_get_state(char *buffer) {
    }
    bp += 5;
    if (cpu6309) {
+      if (M >= 0) {
+         write_hex2(bp, M);
+      }
+      bp += 5;
       if (TV >= 0) {
          write_hex4(bp, TV);
       }
@@ -3121,6 +3133,8 @@ static int op_fn_LSRB(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_MUL(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   // M register
+   M = ACCB;
    // D = A * B (unsigned)
    if (ACCA >= 0 && ACCB >= 0) {
       uint16_t tmp = ACCA * ACCB;
@@ -3703,7 +3717,7 @@ static int get_r0(int pb) {
       case  8: ret = pack(ACCA, ACCB);            break;
       case  9: ret = pack(ACCA, ACCB);            break;
       case 10: ret = get_FLAGS();                 break;
-      case 11: ret = (DP < 0) ? -1 : (DP << 8);   break;
+      case 11: ret = pack(DP, M);                 break;
       case 14: ret = pack(ACCE, ACCF);            break;
       case 15: ret = pack(ACCE, ACCF);            break;
       default: ret = 0;
@@ -4080,6 +4094,8 @@ static int op_fn_BITD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_BITMD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   // M register
+   M = operand;
    int b7 = 0;
    if (operand & 0x80) {
       b7 = DZ;
@@ -4230,6 +4246,8 @@ static int op_fn_DIVD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
    int trap = 0;
    int cycle_correction = 0;
+   int signq = 0; // Set if the quotient will be negative
+   int signr = 0; // Set if the remainder will be negative
 
    if (operand == 0) {
       // It seems Z is set in this case
@@ -4246,8 +4264,6 @@ static int op_fn_DIVD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       ACCB = -1;
       set_NZVC_unknown();
    } else {
-      int signq = 0; // Set if the quotient will be negative
-      int signr = 0; // Set if the remainder will be negative
       int a = (ACCA << 8) + ACCB; // 0x0000-0xFFFF
       int b = operand;            // 0x00-0xFF
       // Twos-complement a negative dividend
@@ -4310,6 +4326,8 @@ static int op_fn_DIVD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
       interrupt_helper(sample_q, sample_q->num_cycles - ((NM == 1) ? 18 : 16) - sample_q->oi, 1, VEC_DZ);
    }
+   // M register
+   M = signq ? 0xff : 0x00;
    return -1;
 }
 
@@ -4325,6 +4343,8 @@ static int op_fn_DIVQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
    int cycle_correction = 0;
    int trap = 0;
+   int signq = 0; // Set if the quotient will be negative
+   int signr = 0; // Set if the remainder will be negative
 
    if (operand == 0) {
       // It seems Z is set in this case
@@ -4344,8 +4364,6 @@ static int op_fn_DIVQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       ACCF = -1;
       set_NZVC_unknown();
    } else {
-      int signq = 0; // Set if the quotient will be negative
-      int signr = 0; // Set if the remainder will be negative
       uint32_t a = (ACCA << 24) + (ACCB << 16) + (ACCE << 8) + ACCF; // 0x00000000-0xFFFFFFFF
       uint32_t b = operand; // 0x0000-0xFFFF
       // Twos-complement a negative dividend
@@ -4413,6 +4431,8 @@ static int op_fn_DIVQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
       // Set bit 0 of the vector to differentiate DZ Trap from IL Trap
       interrupt_helper(sample_q, sample_q->num_cycles - ((NM == 1) ? 18 : 16) - sample_q->oi, 1, VEC_DZ);
    }
+   // M register
+   M = signq ? 0xff : 0x00;
    return -1;
 }
 
@@ -4560,6 +4580,8 @@ static int op_fn_MULD(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    }
    // Correct the number of cycles
    sample_q->num_cycles += cycle_correction;
+   // M register
+   M = sign ? 0xff : 0x00;
    return -1;
 }
 
@@ -5029,7 +5051,7 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    case 0x3B: r0inc =  0; r1inc =  1; break; // 113B TFM r0 , r1+
    }
 
-   if (num_bytes >= 0) {
+   if (num_bytes > 0) {
       for (int i = 0; i < num_bytes; i++) {
          memory_read(rd_sample, *reg0, MEM_DATA);
          rd_sample += 3;
@@ -5038,13 +5060,17 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
          wr_sample += 3;
          *reg1 = offset_address(*reg1, r1inc);
       }
-   } else {
+      // M Register
+      M = (rd_sample - 3)->data;
+   } else if (num_bytes < 0) {
       if (r0inc) {
          *reg0 = -1;
       }
       if (r1inc) {
          *reg1 = -1;
       }
+      // M Register
+      M = -1;
    }
 
    // In case D has been involved, we push the value back to ACCA/B
