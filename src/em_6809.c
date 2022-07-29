@@ -2861,6 +2861,7 @@ static int op_fn_CWAI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    sample_t *sample = sample_q->sample;
    int num_samples = sample_q->num_samples;
    int num_cycles = CYCLES_UNKNOWN;
+   // TODO: Handle running out of samples, e.g. 20220728a/random5-E.bin
    if (sample[0].bs >= 0) {
       for (int i = 1; i < num_samples; i++) {
          if (sample[i].bs == 1) {
@@ -3430,6 +3431,7 @@ static int op_fn_SYNC(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    sample_t *sample = sample_q->sample;
    int num_samples = sample_q->num_samples;
    int num_cycles = CYCLES_UNKNOWN;
+   // TODO: Handle running out of samples
    if (sample[0].ba >= 0) {
       int i = sample_q->oi + 2;
       // Look for Sync acknowledge ending (BA = 0) or the address bus changing
@@ -4988,51 +4990,34 @@ static int op_fn_TFM(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    // 1722da    0 ff  1 1 10 9
    // 1722db    0 ff  1 1 00 F
 
+   int interrupted;
+   int num_bytes;
+   if (sample->rnw >= 0) {
+      // If RnW is available, use it to check write cycles in the expected slots
+      num_bytes = 0;
+      int i = 8;
+      while (sample[i].rnw == 0 && i < sample_q->num_samples) {
+         num_bytes++;
+         i += 3;
+      }
+      interrupted = (sample[i + 1].rnw == 0);
+   } else {
+      // If RnW is not available, we can't reliably detect TFM being interrupted
+      // TODO: We could fall back to less reliable LIC if available
+      num_bytes = W;
+      interrupted = 0;
+   }
+
    // TFM - cycle count in instruction tables is 6
-   if (W >= 0) {
-      sample_q->num_cycles += 3 * W;
-   } else {
-      sample_q->num_cycles = CYCLES_UNKNOWN; // Can't determine this
-   }
+   sample_q->num_cycles += 3 * num_bytes;
 
-   // TODO: Is there a better way to detect an interrupted TFM?
-   // - a missing write cycle
-   // - two consecutive write cycles
-   // - the address pattern
-   // - the vector fetch
-
-   // If LIC is available, then using the actual cycles allows us to detect being interrupted
-   if (sample_q->sample->lic >= 0) {
-      int actual_cycles = count_cycles_with_lic(sample_q);
-      if (sample_q->num_cycles > 0 && actual_cycles != sample_q->num_cycles) {
-         // This will be canceled later, if the mismatch is due to being interupted
-         failflag |= FAIL_CYCLES;
-      }
-      sample_q->num_cycles = actual_cycles;
-   }
-
-   // Assume we are not interrupted
-   int interrupted = 0;
-   int num_bytes = W;
-   // Now look for an interrupt sequence in the expected place for each mode
-   if (NM == 1) {
-      // In native mode an interrupt is normally 22 cycles
-      if (em_6809_match_interrupt(sample + sample_q->num_cycles - 22, 22, PC - 3)) {
-         num_bytes = (sample_q->num_cycles - 27) / 3;
-         sample_q->num_cycles -= 22;
-         interrupted = 1;
-      }
-   } else {
-      // In emulated mode an interrupt is normally 19 cycles
-      if (em_6809_match_interrupt(sample + sample_q->num_cycles - 2, 19, PC - 3)) {
-         num_bytes = (sample_q->num_cycles - 8) / 3;
-         sample_q->num_cycles -= 2;
-         interrupted = 1;
-      }
-   }
-
-   // Handle the case where the common actions when TFM is interrupted in either bode
+   // Handle the case where the common actions when TFM is interrupted in either mode
    if (interrupted) {
+      // In native mode, the interrupted PC write is expected at offset 4, so we adjust num_cycles so this is true
+      if (NM == 1) {
+         sample_q->num_cycles--;
+      }
+
       // set the PC back three cycles (the length of TFM), so the TFM re-executes after the RTI
       if (PC >= 0) {
          PC = (PC - 3) & 0xffff;
