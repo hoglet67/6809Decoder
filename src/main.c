@@ -76,6 +76,9 @@ int triggered = 0;
 // indicate state prediction failed
 uint32_t failflag = 0;
 
+// count of total number of instructions
+uint64_t num_instructions = 0;
+
 // ====================================================================
 // Argp processing
 // ====================================================================
@@ -704,7 +707,10 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
       // End the line
       *bp++ = 0;
       puts(disbuf);
+   }
 
+   if (triggered) {
+      num_instructions++;
    }
 
    if (triggered && pc >= 0 && pc == arguments.trigger_stop) {
@@ -1383,6 +1389,7 @@ int main(int argc, char *argv[]) {
 
    decode(stream);
    fclose(stream);
+   printf("num_instructions = %"PRIu64"\n", num_instructions);
 
    return 0;
 }
