@@ -2,28 +2,33 @@ FOR I%=&10 TO &13 STEP 3
 P%=&3000
 [OPT I%
 .test
-ORCC  #&50
-LDX #cc_vals
+ORCC #&50
+LDMD #&00
+CLRA
+STA  &80
+COM  &80
+LDY  #cc_vals
 .loop1
-LDA ,X+
+LDA  ,Y+
 BEQ done
 PSHS A
-LDB #&00
+LDB  #&00
 .loop2
-LDY #&FFFF
-TFR B,DP
+LDX  #&0000
+TFR  B,DP
 PULS CC
 PSHS CC
-ADDR DP,Y
-PSHS CC,Y
-PULS CC,Y
+ADDR DP,X
+PSHS CC,X
+PULS CC,X
 INCB
 BNE loop2
 PULS A
 BRA loop1
 .done
 CLRA
-TFR A,DP
+TFR  A,DP
+LDMD #&01
 ANDCC #&AF
 RTS
 .cc_vals
