@@ -30,12 +30,6 @@ RESET  ;; Push all the registers so we expose state
        ORA   #$10
        STA   $FE31
 
-       ;; Clear unused regsters to avoid false memory errors
-       LDU   #$4000
-       LDW   #$0000
-       LDY   #$0000
-       TFR   Y,V
-
        ;; Clear the screen and set the counter
        LDX   #$7C00
        LDA   #'0'
@@ -51,7 +45,7 @@ CLEAR2
 
 PROT
        ;; Clear the data pointer, so the PRBS seed is accessible
-       CLR   A
+       CLRA
        TFR   A,DP
        JSR   ctrInc
 
@@ -77,6 +71,16 @@ writeLoop
        CMPX #TEST+$80
        BNE  writeLoop
 
+       ;; Clear unused regsters to avoid false memory errors
+       LDU   #$4000
+       LDW   #$0000
+       LDY   #$0000
+       TFR   Y,V
+
+       ;; Set the new M register to $AA
+       LDA  #$55
+       STA  $0000
+       COM  $0000
 
        JMP  TEST
 
@@ -129,16 +133,27 @@ ctrLoop
 ctrDone
       RTS
 
-
 ILL_HANDLER
+      LDX #$0000
+      ADDR DP,X
+      PSHS X
+      PULS X
+      LDX #$0000
+      ADDR CC,X
+      PSHS X
+      PULS X
       RTI
 SWI3_HANDLER
+      NOP
       RTI
 SWI2_HANDLER
+      NOP
       RTI
 FIRQ_HANDLER
+      NOP
       RTI
 IRQ_HANDLER
+      NOP
       PSHS A
       LDA #$7F
       STA $FE4D
@@ -146,10 +161,13 @@ IRQ_HANDLER
       PULS A
       RTI
 SWI_HANDLER
+      NOP
       RTI
 NMI_HANDLER
+      NOP
       JMP RESET
 RST_HANDLER
+      NOP
       JMP RESET
 
       ORG $F7F0
