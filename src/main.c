@@ -565,7 +565,6 @@ int write_s(char *buffer, const char *s) {
 }
 
 static int analyze_instruction(sample_t *sample_q, int num_samples) {
-   static int total_cycles = 0;
    static int interrupt_depth = 0;
    static int skipping_interrupted = 0;
 
@@ -597,7 +596,7 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
 
    if (!triggered && pc >= 0 && pc == arguments.trigger_start) {
       triggered = 1;
-      printf("start trigger hit at cycle %d\n", total_cycles);
+      printf("start trigger hit at sample %08x\n", sample_q->sample_count);
       memory_set_modelling ( arguments.mem_model       & 0x0f);
       memory_set_rd_logging((arguments.mem_model >> 4) & 0x0f);
       memory_set_wr_logging((arguments.mem_model >> 8) & 0x0f);
@@ -630,7 +629,7 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
       int numchars = 0;
       // Show cumulative sample number
       if (arguments.show_samplenums) {
-         bp += sprintf(bp, "%8d", sample_q->sample_count);
+         bp += sprintf(bp, "%08X", sample_q->sample_count);
          *bp++ = ' ';
          *bp++ = ':';
          *bp++ = ' ';
@@ -710,12 +709,11 @@ static int analyze_instruction(sample_t *sample_q, int num_samples) {
 
    if (triggered && pc >= 0 && pc == arguments.trigger_stop) {
       triggered = 0;
-      printf("stop trigger hit at cycle %d\n", total_cycles);
+      printf("stop trigger hit at sample %08x\n", sample_q->sample_count);
       memory_set_rd_logging(0);
       memory_set_wr_logging(0);
    }
 
-   total_cycles += num_cycles;
    return num_cycles;
 }
 
