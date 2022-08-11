@@ -1377,13 +1377,25 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
                   }
                   break;
                case 7:                 /* E,R */
-                  if (cpu6309 && *reg >= 0 && ACCE >= 0) {
-                     // The accumulator is treated as a 8-bit signed offset (!!!)
-                     int offset = ACCE;
-                     if (offset & 0x80) {
-                        offset -= 0x100;
+                  if (cpu6309) {
+                     if (*reg >= 0 && ACCE >= 0) {
+                        // The accumulator is treated as a 8-bit signed offset (!!!)
+                        int offset = ACCE;
+                        if (offset & 0x80) {
+                           offset -= 0x100;
+                        }
+                        ea = (*reg + offset) & 0xffff;
                      }
-                     ea = (*reg + offset) & 0xffff;
+                  } else {
+                     // Ref: David Flamand's Undocumented 6809 Paper
+                     if (*reg >= 0 && ACCA >= 0) {
+                        // The accumulator is treated as a 8-bit signed offset (!!!)
+                        int offset = ACCA;
+                        if (offset & 0x80) {
+                           offset -= 0x100;
+                        }
+                        ea = (*reg + offset) & 0xffff;
+                     }
                   }
                   break;
                case 8:                 /* n7,R */
@@ -1397,13 +1409,23 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
                   }
                   break;
                case 10:                /* F,R */
-                  if (cpu6309 && *reg >= 0 && ACCF >= 0) {
-                     // The accumulator is treated as a 8-bit signed offset (!!!)
-                     int offset = ACCF;
-                     if (offset & 0x80) {
-                        offset -= 0x100;
+                  if (cpu6309) {
+                     if (*reg >= 0 && ACCF >= 0) {
+                        // The accumulator is treated as a 8-bit signed offset (!!!)
+                        int offset = ACCF;
+                        if (offset & 0x80) {
+                           offset -= 0x100;
+                        }
+                        ea = (*reg + offset) & 0xffff;
                      }
-                     ea = (*reg + offset) & 0xffff;
+                  } else {
+                     // Ref: David Flamand's Undocumented 6809 Paper
+                     if (PC >= 0) {
+                        ea = ((PC + 1) | 0x00ff) & 0xffff;
+                        if (ACCA >= 0) {
+                           ACCA &= sample_q[oi + 2].data;
+                        }
+                     }
                   }
                   break;
                case 11:                /* D,R */
@@ -1422,8 +1444,13 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
                   }
                   break;
                case 14:                /* W,R */
-                  if (cpu6309 && *reg >= 0 && ACCE >= 0 && ACCF >= 0) {
-                     ea = (*reg + (ACCE << 8) + ACCF) & 0xffff;
+                  if (cpu6309) {
+                     if (*reg >= 0 && ACCE >= 0 && ACCF >= 0) {
+                        ea = (*reg + (ACCE << 8) + ACCF) & 0xffff;
+                     }
+                  } else {
+                     // Ref: David Flamand's Undocumented 6809 Paper
+                     ea = 0xffff;
                   }
                   break;
                case 15:                /* [n] */
