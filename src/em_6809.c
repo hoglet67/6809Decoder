@@ -778,7 +778,10 @@ static int em_6809_match_reset(sample_t *sample_q, int num_samples) {
          // The vector is the first change of the address bus
       }
       if (sample_q[i].ba < 1 && sample_q[i].bs == 1 && sample_q[i].addr == 0x0E) {
-         return i + 3;
+         // Avoid matching XRES on the 6809 (opcode 0x3e, length 19)
+         if (cpu6309 || sample_q[0].data != 0x3E || i != 16) {
+            return i + 3;
+         }
       }
    }
    return 0;
