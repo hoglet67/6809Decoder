@@ -3555,21 +3555,39 @@ static int op_fn_XHCF(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    return -1;
 }
 
-// Opcode $18 affects only the Condition Codes register (CC). The
-// value in the Overflow bit (V) is shifted into the Zero bit (Z)
-// while the value in the IRQ Mask bit (I) is shifted into the Half
-// Carry bit (H). All other bits in the CC register are
-// cleared. Execution of this opcode takes 3 MPU cycles.
+// Opcode $18 affects only the Condition Codes register (CC).
+//
+// This behaviour was discovered by David Flamand
+//
+// Left Shift And CC (LSACC), take 3 cycles.
+// CC.E' = (CC.F & B6)
+// CC.F' = (CC.H & B5)
+// CC.H' = (CC.I & B4)
+// CC.I' = (CC.N & B3)
+// CC.N' = (CC.Z & B2)
+// CC.Z' = (CC.V & B1)
+// CC.V' = (CC.C & B0) | (CC.Z & B2)
+// CC.C' = 0
+// B0 to B6 are the bits from the byte following this opcode.
+//
+// The previous understanding was always tested with the following
+// instruction being an NOP (0x12), so all bits apart from H and Z
+// were cleared.
+//
+// Execution of this opcode takes 3 MPU cycles.
 
 static int op_fn_X18(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   E = 0; // Bit 7
-   F = 0;
-   H = I;
-   I = 0;
-   N = 0;
-   Z = V;
-   V = 0;
-   C = 0; // Bit 0
+   uint8_t b = (sample_q->sample + sample_q->oi + 1)->data;
+   int tmp1 = (b & 0x01) ? C : 0;
+   int tmp2 = (b & 0x04) ? Z : 0;
+   E = (b & 0x40) ? F : 0; // Bit 7
+   F = (b & 0x20) ? H : 0;
+   H = (b & 0x10) ? I : 0;
+   I = (b & 0x08) ? N : 0;
+   N = (b & 0x04) ? Z : 0;
+   Z = (b & 0x02) ? V : 0;
+   V = (tmp1 == 1 || tmp2 == 1) ? 1 : (tmp1 == 0 && tmp2 == 0) ? 0 : -1;
+   C = 0;                  // Bit 0
    return -1;
 }
 
