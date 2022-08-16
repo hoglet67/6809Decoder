@@ -26,6 +26,10 @@ RESET  ;; Push all the registers so we expose state
        BITA  #$10
        BNE   PROT
 
+       ;; Enable reset from config pin 14
+       LDB   #$FF
+       STB   $FE35
+
        ;; Set the write protect bit (just once!)
        ORA   #$10
        STA   $FE31
