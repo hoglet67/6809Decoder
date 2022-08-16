@@ -174,7 +174,8 @@ enum {
    VEC_IRQ  = 0x08,
    VEC_SWI  = 0x0A,
    VEC_NMI  = 0x0C,
-   VEC_RST  = 0x0E
+   VEC_RST  = 0x0E,
+   VEC_XRST = 0x0F  // the LSB ends up being masked off
 };
 
 // ====================================================================
@@ -948,8 +949,10 @@ static int interrupt_helper(sample_q_t *sample_q, int offset, int full, int vect
          failflag |= FAIL_ACCA;
       }
       ACCA = a;
-      // Set E to indicate the full state was saved
-      E = 1;
+      // Set E to indicate the full state was saved (apart from for XRES)
+      if (vector != VEC_XRST) {
+         E = 1;
+      }
    } else {
       // Clear E to indicate just PC/flags were saved
       E = 0;
@@ -972,9 +975,10 @@ static int interrupt_helper(sample_q_t *sample_q, int offset, int full, int vect
    // Is it a division by zero trap?
    if (vector == VEC_DZ) {
       DZ = 1;
-      // Shares the illegal instruction vector
-      vector = VEC_IL;
    }
+
+   // Mask off the LSB of the vector, which is used as a flag
+   vector &= 0xFFFE;
 
    // Read the vector and compare against what's expected
    int vechi = sample[i].data;
@@ -3624,7 +3628,7 @@ static int op_fn_X8C7(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 //      $11 $3e invokes the FIQ trap
 
 static int op_fn_XRES(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   interrupt_helper(sample_q, 3, 1, VEC_RST);
+   interrupt_helper(sample_q, 3, 1, VEC_XRST);
    return -1;
 }
 
