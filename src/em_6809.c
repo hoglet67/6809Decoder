@@ -3052,19 +3052,72 @@ static int op_fn_EORB(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 // Operand is the postbyte
 static int op_fn_EXG(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    int reg1 = (operand >> 4) & 15;
-   int reg2 = operand  & 15;
-   // According to Atkinson, page 66, there is a 6809 corner case where:
-   //   EXC A,D
-   // should behave as:
-   //   EXC A,B
-   // i.e. do A<==>B
-   if (!cpu6309 && reg1 == 8 && reg2 == 0) {
-      reg2 = 9;
+   int reg2 = operand & 15;
+
+   if (cpu6309) {
+      int tmp1 = get_regp(reg1);
+      int tmp2 = get_regp(reg2);
+      set_regp(reg1, tmp2);
+      set_regp(reg2, tmp1);
+   } else {
+      // According to Atkinson, page 66, there is a 6809 corner case where:
+      //   EXC A,D
+      // should behave as:
+      //   EXC A,B
+      // i.e. do A<==>B
+
+      // According to David Flamand:
+      //
+      // Exchange is implemented as a triple transfer where:
+      //   Source [3-0] -> TEMP
+      //   Source [7-4] -> Destination [3-0]
+      //           TEMP -> Destination [7-4]
+      // The following rules apply to TFR and EXG instruction:
+      //
+      // 1. Transferring from an undefined register, the value $FF or
+      // $FFFF is transferred depending on the destination register
+      // size.
+      //
+      // 2. Transferring to an undefined register is a no operation.
+      //
+      // 3. Transferring to from a 16-bit to a 8-bit register, only
+      // the source LSB is transferred.
+      //
+      // 4. Transferring from A or B or TEMP to a 16-bit register, the
+      // source is transferred into LSB, MSB is set to $FF.
+      //
+      // 5. Transferring from CC or DP to a 16-bit register, the
+      // source is transferred into LSB and MSB.
+      //
+      // That is EXG X,DP and EXG DP,X give different result. (rule
+      // 3,4 and 5,3 respectively)
+
+      // Examples: EXG reg1, reg2
+      // (reg1 = [7:4] and reg2 = [3:0])
+
+      // EXG X, DP
+      //   DP -> temp (temp = DPDP )
+      //    X -> DP      DP =   XL )
+      // temp -> X        X = FFDP )
+
+      // EXG DP, X
+      //    X -> temp (temp = XHXL )
+      //   DP -> X    (X    = DPDP )
+      // temp -> DP   (DP   =   XL )
+
+      // EXG A, D
+      //    D -> temp (temp = AABB )
+      //    A -> D    (   D = FFAA )
+      // temp -> A    (   A = BB   )
+
+      int tmp = get_regp(reg2);
+      set_regp(reg2, get_regp(reg1));
+      // Special case reg2 (8 bits) => reg1 (16 bits)
+      if (tmp >= 0 && reg2 >= 8 && reg1 < 8) {
+         tmp |= 0xFF00;
+      }
+      set_regp(reg1, tmp);
    }
-   int tmp1 = get_regp(reg1);
-   int tmp2 = get_regp(reg2);
-   set_regp(reg1, tmp2);
-   set_regp(reg2, tmp1);
    return -1;
 }
 
