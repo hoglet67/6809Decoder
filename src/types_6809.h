@@ -35,6 +35,22 @@ typedef enum {
    OTHER
 } optype_t;
 
+// If the following instruction is store immediate
+// then the flags are set as follows:
+typedef enum {
+   GRP_DEFAULT,    // N=1 Z=0
+   GRP_N0_Z1,      // N=0 Z=1
+   GRP_A_00,       // NZ based on A==00 test
+   GRP_A_FF,       // NZ based on A==FF test
+   GRP_A_01,       // NZ based on A==01 test
+   GRP_B_01,       // NZ based on B==01 test
+   GRP_R16_01,     // NZ based on <last 16 bit result>=01 test
+   GRP_LEAU,       // NZ based on U
+   GRP_LEAS,       // NZ based on S
+   GRP_LEAX,       // NZ based on X
+   GRP_LEAY,       // NZ based on Y
+} storeimm_t;
+
 typedef int operand_t;
 
 typedef int ea_t;
@@ -57,6 +73,7 @@ typedef struct {
    int (*emulate)(operand_t, ea_t, sample_q_t *);
    optype_t type;
    opsize_t size;
+   storeimm_t storeimm;
 } operation_t;
 
 typedef struct {

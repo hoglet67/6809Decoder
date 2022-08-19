@@ -165,6 +165,10 @@ static int vector_base = 0xfff0;
 static int async_pc_write = 0;
 static int fail_syncbug = 0;
 
+// Used to set the flags on Store Immediare
+static storeimm_t storeimm = GRP_DEFAULT;
+static int last_res16 = 0;
+
 enum {
    VEC_IL   = 0x00,
    VEC_DZ   = 0x01, // the LSB ends up being masked off
@@ -1699,6 +1703,11 @@ static int em_6809_emulate(sample_t *sample_q, int num_samples, instruction_t *i
       failflag = 0;
    }
 
+
+   // Save store immediate group of this instruction, in case
+   // next instruction is a store immediate
+   storeimm = instr->op->storeimm;
+
    // Return a possibly updates estimate of the number of cycles
    return num_cycles;
 }
@@ -1898,6 +1907,8 @@ static int add16_helper(int val, int cin, int operand) {
       tmp &= 0xffff;
       // Set the flags
       set_NZ16(tmp);
+      // Used for the weird flags on store immediate
+      last_res16 = tmp;
       // Return the 16-bit result
       return tmp;
    } else {
@@ -2031,6 +2042,8 @@ static void cmp16_helper(int val, operand_t operand) {
       V = (((val ^ operand ^ tmp) >> 15) & 1) ^ C;
       tmp &= 0xffff;
       set_NZ16(tmp);
+      // Used for the weird flags on store immediate
+      last_res16 = tmp;
    } else {
       set_NZVC_unknown();
    }
@@ -3650,18 +3663,93 @@ static int op_fn_X18(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    return -1;
 }
 
-// Opcodes $87 and $C7 read and discard an 8-bit Immediate operand
-// which follows the opcode. The value of the immediate byte is
-// irrelevant. The Negative bit (N) in the CC register is always set,
-// while the Zero (Z) and Overflow (V) bits are always cleared. No
-// other bits in the Condition Codes register are affected. Each of
-// these opcodes execute in 2 MPU cycles.
+static void set_storeimm_flags_lea(int r, int complex_v) {
+   if (r < 0) {
+      set_NZ_unknown();
+   } else {
+      r = (r | (r >> 8)) & 0xff;
+      set_NZ((r - 1) & 0xFF);
+      if (complex_v) {
+         V = (r == 0x80);
+      }
+   }
+}
 
-static int op_fn_X8C7(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   N = 1;
-   Z = 0;
+static void set_storeimm_flags(int op0, int complex_v) {
+   int tmp;
+   // V is 0, with a few exceptions
    V = 0;
-   return -1;
+   if (op0 == 0x10 || op0 == 0x11) {
+      // If there is a prefix, the behaviour is as expected
+      N = 1;
+      Z = 0;
+   } else {
+      // If there is no prefix, then  the flags depend on the previous instruction
+      switch (storeimm) {
+      case GRP_DEFAULT:
+         N = 1;
+         Z = 0;
+         break;
+      case GRP_N0_Z1:
+         N = 0;
+         Z = 1;
+         break;
+      case GRP_A_00:
+         if (ACCA < 0) {
+            set_NZ_unknown();
+         } else {
+            set_NZ(ACCA);
+         }
+         break;
+      case GRP_A_FF:
+         if (ACCA < 0) {
+            set_NZ_unknown();
+         } else {
+            Z = (ACCA == 0xFF);
+            N = (ACCA < 0x80);
+         }
+         break;
+      case GRP_A_01:
+         if (ACCA < 0) {
+            set_NZV_unknown();
+         } else {
+            set_NZ((ACCA - 1) & 0xFF);
+            if (complex_v) {
+               V = (ACCA == 0x80);
+            }
+         }
+         break;
+      case GRP_B_01:
+         if (ACCB < 0) {
+            set_NZV_unknown();
+         } else {
+            set_NZ((ACCB - 1) & 0xFF);
+            if (complex_v) {
+               V = (ACCB == 0x80);
+            }
+         }
+         break;
+      case GRP_R16_01:
+         tmp = last_res16 >> 8;
+         set_NZ((tmp - 1) & 0xFF);
+         if (complex_v) {
+            V = (tmp == 0x80);
+         }
+         break;
+      case GRP_LEAU:
+         set_storeimm_flags_lea(U, complex_v);
+         break;
+      case GRP_LEAS:
+         set_storeimm_flags_lea(S, complex_v);
+         break;
+      case GRP_LEAX:
+         set_storeimm_flags_lea(X, complex_v);
+         break;
+      case GRP_LEAY:
+         set_storeimm_flags_lea(Y, complex_v);
+         break;
+      }
+   }
 }
 
 // Opcode $3E is similar to the SWI instruction. It stacks the Entire
@@ -3689,38 +3777,68 @@ static int op_fn_XFIQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    return -1;
 }
 
+// Opcodes $87 and $C7 read and discard an 8-bit Immediate operand
+// which follows the opcode. The value of the immediate byte is
+// irrelevant.
+//
+// The flag behaviour is complex, and can depend on the previous
+// instruction.
+//
+// Each ofthese opcodes execute in 2 MPU cycles.
+
+static int op_fn_X87(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   set_storeimm_flags(sample_q->sample->data, 1);
+   return -1;
+}
+
+static int op_fn_XC7(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   set_storeimm_flags(sample_q->sample->data, 1);
+   return -1;
+}
+
 // Opcodes $8F and $CF are STX Immediate and STU Immediate
 // respectively. These instructions are partially functional. Two
 // bytes of immediate data follow the opcode. The first immediate byte
 // is read and discarded by the instruction. The lower half (LSB) of
 // the X or U register is then written into the second immediate
-// byte. The Negative bit (N) in the CC register is always set, while
-// the Zero (Z) and Overflow (V) bits are always cleared. No other
-// bits in the Condition Codes register are affected. Each of these
-// opcodes execute in 3 MPU cycles.
+// byte.
+//
+// The flag behaviour is complex, and can depend on the previous
+// instruction.
+//
+// Each of these opcodes execute in 3 MPU cycles.
+
+static int op_fn_XSTX(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   set_storeimm_flags(sample_q->sample->data, 0);
+   return X & 0xff;
+}
+
+static int op_fn_XSTU(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   set_storeimm_flags(sample_q->sample->data, 0);
+   return U & 0xff;
+}
+
+// Opcodes $108F and $10CF are STY Immediate and STS Immediate
+// respectively. These instructions are partially functional. Two
+// bytes of immediate data follow the opcode. The first immediate byte
+// is read and discarded by the instruction. The lower half (LSB) of
+// the Y or S register is then written into the second immediate
+// byte.
+//
+// The flag behaviour is simple due to the prefix.
+//
+// Each of these opcodes execute in 3 MPU cycles.
 
 static int op_fn_XSTS(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   // There is a prefix, so no complex flag behaviour
    N = 1;
    Z = 0;
    V = 0;
    return S & 0xff;
 }
 
-static int op_fn_XSTU(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   N = 1;
-   Z = 0;
-   V = 0;
-   return U & 0xff;
-}
-
-static int op_fn_XSTX(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   N = 1;
-   Z = 0;
-   V = 0;
-   return X & 0xff;
-}
-
 static int op_fn_XSTY(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+   // There is a prefix, so no complex flag behaviour
    N = 1;
    Z = 0;
    V = 0;
@@ -5218,249 +5336,250 @@ static int op_fn_TSTW(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 // Opcode Tables
 // ====================================================================
 
-static operation_t op_ABX   = { "ABX",   op_fn_ABX ,     REGOP , 0 };
-static operation_t op_ADCA  = { "ADCA",  op_fn_ADCA,    READOP , 0 };
-static operation_t op_ADCB  = { "ADCB",  op_fn_ADCB,    READOP , 0 };
-static operation_t op_ADDA  = { "ADDA",  op_fn_ADDA,    READOP , 0 };
-static operation_t op_ADDB  = { "ADDB",  op_fn_ADDB,    READOP , 0 };
-static operation_t op_ADDD  = { "ADDD",  op_fn_ADDD,    READOP , 1 };
-static operation_t op_ANDA  = { "ANDA",  op_fn_ANDA,    READOP , 0 };
-static operation_t op_ANDB  = { "ANDB",  op_fn_ANDB,    READOP , 0 };
-static operation_t op_ANDC  = { "ANDC",  op_fn_ANDC,     REGOP , 0 };
-static operation_t op_ASL   = { "ASL",   op_fn_ASL ,     RMWOP , 0 };
-static operation_t op_ASLA  = { "ASLA",  op_fn_ASLA,     REGOP , 0 };
-static operation_t op_ASLB  = { "ASLB",  op_fn_ASLB,     REGOP , 0 };
-static operation_t op_ASR   = { "ASR",   op_fn_ASR ,     RMWOP , 0 };
-static operation_t op_ASRA  = { "ASRA",  op_fn_ASRA,     REGOP , 0 };
-static operation_t op_ASRB  = { "ASRB",  op_fn_ASRB,     REGOP , 0 };
-static operation_t op_BCC   = { "BCC",   op_fn_BCC ,  BRANCHOP , 0 };
-static operation_t op_BEQ   = { "BEQ",   op_fn_BEQ ,  BRANCHOP , 0 };
-static operation_t op_BGE   = { "BGE",   op_fn_BGE ,  BRANCHOP , 0 };
-static operation_t op_BGT   = { "BGT",   op_fn_BGT ,  BRANCHOP , 0 };
-static operation_t op_BHI   = { "BHI",   op_fn_BHI ,  BRANCHOP , 0 };
-static operation_t op_BITA  = { "BITA",  op_fn_BITA,    READOP , 0 };
-static operation_t op_BITB  = { "BITB",  op_fn_BITB,    READOP , 0 };
-static operation_t op_BLE   = { "BLE",   op_fn_BLE ,  BRANCHOP , 0 };
-static operation_t op_BLO   = { "BLO",   op_fn_BLO ,  BRANCHOP , 0 };
-static operation_t op_BLS   = { "BLS",   op_fn_BLS ,  BRANCHOP , 0 };
-static operation_t op_BLT   = { "BLT",   op_fn_BLT ,  BRANCHOP , 0 };
-static operation_t op_BMI   = { "BMI",   op_fn_BMI ,  BRANCHOP , 0 };
-static operation_t op_BNE   = { "BNE",   op_fn_BNE ,  BRANCHOP , 0 };
-static operation_t op_BPL   = { "BPL",   op_fn_BPL ,  BRANCHOP , 0 };
-static operation_t op_BRA   = { "BRA",   op_fn_BRA ,  BRANCHOP , 0 };
-static operation_t op_BRN   = { "BRN",   op_fn_BRN ,  BRANCHOP , 0 };
-static operation_t op_BSR   = { "BSR",   op_fn_BSR ,     JSROP , 1 };
-static operation_t op_BVC   = { "BVC",   op_fn_BVC ,  BRANCHOP , 0 };
-static operation_t op_BVS   = { "BVS",   op_fn_BVS ,  BRANCHOP , 0 };
-static operation_t op_CLR   = { "CLR",   op_fn_CLR ,     RMWOP , 0 };
-static operation_t op_CLRA  = { "CLRA",  op_fn_CLRA,     REGOP , 0 };
-static operation_t op_CLRB  = { "CLRB",  op_fn_CLRB,     REGOP , 0 };
-static operation_t op_CMPA  = { "CMPA",  op_fn_CMPA,    READOP , 0 };
-static operation_t op_CMPB  = { "CMPB",  op_fn_CMPB,    READOP , 0 };
-static operation_t op_CMPD  = { "CMPD",  op_fn_CMPD,    READOP , 1 };
-static operation_t op_CMPS  = { "CMPS",  op_fn_CMPS,    READOP , 1 };
-static operation_t op_CMPU  = { "CMPU",  op_fn_CMPU,    READOP , 1 };
-static operation_t op_CMPX  = { "CMPX",  op_fn_CMPX,    READOP , 1 };
-static operation_t op_CMPY  = { "CMPY",  op_fn_CMPY,    READOP , 1 };
-static operation_t op_COM   = { "COM",   op_fn_COM ,     RMWOP , 0 };
-static operation_t op_COMA  = { "COMA",  op_fn_COMA,     REGOP , 0 };
-static operation_t op_COMB  = { "COMB",  op_fn_COMB,     REGOP , 0 };
-static operation_t op_CWAI  = { "CWAI",  op_fn_CWAI,     OTHER , 0 };
-static operation_t op_DAA   = { "DAA",   op_fn_DAA ,     REGOP , 0 };
-static operation_t op_DEC   = { "DEC",   op_fn_DEC ,     RMWOP , 0 };
-static operation_t op_DECA  = { "DECA",  op_fn_DECA,     REGOP , 0 };
-static operation_t op_DECB  = { "DECB",  op_fn_DECB,     REGOP , 0 };
-static operation_t op_EORA  = { "EORA",  op_fn_EORA,    READOP , 0 };
-static operation_t op_EORB  = { "EORB",  op_fn_EORB,    READOP , 0 };
-static operation_t op_EXG   = { "EXG",   op_fn_EXG ,     REGOP , 0 };
-static operation_t op_INC   = { "INC",   op_fn_INC ,     RMWOP , 0 };
-static operation_t op_INCA  = { "INCA",  op_fn_INCA,     REGOP , 0 };
-static operation_t op_INCB  = { "INCB",  op_fn_INCB,     REGOP , 0 };
-static operation_t op_JMP   = { "JMP",   op_fn_JMP ,     LEAOP , 0 };
-static operation_t op_JSR   = { "JSR",   op_fn_JSR ,     JSROP , 1 };
-static operation_t op_LBCC  = { "LBCC",  op_fn_BCC ,  BRANCHOP , 0 };
-static operation_t op_LBEQ  = { "LBEQ",  op_fn_BEQ ,  BRANCHOP , 0 };
-static operation_t op_LBGE  = { "LBGE",  op_fn_BGE ,  BRANCHOP , 0 };
-static operation_t op_LBGT  = { "LBGT",  op_fn_BGT ,  BRANCHOP , 0 };
-static operation_t op_LBHI  = { "LBHI",  op_fn_BHI ,  BRANCHOP , 0 };
-static operation_t op_LBLE  = { "LBLE",  op_fn_BLE ,  BRANCHOP , 0 };
-static operation_t op_LBLO  = { "LBLO",  op_fn_BLO ,  BRANCHOP , 0 };
-static operation_t op_LBLS  = { "LBLS",  op_fn_BLS ,  BRANCHOP , 0 };
-static operation_t op_LBLT  = { "LBLT",  op_fn_BLT ,  BRANCHOP , 0 };
-static operation_t op_LBMI  = { "LBMI",  op_fn_BMI ,  BRANCHOP , 0 };
-static operation_t op_LBNE  = { "LBNE",  op_fn_BNE ,  BRANCHOP , 0 };
-static operation_t op_LBPL  = { "LBPL",  op_fn_BPL ,  BRANCHOP , 0 };
-static operation_t op_LBRA  = { "LBRA",  op_fn_BRA ,  BRANCHOP , 0 };
-static operation_t op_LBRN  = { "LBRN",  op_fn_BRN ,  BRANCHOP , 0 };
-static operation_t op_LBSR  = { "LBSR",  op_fn_BSR ,     JSROP , 1 };
-static operation_t op_LBVC  = { "LBVC",  op_fn_BVC ,  BRANCHOP , 0 };
-static operation_t op_LBVS  = { "LBVS",  op_fn_BVS ,  BRANCHOP , 0 };
-static operation_t op_LDA   = { "LDA",   op_fn_LDA ,    LOADOP , 0 };
-static operation_t op_LDB   = { "LDB",   op_fn_LDB ,    LOADOP , 0 };
-static operation_t op_LDD   = { "LDD",   op_fn_LDD ,    LOADOP , 1 };
-static operation_t op_LDS   = { "LDS",   op_fn_LDS ,    LOADOP , 1 };
-static operation_t op_LDU   = { "LDU",   op_fn_LDU ,    LOADOP , 1 };
-static operation_t op_LDX   = { "LDX",   op_fn_LDX ,    LOADOP , 1 };
-static operation_t op_LDY   = { "LDY",   op_fn_LDY ,    LOADOP , 1 };
-static operation_t op_LEAS  = { "LEAS",  op_fn_LEAS,     LEAOP , 0 };
-static operation_t op_LEAU  = { "LEAU",  op_fn_LEAU,     LEAOP , 0 };
-static operation_t op_LEAX  = { "LEAX",  op_fn_LEAX,     LEAOP , 0 };
-static operation_t op_LEAY  = { "LEAY",  op_fn_LEAY,     LEAOP , 0 };
-static operation_t op_LSR   = { "LSR",   op_fn_LSR ,     RMWOP , 0 };
-static operation_t op_LSRA  = { "LSRA",  op_fn_LSRA,     REGOP , 0 };
-static operation_t op_LSRB  = { "LSRB",  op_fn_LSRB,     REGOP , 0 };
-static operation_t op_MUL   = { "MUL",   op_fn_MUL ,     REGOP , 0 };
-static operation_t op_NEG   = { "NEG",   op_fn_NEG ,     RMWOP , 0 };
-static operation_t op_NEGA  = { "NEGA",  op_fn_NEGA,     REGOP , 0 };
-static operation_t op_NEGB  = { "NEGB",  op_fn_NEGB,     REGOP , 0 };
-static operation_t op_NOP   = { "NOP",   op_fn_NOP ,     REGOP , 0 };
-static operation_t op_ORA   = { "ORA",   op_fn_ORA ,    READOP , 0 };
-static operation_t op_ORB   = { "ORB",   op_fn_ORB ,    READOP , 0 };
-static operation_t op_ORCC  = { "ORCC",  op_fn_ORCC,     REGOP , 0 };
-static operation_t op_PSHS  = { "PSHS",  op_fn_PSHS,     OTHER , 0 };
-static operation_t op_PSHU  = { "PSHU",  op_fn_PSHU,     OTHER , 0 };
-static operation_t op_PULS  = { "PULS",  op_fn_PULS,     OTHER , 0 };
-static operation_t op_PULU  = { "PULU",  op_fn_PULU,     OTHER , 0 };
-static operation_t op_ROL   = { "ROL",   op_fn_ROL ,     RMWOP , 0 };
-static operation_t op_ROLA  = { "ROLA",  op_fn_ROLA,     REGOP , 0 };
-static operation_t op_ROLB  = { "ROLB",  op_fn_ROLB,     REGOP , 0 };
-static operation_t op_ROR   = { "ROR",   op_fn_ROR ,     RMWOP , 0 };
-static operation_t op_RORA  = { "RORA",  op_fn_RORA,     REGOP , 0 };
-static operation_t op_RORB  = { "RORB",  op_fn_RORB,     REGOP , 0 };
-static operation_t op_RTI   = { "RTI",   op_fn_RTI ,     OTHER , 0 };
-static operation_t op_RTS   = { "RTS",   op_fn_RTS ,     OTHER , 0 };
-static operation_t op_SBCA  = { "SBCA",  op_fn_SBCA,    READOP , 0 };
-static operation_t op_SBCB  = { "SBCB",  op_fn_SBCB,    READOP , 0 };
-static operation_t op_SEX   = { "SEX",   op_fn_SEX ,     REGOP , 0 };
-static operation_t op_STA   = { "STA",   op_fn_STA ,   STOREOP , 0 };
-static operation_t op_STB   = { "STB",   op_fn_STB ,   STOREOP , 0 };
-static operation_t op_STD   = { "STD",   op_fn_STD ,   STOREOP , 1 };
-static operation_t op_STS   = { "STS",   op_fn_STS ,   STOREOP , 1 };
-static operation_t op_STU   = { "STU",   op_fn_STU ,   STOREOP , 1 };
-static operation_t op_STX   = { "STX",   op_fn_STX ,   STOREOP , 1 };
-static operation_t op_STY   = { "STY",   op_fn_STY ,   STOREOP , 1 };
-static operation_t op_SUBA  = { "SUBA",  op_fn_SUBA,    READOP , 0 };
-static operation_t op_SUBB  = { "SUBB",  op_fn_SUBB,    READOP , 0 };
-static operation_t op_SUBD  = { "SUBD",  op_fn_SUBD,    READOP , 1 };
-static operation_t op_SWI   = { "SWI",   op_fn_SWI ,     OTHER , 0 };
-static operation_t op_SWI2  = { "SWI2",  op_fn_SWI2,     OTHER , 0 };
-static operation_t op_SWI3  = { "SWI3",  op_fn_SWI3,     OTHER , 0 };
-static operation_t op_SYNC  = { "SYNC",  op_fn_SYNC,     OTHER , 0 };
-static operation_t op_TFR   = { "TFR",   op_fn_TFR ,     REGOP , 0 };
-static operation_t op_TST   = { "TST",   op_fn_TST ,    READOP , 0 };
-static operation_t op_TSTA  = { "TSTA",  op_fn_TSTA,     REGOP , 0 };
-static operation_t op_TSTB  = { "TSTB",  op_fn_TSTB,     REGOP , 0 };
-static operation_t op_UU    = { "???",   op_fn_UU,       OTHER , 0 };
+static operation_t op_ABX   = { "ABX",   op_fn_ABX ,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_ADCA  = { "ADCA",  op_fn_ADCA,    READOP , 0 , GRP_A_FF    };
+static operation_t op_ADCB  = { "ADCB",  op_fn_ADCB,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_ADDA  = { "ADDA",  op_fn_ADDA,    READOP , 0 , GRP_A_FF    };
+static operation_t op_ADDB  = { "ADDB",  op_fn_ADDB,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_ADDD  = { "ADDD",  op_fn_ADDD,    READOP , 1 , GRP_A_01    };
+static operation_t op_ANDA  = { "ANDA",  op_fn_ANDA,    READOP , 0 , GRP_A_FF    };
+static operation_t op_ANDB  = { "ANDB",  op_fn_ANDB,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_ANDC  = { "ANDC",  op_fn_ANDC,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_ASL   = { "ASL",   op_fn_ASL ,     RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_ASLA  = { "ASLA",  op_fn_ASLA,     REGOP , 0 , GRP_A_01    };
+static operation_t op_ASLB  = { "ASLB",  op_fn_ASLB,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_ASR   = { "ASR",   op_fn_ASR ,     RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_ASRA  = { "ASRA",  op_fn_ASRA,     REGOP , 0 , GRP_A_01    };
+static operation_t op_ASRB  = { "ASRB",  op_fn_ASRB,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_BCC   = { "BCC",   op_fn_BCC ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_BEQ   = { "BEQ",   op_fn_BEQ ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_BGE   = { "BGE",   op_fn_BGE ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_BGT   = { "BGT",   op_fn_BGT ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_BHI   = { "BHI",   op_fn_BHI ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_BITA  = { "BITA",  op_fn_BITA,    READOP , 0 , GRP_N0_Z1   };
+static operation_t op_BITB  = { "BITB",  op_fn_BITB,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_BLE   = { "BLE",   op_fn_BLE ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_BLO   = { "BLO",   op_fn_BLO ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_BLS   = { "BLS",   op_fn_BLS ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_BLT   = { "BLT",   op_fn_BLT ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_BMI   = { "BMI",   op_fn_BMI ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_BNE   = { "BNE",   op_fn_BNE ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_BPL   = { "BPL",   op_fn_BPL ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_BRA   = { "BRA",   op_fn_BRA ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_BRN   = { "BRN",   op_fn_BRN ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_BSR   = { "BSR",   op_fn_BSR ,     JSROP , 1 , GRP_DEFAULT };
+static operation_t op_BVC   = { "BVC",   op_fn_BVC ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_BVS   = { "BVS",   op_fn_BVS ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_CLR   = { "CLR",   op_fn_CLR ,     RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_CLRA  = { "CLRA",  op_fn_CLRA,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_CLRB  = { "CLRB",  op_fn_CLRB,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_CMPA  = { "CMPA",  op_fn_CMPA,    READOP , 0 , GRP_N0_Z1   };
+static operation_t op_CMPB  = { "CMPB",  op_fn_CMPB,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_CMPD  = { "CMPD",  op_fn_CMPD,    READOP , 1 , GRP_R16_01  };
+static operation_t op_CMPS  = { "CMPS",  op_fn_CMPS,    READOP , 1 , GRP_R16_01  };
+static operation_t op_CMPU  = { "CMPU",  op_fn_CMPU,    READOP , 1 , GRP_R16_01  };
+static operation_t op_CMPX  = { "CMPX",  op_fn_CMPX,    READOP , 1 , GRP_R16_01  };
+static operation_t op_CMPY  = { "CMPY",  op_fn_CMPY,    READOP , 1 , GRP_R16_01  };
+static operation_t op_COM   = { "COM",   op_fn_COM ,     RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_COMA  = { "COMA",  op_fn_COMA,     REGOP , 0 , GRP_A_01    };
+static operation_t op_COMB  = { "COMB",  op_fn_COMB,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_CWAI  = { "CWAI",  op_fn_CWAI,     OTHER , 0 , GRP_DEFAULT };
+static operation_t op_DAA   = { "DAA",   op_fn_DAA ,     REGOP , 0 , GRP_A_01    };
+static operation_t op_DEC   = { "DEC",   op_fn_DEC ,     RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_DECA  = { "DECA",  op_fn_DECA,     REGOP , 0 , GRP_A_01    };
+static operation_t op_DECB  = { "DECB",  op_fn_DECB,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_EORA  = { "EORA",  op_fn_EORA,    READOP , 0 , GRP_A_FF    };
+static operation_t op_EORB  = { "EORB",  op_fn_EORB,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_EXG   = { "EXG",   op_fn_EXG ,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_INC   = { "INC",   op_fn_INC ,     RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_INCA  = { "INCA",  op_fn_INCA,     REGOP , 0 , GRP_A_01    };
+static operation_t op_INCB  = { "INCB",  op_fn_INCB,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_JMP   = { "JMP",   op_fn_JMP ,     LEAOP , 0 , GRP_DEFAULT };
+static operation_t op_JSR   = { "JSR",   op_fn_JSR ,     JSROP , 1 , GRP_DEFAULT };
+static operation_t op_LBCC  = { "LBCC",  op_fn_BCC ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LBEQ  = { "LBEQ",  op_fn_BEQ ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LBGE  = { "LBGE",  op_fn_BGE ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LBGT  = { "LBGT",  op_fn_BGT ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LBHI  = { "LBHI",  op_fn_BHI ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LBLE  = { "LBLE",  op_fn_BLE ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LBLO  = { "LBLO",  op_fn_BLO ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LBLS  = { "LBLS",  op_fn_BLS ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LBLT  = { "LBLT",  op_fn_BLT ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LBMI  = { "LBMI",  op_fn_BMI ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LBNE  = { "LBNE",  op_fn_BNE ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LBPL  = { "LBPL",  op_fn_BPL ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LBRA  = { "LBRA",  op_fn_BRA ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LBRN  = { "LBRN",  op_fn_BRN ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LBSR  = { "LBSR",  op_fn_BSR ,     JSROP , 1 , GRP_DEFAULT };
+static operation_t op_LBVC  = { "LBVC",  op_fn_BVC ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LBVS  = { "LBVS",  op_fn_BVS ,  BRANCHOP , 0 , GRP_DEFAULT };
+static operation_t op_LDA   = { "LDA",   op_fn_LDA ,    LOADOP , 0 , GRP_A_00    };
+static operation_t op_LDB   = { "LDB",   op_fn_LDB ,    LOADOP , 0 , GRP_DEFAULT };
+static operation_t op_LDD   = { "LDD",   op_fn_LDD ,    LOADOP , 1 , GRP_A_00    };
+static operation_t op_LDS   = { "LDS",   op_fn_LDS ,    LOADOP , 1 , GRP_DEFAULT };
+static operation_t op_LDU   = { "LDU",   op_fn_LDU ,    LOADOP , 1 , GRP_DEFAULT };
+static operation_t op_LDX   = { "LDX",   op_fn_LDX ,    LOADOP , 1 , GRP_DEFAULT };
+static operation_t op_LDY   = { "LDY",   op_fn_LDY ,    LOADOP , 1 , GRP_DEFAULT };
+static operation_t op_LEAS  = { "LEAS",  op_fn_LEAS,     LEAOP , 0 , GRP_LEAS    };
+static operation_t op_LEAU  = { "LEAU",  op_fn_LEAU,     LEAOP , 0 , GRP_LEAU    };
+static operation_t op_LEAX  = { "LEAX",  op_fn_LEAX,     LEAOP , 0 , GRP_LEAX    };
+static operation_t op_LEAY  = { "LEAY",  op_fn_LEAY,     LEAOP , 0 , GRP_LEAY    };
+static operation_t op_LSR   = { "LSR",   op_fn_LSR ,     RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_LSRA  = { "LSRA",  op_fn_LSRA,     REGOP , 0 , GRP_A_01    };
+static operation_t op_LSRB  = { "LSRB",  op_fn_LSRB,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_MUL   = { "MUL",   op_fn_MUL ,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_NEG   = { "NEG",   op_fn_NEG ,     RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_NEGA  = { "NEGA",  op_fn_NEGA,     REGOP , 0 , GRP_A_01    };
+static operation_t op_NEGB  = { "NEGB",  op_fn_NEGB,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_NOP   = { "NOP",   op_fn_NOP ,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_ORA   = { "ORA",   op_fn_ORA ,    READOP , 0 , GRP_A_FF    };
+static operation_t op_ORB   = { "ORB",   op_fn_ORB ,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_ORCC  = { "ORCC",  op_fn_ORCC,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_PSHS  = { "PSHS",  op_fn_PSHS,     OTHER , 0 , GRP_DEFAULT };
+static operation_t op_PSHU  = { "PSHU",  op_fn_PSHU,     OTHER , 0 , GRP_DEFAULT };
+static operation_t op_PULS  = { "PULS",  op_fn_PULS,     OTHER , 0 , GRP_DEFAULT };
+static operation_t op_PULU  = { "PULU",  op_fn_PULU,     OTHER , 0 , GRP_DEFAULT };
+static operation_t op_ROL   = { "ROL",   op_fn_ROL ,     RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_ROLA  = { "ROLA",  op_fn_ROLA,     REGOP , 0 , GRP_A_01    };
+static operation_t op_ROLB  = { "ROLB",  op_fn_ROLB,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_ROR   = { "ROR",   op_fn_ROR ,     RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_RORA  = { "RORA",  op_fn_RORA,     REGOP , 0 , GRP_A_01    };
+static operation_t op_RORB  = { "RORB",  op_fn_RORB,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_RTI   = { "RTI",   op_fn_RTI ,     OTHER , 0 , GRP_DEFAULT };
+static operation_t op_RTS   = { "RTS",   op_fn_RTS ,     OTHER , 0 , GRP_DEFAULT };
+static operation_t op_SBCA  = { "SBCA",  op_fn_SBCA,    READOP , 0 , GRP_A_FF    };
+static operation_t op_SBCB  = { "SBCB",  op_fn_SBCB,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_SEX   = { "SEX",   op_fn_SEX ,     REGOP , 0 , GRP_B_01    };
+static operation_t op_STA   = { "STA",   op_fn_STA ,   STOREOP , 0 , GRP_DEFAULT };
+static operation_t op_STB   = { "STB",   op_fn_STB ,   STOREOP , 0 , GRP_DEFAULT };
+static operation_t op_STD   = { "STD",   op_fn_STD ,   STOREOP , 1 , GRP_DEFAULT };
+static operation_t op_STS   = { "STS",   op_fn_STS ,   STOREOP , 1 , GRP_DEFAULT };
+static operation_t op_STU   = { "STU",   op_fn_STU ,   STOREOP , 1 , GRP_DEFAULT };
+static operation_t op_STX   = { "STX",   op_fn_STX ,   STOREOP , 1 , GRP_DEFAULT };
+static operation_t op_STY   = { "STY",   op_fn_STY ,   STOREOP , 1 , GRP_DEFAULT };
+static operation_t op_SUBA  = { "SUBA",  op_fn_SUBA,    READOP , 0 , GRP_A_FF    };
+static operation_t op_SUBB  = { "SUBB",  op_fn_SUBB,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_SUBD  = { "SUBD",  op_fn_SUBD,    READOP , 1 , GRP_A_01    };
+static operation_t op_SWI   = { "SWI",   op_fn_SWI ,     OTHER , 0 , GRP_DEFAULT };
+static operation_t op_SWI2  = { "SWI2",  op_fn_SWI2,     OTHER , 0 , GRP_DEFAULT };
+static operation_t op_SWI3  = { "SWI3",  op_fn_SWI3,     OTHER , 0 , GRP_DEFAULT };
+static operation_t op_SYNC  = { "SYNC",  op_fn_SYNC,     OTHER , 0 , GRP_DEFAULT };
+static operation_t op_TFR   = { "TFR",   op_fn_TFR ,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_TST   = { "TST",   op_fn_TST ,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_TSTA  = { "TSTA",  op_fn_TSTA,     REGOP , 0 , GRP_A_01    };
+static operation_t op_TSTB  = { "TSTB",  op_fn_TSTB,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_UU    = { "???",   op_fn_UU,       OTHER , 0 , GRP_DEFAULT };
 
 // 6809 Undocumented
 
-static operation_t op_XX    = { "???",   op_fn_XX,       OTHER , 0 };
-static operation_t op_X18   = { "X18",   op_fn_X18,      REGOP , 0 };
-static operation_t op_X8C7  = { "X8C7",  op_fn_X8C7,    READOP , 0 };
-static operation_t op_XADDD = { "XADDD", op_fn_XADDD,   READOP , 1 };
-static operation_t op_XADDU = { "XADDU", op_fn_XADDU,   READOP , 1 };
-static operation_t op_XCLRA = { "XCLRA", op_fn_XCLRA,    REGOP , 0 };
-static operation_t op_XCLRB = { "XCLRB", op_fn_XCLRB,    REGOP , 0 };
-static operation_t op_XDEC  = { "XDEC",  op_fn_XDEC ,    RMWOP , 0 };
-static operation_t op_XDECA = { "XDECA", op_fn_XDECA,    REGOP , 0 };
-static operation_t op_XDECB = { "XDECB", op_fn_XDECB,    REGOP , 0 };
-static operation_t op_XFIQ  = { "XFIQ",  op_fn_XFIQ,     OTHER , 0 };
-static operation_t op_XHCF  = { "XHCF",  op_fn_XHCF,    READOP , 0 };
-static operation_t op_XNC   = { "XNC",   op_fn_XNC,      RMWOP , 0 };
-static operation_t op_XNCA  = { "XNCA",  op_fn_XNCA,     REGOP , 0 };
-static operation_t op_XNCB  = { "XNCB",  op_fn_XNCB,     REGOP , 0 };
-static operation_t op_XSTS  = { "XSTS",  op_fn_XSTS,   STOREOP , 0 };
-static operation_t op_XSTU  = { "XSTU",  op_fn_XSTU,   STOREOP , 0 };
-static operation_t op_XSTX  = { "XSTX",  op_fn_XSTX,   STOREOP , 0 };
-static operation_t op_XSTY  = { "XSTY",  op_fn_XSTY,   STOREOP , 0 };
-static operation_t op_XRES  = { "XRES",  op_fn_XRES,     OTHER , 0 };
+static operation_t op_XX    = { "???",   op_fn_XX,       OTHER , 0 , GRP_DEFAULT };
+static operation_t op_X18   = { "X18",   op_fn_X18,      REGOP , 0 , GRP_DEFAULT };
+static operation_t op_X87   = { "X87",   op_fn_X87,     READOP , 0 , GRP_DEFAULT };
+static operation_t op_XC7   = { "XC7",   op_fn_XC7,     READOP , 0 , GRP_DEFAULT };
+static operation_t op_XADDD = { "XADDD", op_fn_XADDD,   READOP , 1 , GRP_R16_01  };
+static operation_t op_XADDU = { "XADDU", op_fn_XADDU,   READOP , 1 , GRP_R16_01  };
+static operation_t op_XCLRA = { "XCLRA", op_fn_XCLRA,    REGOP , 0 , GRP_DEFAULT };
+static operation_t op_XCLRB = { "XCLRB", op_fn_XCLRB,    REGOP , 0 , GRP_DEFAULT };
+static operation_t op_XDEC  = { "XDEC",  op_fn_XDEC ,    RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_XDECA = { "XDECA", op_fn_XDECA,    REGOP , 0 , GRP_A_01    };
+static operation_t op_XDECB = { "XDECB", op_fn_XDECB,    REGOP , 0 , GRP_DEFAULT };
+static operation_t op_XFIQ  = { "XFIQ",  op_fn_XFIQ,     OTHER , 0 , GRP_DEFAULT };
+static operation_t op_XHCF  = { "XHCF",  op_fn_XHCF,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_XNC   = { "XNC",   op_fn_XNC,      RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_XNCA  = { "XNCA",  op_fn_XNCA,     REGOP , 0 , GRP_A_01    };
+static operation_t op_XNCB  = { "XNCB",  op_fn_XNCB,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_XSTS  = { "XSTS",  op_fn_XSTS,   STOREOP , 0 , GRP_DEFAULT };
+static operation_t op_XSTU  = { "XSTU",  op_fn_XSTU,   STOREOP , 0 , GRP_DEFAULT };
+static operation_t op_XSTX  = { "XSTX",  op_fn_XSTX,   STOREOP , 0 , GRP_DEFAULT };
+static operation_t op_XSTY  = { "XSTY",  op_fn_XSTY,   STOREOP , 0 , GRP_DEFAULT };
+static operation_t op_XRES  = { "XRES",  op_fn_XRES,     OTHER , 0 , GRP_DEFAULT };
 
 // 6309
 
-static operation_t op_ADCD  = { "ADCD",  op_fn_ADCD,    READOP , 1 };
-static operation_t op_ADCR  = { "ADCR",  op_fn_ADCR,     REGOP , 0 };
-static operation_t op_ADDE  = { "ADDE",  op_fn_ADDE,    READOP , 0 };
-static operation_t op_ADDF  = { "ADDF",  op_fn_ADDF,    READOP , 0 };
-static operation_t op_ADDR  = { "ADDR",  op_fn_ADDR,     REGOP , 0 };
-static operation_t op_ADDW  = { "ADDW",  op_fn_ADDW,    READOP , 1 };
-static operation_t op_AIM   = { "AIM",   op_fn_AIM,      RMWOP , 0 };
-static operation_t op_ANDD  = { "ANDD",  op_fn_ANDD,    READOP , 1 };
-static operation_t op_ANDR  = { "ANDR",  op_fn_ANDR,     REGOP , 0 };
-static operation_t op_ASLD  = { "ASLD",  op_fn_ASLD,     REGOP , 0 };
-static operation_t op_ASRD  = { "ASRD",  op_fn_ASRD,     REGOP , 0 };
-static operation_t op_BAND  = { "BAND",  op_fn_BAND,    READOP , 0 };
-static operation_t op_BEOR  = { "BEOR",  op_fn_BEOR,    READOP , 0 };
-static operation_t op_BIAND = { "BIAND", op_fn_BIAND,   READOP , 0 };
-static operation_t op_BIEOR = { "BIEOR", op_fn_BIEOR,   READOP , 0 };
-static operation_t op_BIOR  = { "BIOR",  op_fn_BIOR,    READOP , 0 };
-static operation_t op_BITD  = { "BITD",  op_fn_BITD,    READOP , 1 };
-static operation_t op_BITMD = { "BITMD", op_fn_BITMD,   READOP , 0 };
-static operation_t op_BOR   = { "BOR",   op_fn_BOR,     READOP , 0 };
-static operation_t op_CLRD  = { "CLRD",  op_fn_CLRD,     REGOP , 0 };
-static operation_t op_CLRE  = { "CLRE",  op_fn_CLRE,     REGOP , 0 };
-static operation_t op_CLRF  = { "CLRF",  op_fn_CLRF,     REGOP , 0 };
-static operation_t op_CLRW  = { "CLRW",  op_fn_CLRW,     REGOP , 0 };
-static operation_t op_CMPE  = { "CMPE",  op_fn_CMPE,    READOP , 0 };
-static operation_t op_CMPF  = { "CMPF",  op_fn_CMPF,    READOP , 0 };
-static operation_t op_CMPR  = { "CMPR",  op_fn_CMPR,     REGOP , 0 };
-static operation_t op_CMPW  = { "CMPW",  op_fn_CMPW,    READOP , 1 };
-static operation_t op_COMD  = { "COMD",  op_fn_COMD,     REGOP , 0 };
-static operation_t op_COME  = { "COME",  op_fn_COME,     REGOP , 0 };
-static operation_t op_COMF  = { "COMF",  op_fn_COMF,     REGOP , 0 };
-static operation_t op_COMW  = { "COMW",  op_fn_COMW,     REGOP , 0 };
-static operation_t op_DECD  = { "DECD",  op_fn_DECD,     REGOP , 0 };
-static operation_t op_DECE  = { "DECE",  op_fn_DECE,     REGOP , 0 };
-static operation_t op_DECF  = { "DECF",  op_fn_DECF,     REGOP , 0 };
-static operation_t op_DECW  = { "DECW",  op_fn_DECW,     REGOP , 0 };
-static operation_t op_DIVD  = { "DIVD",  op_fn_DIVD,    READOP , 0 };
-static operation_t op_DIVQ  = { "DIVQ",  op_fn_DIVQ,    READOP , 1 };
-static operation_t op_EIM   = { "EIM",   op_fn_EIM,      RMWOP , 0 };
-static operation_t op_EORD  = { "EORD",  op_fn_EORD,    READOP , 1 };
-static operation_t op_EORR  = { "EORR",  op_fn_EORR,     REGOP , 0 };
-static operation_t op_INCD  = { "INCD",  op_fn_INCD,     REGOP , 0 };
-static operation_t op_INCE  = { "INCE",  op_fn_INCE,     REGOP , 0 };
-static operation_t op_INCF  = { "INCF",  op_fn_INCF,     REGOP , 0 };
-static operation_t op_INCW  = { "INCW",  op_fn_INCW,     REGOP , 0 };
-static operation_t op_LDBT  = { "LDBT",  op_fn_LDBT,    READOP , 0 };
-static operation_t op_LDE   = { "LDE",   op_fn_LDE,     LOADOP , 0 };
-static operation_t op_LDF   = { "LDF",   op_fn_LDF,     LOADOP , 0 };
-static operation_t op_LDMD  = { "LDMD",  op_fn_LDMD,     REGOP , 0 };
-static operation_t op_LDQ   = { "LDQ",   op_fn_LDQ,     LOADOP , 2 };
-static operation_t op_LDW   = { "LDW",   op_fn_LDW,     LOADOP , 1 };
-static operation_t op_LSRD  = { "LSRD",  op_fn_LSRD,     REGOP , 0 };
-static operation_t op_LSRW  = { "LSRW",  op_fn_LSRW,     REGOP , 0 };
-static operation_t op_MULD  = { "MULD",  op_fn_MULD,    READOP , 1 };
-static operation_t op_NEGD  = { "NEGD",  op_fn_NEGD,     REGOP , 0 };
-static operation_t op_OIM   = { "OIM",   op_fn_OIM,      RMWOP , 0 };
-static operation_t op_ORD   = { "ORD",   op_fn_ORD,     READOP , 1 };
-static operation_t op_ORR   = { "ORR",   op_fn_ORR,      REGOP , 0 };
-static operation_t op_PSHSW = { "PSHSW", op_fn_PSHSW,    OTHER , 0 };
-static operation_t op_PSHUW = { "PSHUW", op_fn_PSHUW,    OTHER , 0 };
-static operation_t op_PULSW = { "PULSW", op_fn_PULSW,    OTHER , 0 };
-static operation_t op_PULUW = { "PULUW", op_fn_PULUW,    OTHER , 0 };
-static operation_t op_ROLD  = { "ROLD",  op_fn_ROLD,     REGOP , 0 };
-static operation_t op_ROLW  = { "ROLW",  op_fn_ROLW,     REGOP , 0 };
-static operation_t op_RORD  = { "RORD",  op_fn_RORD,     REGOP , 0 };
-static operation_t op_RORW  = { "RORW",  op_fn_RORW,     REGOP , 0 };
-static operation_t op_SBCD  = { "SBCD",  op_fn_SBCD,    READOP , 1 };
-static operation_t op_SBCR  = { "SBCR",  op_fn_SBCR,     REGOP , 0 };
-static operation_t op_SEXW  = { "SEXW",  op_fn_SEXW,     REGOP , 0 };
-static operation_t op_STBT  = { "STBT",  op_fn_STBT,     RMWOP , 0 };
-static operation_t op_STE   = { "STE",   op_fn_STE,    STOREOP , 0 };
-static operation_t op_STF   = { "STF",   op_fn_STF,    STOREOP , 0 };
-static operation_t op_STQ   = { "STQ",   op_fn_STQ,    STOREOP , 2 };
-static operation_t op_STW   = { "STW",   op_fn_STW,    STOREOP , 1 };
-static operation_t op_SUBE  = { "SUBE",  op_fn_SUBE,    READOP , 0 };
-static operation_t op_SUBF  = { "SUBF",  op_fn_SUBF,    READOP , 0 };
-static operation_t op_SUBR  = { "SUBR",  op_fn_SUBR,     REGOP , 0 };
-static operation_t op_SUBW  = { "SUBW",  op_fn_SUBW,    READOP , 1 };
-static operation_t op_TFM   = { "TFM",   op_fn_TFM,      OTHER , 0 };
-static operation_t op_TIM   = { "TIM",   op_fn_TIM,     READOP , 0 };
-static operation_t op_TRAP  = { "???",   op_fn_TRAP,     OTHER , 0 };
-static operation_t op_TSTD  = { "TSTD",  op_fn_TSTD,    READOP , 1 };
-static operation_t op_TSTE  = { "TSTE",  op_fn_TSTE,    READOP , 0 };
-static operation_t op_TSTF  = { "TSTF",  op_fn_TSTF,    READOP , 0 };
-static operation_t op_TSTW  = { "TSTW",  op_fn_TSTW,    READOP , 1 };
+static operation_t op_ADCD  = { "ADCD",  op_fn_ADCD,    READOP , 1 , GRP_DEFAULT };
+static operation_t op_ADCR  = { "ADCR",  op_fn_ADCR,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_ADDE  = { "ADDE",  op_fn_ADDE,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_ADDF  = { "ADDF",  op_fn_ADDF,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_ADDR  = { "ADDR",  op_fn_ADDR,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_ADDW  = { "ADDW",  op_fn_ADDW,    READOP , 1 , GRP_DEFAULT };
+static operation_t op_AIM   = { "AIM",   op_fn_AIM,      RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_ANDD  = { "ANDD",  op_fn_ANDD,    READOP , 1 , GRP_DEFAULT };
+static operation_t op_ANDR  = { "ANDR",  op_fn_ANDR,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_ASLD  = { "ASLD",  op_fn_ASLD,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_ASRD  = { "ASRD",  op_fn_ASRD,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_BAND  = { "BAND",  op_fn_BAND,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_BEOR  = { "BEOR",  op_fn_BEOR,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_BIAND = { "BIAND", op_fn_BIAND,   READOP , 0 , GRP_DEFAULT };
+static operation_t op_BIEOR = { "BIEOR", op_fn_BIEOR,   READOP , 0 , GRP_DEFAULT };
+static operation_t op_BIOR  = { "BIOR",  op_fn_BIOR,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_BITD  = { "BITD",  op_fn_BITD,    READOP , 1 , GRP_DEFAULT };
+static operation_t op_BITMD = { "BITMD", op_fn_BITMD,   READOP , 0 , GRP_DEFAULT };
+static operation_t op_BOR   = { "BOR",   op_fn_BOR,     READOP , 0 , GRP_DEFAULT };
+static operation_t op_CLRD  = { "CLRD",  op_fn_CLRD,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_CLRE  = { "CLRE",  op_fn_CLRE,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_CLRF  = { "CLRF",  op_fn_CLRF,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_CLRW  = { "CLRW",  op_fn_CLRW,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_CMPE  = { "CMPE",  op_fn_CMPE,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_CMPF  = { "CMPF",  op_fn_CMPF,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_CMPR  = { "CMPR",  op_fn_CMPR,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_CMPW  = { "CMPW",  op_fn_CMPW,    READOP , 1 , GRP_DEFAULT };
+static operation_t op_COMD  = { "COMD",  op_fn_COMD,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_COME  = { "COME",  op_fn_COME,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_COMF  = { "COMF",  op_fn_COMF,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_COMW  = { "COMW",  op_fn_COMW,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_DECD  = { "DECD",  op_fn_DECD,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_DECE  = { "DECE",  op_fn_DECE,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_DECF  = { "DECF",  op_fn_DECF,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_DECW  = { "DECW",  op_fn_DECW,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_DIVD  = { "DIVD",  op_fn_DIVD,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_DIVQ  = { "DIVQ",  op_fn_DIVQ,    READOP , 1 , GRP_DEFAULT };
+static operation_t op_EIM   = { "EIM",   op_fn_EIM,      RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_EORD  = { "EORD",  op_fn_EORD,    READOP , 1 , GRP_DEFAULT };
+static operation_t op_EORR  = { "EORR",  op_fn_EORR,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_INCD  = { "INCD",  op_fn_INCD,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_INCE  = { "INCE",  op_fn_INCE,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_INCF  = { "INCF",  op_fn_INCF,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_INCW  = { "INCW",  op_fn_INCW,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_LDBT  = { "LDBT",  op_fn_LDBT,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_LDE   = { "LDE",   op_fn_LDE,     LOADOP , 0 , GRP_DEFAULT };
+static operation_t op_LDF   = { "LDF",   op_fn_LDF,     LOADOP , 0 , GRP_DEFAULT };
+static operation_t op_LDMD  = { "LDMD",  op_fn_LDMD,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_LDQ   = { "LDQ",   op_fn_LDQ,     LOADOP , 2 , GRP_DEFAULT };
+static operation_t op_LDW   = { "LDW",   op_fn_LDW,     LOADOP , 1 , GRP_DEFAULT };
+static operation_t op_LSRD  = { "LSRD",  op_fn_LSRD,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_LSRW  = { "LSRW",  op_fn_LSRW,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_MULD  = { "MULD",  op_fn_MULD,    READOP , 1 , GRP_DEFAULT };
+static operation_t op_NEGD  = { "NEGD",  op_fn_NEGD,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_OIM   = { "OIM",   op_fn_OIM,      RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_ORD   = { "ORD",   op_fn_ORD,     READOP , 1 , GRP_DEFAULT };
+static operation_t op_ORR   = { "ORR",   op_fn_ORR,      REGOP , 0 , GRP_DEFAULT };
+static operation_t op_PSHSW = { "PSHSW", op_fn_PSHSW,    OTHER , 0 , GRP_DEFAULT };
+static operation_t op_PSHUW = { "PSHUW", op_fn_PSHUW,    OTHER , 0 , GRP_DEFAULT };
+static operation_t op_PULSW = { "PULSW", op_fn_PULSW,    OTHER , 0 , GRP_DEFAULT };
+static operation_t op_PULUW = { "PULUW", op_fn_PULUW,    OTHER , 0 , GRP_DEFAULT };
+static operation_t op_ROLD  = { "ROLD",  op_fn_ROLD,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_ROLW  = { "ROLW",  op_fn_ROLW,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_RORD  = { "RORD",  op_fn_RORD,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_RORW  = { "RORW",  op_fn_RORW,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_SBCD  = { "SBCD",  op_fn_SBCD,    READOP , 1 , GRP_DEFAULT };
+static operation_t op_SBCR  = { "SBCR",  op_fn_SBCR,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_SEXW  = { "SEXW",  op_fn_SEXW,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_STBT  = { "STBT",  op_fn_STBT,     RMWOP , 0 , GRP_DEFAULT };
+static operation_t op_STE   = { "STE",   op_fn_STE,    STOREOP , 0 , GRP_DEFAULT };
+static operation_t op_STF   = { "STF",   op_fn_STF,    STOREOP , 0 , GRP_DEFAULT };
+static operation_t op_STQ   = { "STQ",   op_fn_STQ,    STOREOP , 2 , GRP_DEFAULT };
+static operation_t op_STW   = { "STW",   op_fn_STW,    STOREOP , 1 , GRP_DEFAULT };
+static operation_t op_SUBE  = { "SUBE",  op_fn_SUBE,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_SUBF  = { "SUBF",  op_fn_SUBF,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_SUBR  = { "SUBR",  op_fn_SUBR,     REGOP , 0 , GRP_DEFAULT };
+static operation_t op_SUBW  = { "SUBW",  op_fn_SUBW,    READOP , 1 , GRP_DEFAULT };
+static operation_t op_TFM   = { "TFM",   op_fn_TFM,      OTHER , 0 , GRP_DEFAULT };
+static operation_t op_TIM   = { "TIM",   op_fn_TIM,     READOP , 0 , GRP_DEFAULT };
+static operation_t op_TRAP  = { "???",   op_fn_TRAP,     OTHER , 0 , GRP_DEFAULT };
+static operation_t op_TSTD  = { "TSTD",  op_fn_TSTD,    READOP , 1 , GRP_DEFAULT };
+static operation_t op_TSTE  = { "TSTE",  op_fn_TSTE,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_TSTF  = { "TSTF",  op_fn_TSTF,    READOP , 0 , GRP_DEFAULT };
+static operation_t op_TSTW  = { "TSTW",  op_fn_TSTW,    READOP , 1 , GRP_DEFAULT };
 
 // ====================================================================
 // 6809 Opcode Tables
@@ -5603,7 +5722,7 @@ static opcode_t instr_table_6809[] = {
    /* 84 */    { &op_ANDA , IMMEDIATE_8  , 0, 2 },
    /* 85 */    { &op_BITA , IMMEDIATE_8  , 0, 2 },
    /* 86 */    { &op_LDA  , IMMEDIATE_8  , 0, 2 },
-   /* 87 */    { &op_X8C7 , IMMEDIATE_8  , 1, 2 },
+   /* 87 */    { &op_X87  , IMMEDIATE_8  , 1, 2 },
    /* 88 */    { &op_EORA , IMMEDIATE_8  , 0, 2 },
    /* 89 */    { &op_ADCA , IMMEDIATE_8  , 0, 2 },
    /* 8A */    { &op_ORA  , IMMEDIATE_8  , 0, 2 },
@@ -5667,7 +5786,7 @@ static opcode_t instr_table_6809[] = {
    /* C4 */    { &op_ANDB , IMMEDIATE_8  , 0, 2 },
    /* C5 */    { &op_BITB , IMMEDIATE_8  , 0, 2 },
    /* C6 */    { &op_LDB  , IMMEDIATE_8  , 0, 2 },
-   /* C7 */    { &op_X8C7 , IMMEDIATE_8  , 1, 2 },
+   /* C7 */    { &op_XC7  , IMMEDIATE_8  , 1, 2 },
    /* C8 */    { &op_EORB , IMMEDIATE_8  , 0, 2 },
    /* C9 */    { &op_ADCB , IMMEDIATE_8  , 0, 2 },
    /* CA */    { &op_ORB  , IMMEDIATE_8  , 0, 2 },
