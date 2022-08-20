@@ -1913,6 +1913,7 @@ static int add16_helper(int val, int cin, int operand) {
       return tmp;
    } else {
       set_NZVC_unknown();
+      last_res16 = -1;
       return -1;
    }
 }
@@ -2046,6 +2047,7 @@ static void cmp16_helper(int val, operand_t operand) {
       last_res16 = tmp;
    } else {
       set_NZVC_unknown();
+      last_res16 = -1;
    }
 }
 
@@ -3663,20 +3665,17 @@ static int op_fn_X18(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    return -1;
 }
 
-static void set_storeimm_flags_lea(int r, int complex_v) {
+static void set_storeimm_flags_lea(int r) {
    if (r < 0) {
-      set_NZ_unknown();
+      set_NZV_unknown();
    } else {
       r = (r | (r >> 8)) & 0xff;
       set_NZ((r - 1) & 0xFF);
-      if (complex_v) {
-         V = (r == 0x80);
-      }
+      V = (r == 0x80);
    }
 }
 
-static void set_storeimm_flags(int op0, int complex_v) {
-   int tmp;
+static void set_storeimm_flags(int op0) {
    // V is 0, with a few exceptions
    V = 0;
    if (op0 == 0x10 || op0 == 0x11) {
@@ -3714,9 +3713,7 @@ static void set_storeimm_flags(int op0, int complex_v) {
             set_NZV_unknown();
          } else {
             set_NZ((ACCA - 1) & 0xFF);
-            if (complex_v) {
-               V = (ACCA == 0x80);
-            }
+            V = (ACCA == 0x80);
          }
          break;
       case GRP_B_01:
@@ -3724,29 +3721,29 @@ static void set_storeimm_flags(int op0, int complex_v) {
             set_NZV_unknown();
          } else {
             set_NZ((ACCB - 1) & 0xFF);
-            if (complex_v) {
-               V = (ACCB == 0x80);
-            }
+            V = (ACCB == 0x80);
          }
          break;
       case GRP_R16_01:
-         tmp = last_res16 >> 8;
-         set_NZ((tmp - 1) & 0xFF);
-         if (complex_v) {
+         if (last_res16 < 0) {
+            set_NZV_unknown();
+         } else {
+            int tmp = last_res16 >> 8;
+            set_NZ((tmp - 1) & 0xFF);
             V = (tmp == 0x80);
          }
          break;
       case GRP_LEAU:
-         set_storeimm_flags_lea(U, complex_v);
+         set_storeimm_flags_lea(U);
          break;
       case GRP_LEAS:
-         set_storeimm_flags_lea(S, complex_v);
+         set_storeimm_flags_lea(S);
          break;
       case GRP_LEAX:
-         set_storeimm_flags_lea(X, complex_v);
+         set_storeimm_flags_lea(X);
          break;
       case GRP_LEAY:
-         set_storeimm_flags_lea(Y, complex_v);
+         set_storeimm_flags_lea(Y);
          break;
       }
    }
@@ -3787,12 +3784,12 @@ static int op_fn_XFIQ(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 // Each ofthese opcodes execute in 2 MPU cycles.
 
 static int op_fn_X87(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   set_storeimm_flags(sample_q->sample->data, 1);
+   set_storeimm_flags(sample_q->sample->data);
    return -1;
 }
 
 static int op_fn_XC7(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   set_storeimm_flags(sample_q->sample->data, 1);
+   set_storeimm_flags(sample_q->sample->data);
    return -1;
 }
 
@@ -3809,18 +3806,20 @@ static int op_fn_XC7(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 // Each of these opcodes execute in 3 MPU cycles.
 
 static int op_fn_XSTX(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   set_storeimm_flags(sample_q->sample->data, 0);
+   set_storeimm_flags(sample_q->sample->data);
    if (X & 0xff) {
       Z = 0;
    }
+   V = 0;
    return X & 0xff;
 }
 
 static int op_fn_XSTU(operand_t operand, ea_t ea, sample_q_t *sample_q) {
-   set_storeimm_flags(sample_q->sample->data, 0);
+   set_storeimm_flags(sample_q->sample->data);
    if (U & 0xff) {
       Z = 0;
    }
+   V = 0;
    return U & 0xff;
 }
 
