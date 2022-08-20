@@ -78,7 +78,7 @@ LDA <acca
 LDS #&8080
 LEAS A,S
 LDB ,S+
-LDX #&5080
+LDX #&8080
 LEAX B,X
 LDB ,S+
 LDY #&5180
