@@ -3810,11 +3810,17 @@ static int op_fn_XC7(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 
 static int op_fn_XSTX(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    set_storeimm_flags(sample_q->sample->data, 0);
+   if (X & 0xff) {
+      Z = 0;
+   }
    return X & 0xff;
 }
 
 static int op_fn_XSTU(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    set_storeimm_flags(sample_q->sample->data, 0);
+   if (U & 0xff) {
+      Z = 0;
+   }
    return U & 0xff;
 }
 
