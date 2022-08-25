@@ -102,6 +102,7 @@ typedef struct {
    int show_hex;
    int show_instruction;
    int show_state;
+   int show_bbcfwa;
    int show_cycles;
    int show_samplenums;
    int show_something;
