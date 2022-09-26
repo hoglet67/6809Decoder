@@ -2902,6 +2902,7 @@ static int op_fn_COMB(operand_t operand, ea_t ea, sample_q_t *sample_q) {
 }
 
 static int op_fn_CWAI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
+
    // CC = CC & immediate operand
    op_fn_ANDC(operand, ea, sample_q);
 
@@ -2909,7 +2910,7 @@ static int op_fn_CWAI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
    sample_t *sample = sample_q->sample;
    int num_samples = sample_q->num_samples;
    int num_cycles = CYCLES_UNKNOWN;
-   // TODO: Handle running out of samples, e.g. 20220728a/random5-E.bin
+
    if (sample[0].bs >= 0) {
       for (int i = 1; i < num_samples; i++) {
          if (sample[i].bs == 1) {
@@ -2918,6 +2919,13 @@ static int op_fn_CWAI(operand_t operand, ea_t ea, sample_q_t *sample_q) {
          }
       }
    }
+
+   // Handle running out of samples, e.g. 20220728a/random5-E.bin
+   if (num_cycles == CYCLES_UNKNOWN) {
+      sample_q->num_cycles = num_samples;
+      return -1;
+   }
+
    sample_q->num_cycles = num_cycles;
 
    // Look at the vector fetch to determine what event released CWAI
