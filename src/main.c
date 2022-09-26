@@ -58,6 +58,7 @@ const char *machine_names[] = {
    "dragon32",
    "beeb",
    "positron9000",
+   "sbc09",
    0
 };
 

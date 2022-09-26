@@ -126,6 +126,33 @@ static void init_dragon(arguments_t *args) {
 }
 
 // ==================================================
+// SBC09 Memory Handlers
+// ==================================================
+
+static void memory_read_sbc09(int data, int ea) {
+   if (memory[ea] >= 0 && memory[ea] != data && (ea < 0x8000 || ea >= 0xc000)) {
+      log_memory_fail(ea, memory[ea], data);
+      failflag |= FAIL_MEMORY;
+   }
+   memory[ea] = data;
+}
+
+static int memory_write_sbc09(int data, int ea) {
+   if (ea >= 0xc000) {
+      return 1;
+   } else {
+      memory[ea] = data;
+      return 0;
+   }
+}
+
+static void init_sbc09(arguments_t *args) {
+   memory_read_fn  = memory_read_sbc09;
+   memory_write_fn = memory_write_sbc09;
+   addr_display_fn = addr_display_default;
+}
+
+// ==================================================
 // Beeb Memory Handlers
 // ==================================================
 
@@ -203,6 +230,9 @@ void memory_init(arguments_t *args) {
       break;
    case MACHINE_BEEB:
       init_beeb(args);
+      break;
+   case MACHINE_SBC09:
+      init_sbc09(args);
       break;
    default:
       init_default(args);
