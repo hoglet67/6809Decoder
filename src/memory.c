@@ -49,6 +49,8 @@ static inline void log_memory_access(char *msg, int data, int ea, int ignored) {
    bp += write_s(bp, " = ");
    write_hex2(bp, data);
    bp += 2;
+   *bp++ = ' ';
+   *bp++ = (data >= 32 && data <= 126) ? data : '.';
    if (ignored) {
       bp += write_s(bp, " (ignored)");
    }
@@ -102,6 +104,7 @@ static int memory_write_default(int data, int ea) {
 }
 
 static void init_default(arguments_t *args) {
+   memory = init_ram(0x10000);
    memory_read_fn  = memory_read_default;
    memory_write_fn = memory_write_default;
    addr_display_fn = addr_display_default;
@@ -120,6 +123,7 @@ static void memory_read_dragon(int data, int ea) {
 }
 
 static void init_dragon(arguments_t *args) {
+   memory = init_ram(0x10000);
    memory_read_fn  = memory_read_dragon;
    memory_write_fn = memory_write_default;
    addr_display_fn = addr_display_default;
@@ -129,27 +133,88 @@ static void init_dragon(arguments_t *args) {
 // SBC09 Memory Handlers
 // ==================================================
 
-static void memory_read_sbc09(int data, int ea) {
-   if (memory[ea] >= 0 && memory[ea] != data && (ea < 0x8000 || ea >= 0xc000)) {
-      log_memory_fail(ea, memory[ea], data);
-      failflag |= FAIL_MEMORY;
+static int mmu_disabled[4] = { 0x80, 0x81, 0x00, 0x01 };
+
+static int mmu0[4] = { 0xff, 0xff, 0xff, 0xff };
+
+static int mmu_enabled = 0;
+
+static int get_block(int ea) {
+   if (ea < 0) {
+      fprintf(stderr, "EA should never be undefined; exiting\n");
+      exit(1);
+   } else if (ea < 0xfc00 || ea >= 0xff00) {
+      if (mmu_enabled) {
+         return mmu0[(ea >> 14) & 3];
+      } else {
+         return mmu_disabled[(ea >> 14) & 3];
+      }
+   } else {
+      return -1; // IO
    }
-   memory[ea] = data;
+}
+
+static int addr_display_sbc09(char *bp, int ea) {
+   int block = get_block(ea);
+   if (block >= 0) {
+      write_hex2(bp, block);
+      bp += 2;
+      *bp++ = ':';
+      write_hex4(bp, ea);
+      return 7;
+   } else {
+      write_hex4(bp, ea);
+      return 4;
+   }
+}
+
+static inline int *get_memptr_sbc09(int ea) {
+   int block = get_block(ea);
+   return memory + (block << 14) + (ea & 0x3FFF);
+}
+
+
+static void memory_read_sbc09(int data, int ea) {
+   if (ea < 0xfc00 || ea >= 0xff00) {
+      int *memptr = get_memptr_sbc09(ea);
+      if (memptr) {
+         if (*memptr >= 0 && *memptr != data) {
+            log_memory_fail(ea, *memptr, data);
+            failflag |= FAIL_MEMORY;
+         }
+         *memptr = data;
+      }
+   }
 }
 
 static int memory_write_sbc09(int data, int ea) {
-   if (ea >= 0xc000) {
-      return 1;
-   } else {
-      memory[ea] = data;
-      return 0;
+   if (ea < 0xfc00 || ea >= 0xff00) {
+      int *memptr = get_memptr_sbc09(ea);
+      if (memptr) {
+         *memptr = data;
+      }
+   } else if (ea == 0xfe0e) {
+      if (data & 0x10) {
+         printf("*** MMU Enabled ***\n");
+         mmu_enabled = 1;
+      }
+   } else if (ea == 0xfe0f) {
+      if (data & 0x10) {
+         printf("*** MMU Disabled ***\n");
+         mmu_enabled = 0;
+      }
+   } else if (ea >= 0xfe10 && ea <= 0xfe13) {
+      mmu0[ea & 3] = data;
    }
+   return 0;
 }
 
 static void init_sbc09(arguments_t *args) {
+   // For now, lets just model 256 x 16K blocks
+   memory = init_ram(0x100 * 0x4000);
    memory_read_fn  = memory_read_sbc09;
    memory_write_fn = memory_write_sbc09;
-   addr_display_fn = addr_display_default;
+   addr_display_fn = addr_display_sbc09;
 }
 
 // ==================================================
@@ -185,11 +250,13 @@ static inline int *get_memptr_beeb(int ea) {
 static void memory_read_beeb(int data, int ea) {
    if (ea < 0xfc00 || ea >= 0xff00) {
       int *memptr = get_memptr_beeb(ea);
-      if (memptr && *memptr >= 0 && *memptr != data) {
-         log_memory_fail(ea, *memptr, data);
-         failflag |= FAIL_MEMORY;
+      if (memptr) {
+         if (*memptr >= 0 && *memptr != data) {
+            log_memory_fail(ea, *memptr, data);
+            failflag |= FAIL_MEMORY;
+         }
+         *memptr = data;
       }
-      memory[ea] = data;
    }
 }
 
@@ -208,6 +275,7 @@ static int memory_write_beeb(int data, int ea) {
 }
 
 static void init_beeb(arguments_t *args) {
+   memory = init_ram(0x10000);
    swrom = init_ram(SWROM_NUM_BANKS * SWROM_SIZE);
    memory_read_fn  = memory_read_beeb;
    memory_write_fn = memory_write_beeb;
@@ -222,7 +290,6 @@ static void init_beeb(arguments_t *args) {
 // ==================================================
 
 void memory_init(arguments_t *args) {
-   memory = init_ram(0x10000);
    // Setup the machine specific memory read/write handler
    switch (args->machine) {
    case MACHINE_DRAGON32:
